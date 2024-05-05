@@ -1,12 +1,13 @@
 // ****************************************************************************
 //
-//	 _____ _____ _____ _____
-//	|   __|     |   __|  |  |
-//	|  |  |  |  |__   |     |
-//	|_____|_____|_____|__|__|
+//	 _ _          _
+//	| (_) ___  __| |
+//	| | |/ _ \/ _` |
+//	| | |  __/ (_| |
+//	|_|_|\___|\__,_|
 //
 // ****************************************************************************
-// G O S H   -   Copyright © JPL 2023
+// L I E D   -   Copyright © JPL 2024
 // ****************************************************************************
 package edit
 
@@ -22,7 +23,6 @@ import (
 	"lied/utils"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -62,14 +62,14 @@ var (
 // ****************************************************************************
 func SwitchToEditor(fName string) {
 	ui.CurrentMode = ui.ModeTextEdit
-	ui.SetTitle("Editor")
+	ui.SetTitle(conf.APP_NAME)
 	ui.LblKeys.SetText(conf.FKEY_LABELS + "\nCtrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+T=Close")
-	scr := ui.GetScreenFromTitle("Editor")
+	scr := ui.GetScreenFromTitle(conf.APP_NAME)
 	if scr == "NIL" {
 		var screen ui.MyScreen
 		screen.ID, _ = utils.RandomHex(3)
 		screen.Mode = ui.ModeTextEdit
-		screen.Title = "Editor"
+		screen.Title = conf.APP_NAME
 		screen.Keys = "Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+T=Close"
 		ui.PgsApp.AddPage(screen.Title+"_"+screen.ID, ui.FlxEditor, true, true)
 		scr = screen.Title + "_" + screen.ID
@@ -448,20 +448,5 @@ func ShowTreeDir(rootDir string) {
 // SelfInit()
 // ****************************************************************************
 func SelfInit(a any) {
-	if ui.CurrentMode == ui.ModeFiles {
-		idx, _ := ui.TblFiles.GetSelection()
-		fName := filepath.Join(conf.Cwd, strings.TrimSpace(ui.TblFiles.GetCell(idx, 2).Text))
-		mtype := utils.GetMimeType(fName)
-		if len(mtype) > 3 {
-			if mtype[:4] == "text" {
-				SwitchToEditor(fName)
-			} else {
-				NewFileOrLastFile(conf.Cwd)
-			}
-		} else {
-			NewFileOrLastFile(conf.Cwd)
-		}
-	} else {
-		NewFileOrLastFile(conf.Cwd)
-	}
+	NewFileOrLastFile(conf.Cwd)
 }

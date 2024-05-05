@@ -24,7 +24,6 @@ const (
 	APP_FOLDER              = ".lied"
 	ICON_MODIFIED           = "●"
 	NEW_FILE_TEMPLATE       = "lied_"
-	LABEL_PARENT_FOLDER     = "<UP>"
 	FILE_LOG                = "lied.log"
 	FILE_CONFIG             = "lied.json"
 	FKEY_LABELS             = "F1=Help F2=Prompt F3=Close F5=Refresh F6=Previous F7=Next F8=Context Menu F10=Main Menu F12=Exit"
