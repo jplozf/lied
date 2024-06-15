@@ -20,6 +20,7 @@ import (
 	"lied/conf"
 	"lied/utils"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ type FnAny func(any)
 type Mode int
 
 type MyScreen struct {
+	Idx   int
 	ID    string
 	Title string
 	Page  *tview.Pages
@@ -188,6 +190,7 @@ func SetUI(fQuit Fn, hostname string) {
 	TxtEditName = tview.NewTextView()
 	TxtEditName.Clear()
 	TxtEditName.SetBorder(true)
+	TxtEditName.SetDynamicColors(true)
 	TblOpenFiles = tview.NewTable()
 	TblOpenFiles.SetBorder(true)
 	TblOpenFiles.SetSelectable(true, false)
@@ -231,7 +234,7 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(tview.NewFlex().
 			AddItem(LblHostname, len(hostname)+3, 0, false).
 			AddItem(lblStatus, 0, 1, false).
-			AddItem(LblScreen, 5, 0, false).
+			AddItem(LblScreen, 10, 0, false).
 			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
 
 	//*************************************************************************
@@ -371,7 +374,8 @@ func GetCurrentScreen() string {
 func GetScreenFromTitle(t string) string {
 	for i := 0; i < len(ArrScreens); i++ {
 		if ArrScreens[i].Title == t {
-			return (ArrScreens[i].Title + "_" + ArrScreens[i].ID)
+			// return (ArrScreens[i].Title + "_" + ArrScreens[i].ID)
+			return strconv.Itoa(ArrScreens[i].Idx)
 		}
 	}
 	return "NIL"
@@ -450,8 +454,9 @@ func AddNewScreen(mode Mode, selfInit FnAny, param any) {
 		screen.Keys = ""
 		PgsApp.AddPage(screen.Title+"_"+screen.ID, FlxHelp, true, true)
 	}
-	ArrScreens = append(ArrScreens, screen)
 	IdxScreens++
+	screen.Idx = IdxScreens
+	ArrScreens = append(ArrScreens, screen)
 	ShowScreen(IdxScreens)
 	if selfInit != nil {
 		selfInit(param)
@@ -459,12 +464,18 @@ func AddNewScreen(mode Mode, selfInit FnAny, param any) {
 	SetStatus(fmt.Sprintf("New screen [%s-%s]", screen.Title, strings.ToUpper(screen.ID)))
 }
 
+// ****************************************************************************
+// PleaseWait()
+// ****************************************************************************
 func PleaseWait() {
 	SetStatus("Running...")
 	LblHourglass.SetText("⌛")
 	App.ForceDraw()
 }
 
+// ****************************************************************************
+// JobsDone()
+// ****************************************************************************
 func JobsDone() {
 	LblHourglass.SetText("")
 }

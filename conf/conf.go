@@ -26,7 +26,8 @@ const (
 	NEW_FILE_TEMPLATE       = "lied_"
 	FILE_LOG                = "lied.log"
 	FILE_CONFIG             = "lied.json"
-	FKEY_LABELS             = "F1=Help F2=Prompt F3=Close F5=Refresh F6=Previous F7=Next F8=Context Menu F10=Main Menu F12=Exit"
+	FILE_MRU                = "mru"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Close F6=Previous F7=Next F10=Menu F12=Exit"
 )
 
 var Cwd string

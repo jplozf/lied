@@ -15,6 +15,7 @@ package main
 // IMPORTS
 // ****************************************************************************
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 
 	"lied/conf"
 	"lied/edit"
@@ -62,12 +64,14 @@ func init() {
 	if err != nil {
 		log.Fatalf(err.Error())
 	}
-	greeting = user.Username + "@" + hostname + "⯈"
+	greeting = fmt.Sprintf("%s@%s⯈", user.Username, hostname)
 
 	ui.App = tview.NewApplication()
 	ui.SetUI(appQuit, greeting)
 
 	ui.PgsApp.AddPage("edit", ui.FlxEditor, true, true)
+	ui.CurrentMode = ui.ModeTextEdit
+	// ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, nil)
 	ui.PgsApp.AddPage("dlgQuit", ui.DlgQuit, false, false)
 
 	userDir, err := os.UserHomeDir()
@@ -118,7 +122,8 @@ func main() {
 	ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF1:
-			ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
+			// ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
+			SwitchHelp()
 		case tcell.KeyF3:
 			ui.CloseCurrentScreen()
 		case tcell.KeyF6:
@@ -130,6 +135,18 @@ func main() {
 		case tcell.KeyF12:
 			ShowQuitDialog(nil)
 		case tcell.KeyCtrlC:
+			return nil
+		case tcell.KeyCtrlS:
+			edit.SaveFile()
+			return nil
+		case tcell.KeyCtrlN:
+			edit.NewFile(conf.Cwd)
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyEsc:
+			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
 		}
 		return event
@@ -160,13 +177,14 @@ func main() {
 	})
 	ui.TblOpenFiles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-		case tcell.KeyTab:
+		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TrvExplorer)
 			return nil
 		case tcell.KeyEnter:
 			idx, _ := ui.TblOpenFiles.GetSelection()
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenFile(fName)
+			edit.SetFocusOnPath(fName)
 			ui.App.SetFocus(ui.EdtMain)
 			return nil
 		}
@@ -174,17 +192,37 @@ func main() {
 	})
 	ui.TrvExplorer.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
-		case tcell.KeyTab:
-			// ui.App.SetFocus(ui.TxtPrompt)
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.EdtMain)
+			return nil
+		}
+		return event
+	})
+	ui.EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
 		}
 		return event
 	})
 
-	// edit.SwitchToEditor("")
+	edit.ShowTreeDir("/")
+
 	if len(args) > 1 {
+		edit.NewFileOrLastFile(conf.Cwd)
 		fName, _ := filepath.Abs(args[1])
-		edit.OpenFile(fName)
+		if utils.IsFileExist(fName) {
+			edit.OpenFile(fName)
+		} else {
+			f, e := os.Create(fName)
+			if e != nil {
+				ui.SetStatus(fmt.Sprintf("Can't create '%s' file", fName))
+			} else {
+				f.Close()
+				edit.OpenFile(fName)
+			}
+		}
 	} else {
 		edit.NewFileOrLastFile(conf.Cwd)
 	}
@@ -194,9 +232,10 @@ func main() {
 	ui.LblHostname.SetText("♯" + greeting)
 
 	go ui.UpdateTime()
-	if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.FlxEditor).EnableMouse(true).Run(); err != nil {
+	if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.EdtMain).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
+	// ui.App.SetFocus(ui.EdtMain)
 }
 
 // ****************************************************************************
@@ -204,19 +243,29 @@ func main() {
 // ****************************************************************************
 func ShowMainMenu() {
 	MnuMain = MnuMain.New(" "+conf.APP_NAME+" ", ui.GetCurrentScreen(), ui.EdtMain)
-	// Dynamic options (screens currently open)
-	for i := 0; i < len(ui.ArrScreens); i++ {
+	// Dynamic options (files currently open)
+	for i, e := range edit.OpenFiles {
 		chk := false
-		if i == ui.IdxScreens {
+		if e.FName == edit.CurrentFile.FName {
 			chk = true
 		}
-		MnuMain.AddItem(ui.ArrScreens[i].ID, fmt.Sprintf("%2d) %s-%s", i+1, ui.ArrScreens[i].Title, ui.ArrScreens[i].ID), ui.ShowScreen, i, true, chk)
+		sha, _ := utils.GetSha256(e.FName)
+		MnuMain.AddItem(sha,
+			fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName)),
+			edit.SwitchAnyFile,
+			e.FName,
+			true,
+			chk)
 	}
-	MnuMain.AddSeparator()
 	// Fixed options
 	MnuMain.AddSeparator()
+	MnuMain.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, true, false)
+	MnuMain.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
+	MnuMain.AddItem("mnuNew", "New", edit.NewAnyFile, conf.Cwd, true, false)
+	MnuMain.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
+	MnuMain.AddSeparator()
 	MnuMain.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
-
+	// Popup menu
 	ui.PgsApp.AddPage("dlgMainMenu", MnuMain.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgMainMenu")
 }
@@ -231,21 +280,42 @@ func appQuit() {
 	saveSettings()
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
 	ui.App.Stop()
-	fmt.Printf("\n♯%s\n\n", conf.APP_STRING)
+	fmt.Printf("♯%s\n", conf.APP_STRING)
 }
 
 // ****************************************************************************
 // readSettings()
 // ****************************************************************************
 func readSettings() {
-	// TODO : Restore the MRU
+	// Read MRU list and open them
+	ui.SetStatus("Reading MRU list")
+	fMRU, err := os.Open(filepath.Join(appDir, conf.FILE_MRU))
+	if err != nil {
+		return
+	}
+	defer fMRU.Close()
+	sMRU := bufio.NewScanner(fMRU)
+	for sMRU.Scan() {
+		edit.OpenFile(sMRU.Text())
+	}
 }
 
 // ****************************************************************************
 // saveSettings()
 // ****************************************************************************
 func saveSettings() {
-	// TODO : Save the MRU
+	// Save MRU list
+	ui.SetStatus("Saving MRU list")
+	fMRU, err := os.Create(filepath.Join(appDir, conf.FILE_MRU))
+	if err != nil {
+		return
+	}
+	defer fMRU.Close()
+	wMRU := bufio.NewWriter(fMRU)
+	for _, oFile := range edit.OpenFiles {
+		fmt.Fprintln(wMRU, oFile.FName)
+	}
+	wMRU.Flush()
 }
 
 // ****************************************************************************
@@ -253,4 +323,33 @@ func saveSettings() {
 // ****************************************************************************
 func ShowQuitDialog(p any) {
 	ui.PgsApp.SwitchToPage("dlgQuit")
+}
+
+// ****************************************************************************
+// SwitchHelp()
+// ****************************************************************************
+func SwitchHelp() {
+	if ui.CurrentMode == ui.ModeTextEdit {
+		// We are in TextEdit mode, so we want to switch to Help mode (if any)
+		idx := ui.GetScreenFromTitle("Help")
+		ui.SetStatus(fmt.Sprintf("Help IDX=%s", idx))
+		if idx == "NIL" {
+			// There is no Help mode yet
+			ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
+		} else {
+			i, _ := strconv.Atoi(idx)
+			ui.ShowScreen(i)
+		}
+	} else {
+		// We are in Help mode, so we want to go back to TextEdit mode (if any)
+		idx := ui.GetScreenFromTitle("Editor")
+		ui.SetStatus(fmt.Sprintf("Editor IDX=%s", idx))
+		if idx == "NIL" {
+			// There is no TextEdit mode yet
+			ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, nil)
+		} else {
+			i, _ := strconv.Atoi(idx)
+			ui.ShowScreen(i)
+		}
+	}
 }
