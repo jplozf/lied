@@ -26,9 +26,19 @@ const (
 	NEW_FILE_TEMPLATE       = "lied_"
 	FILE_LOG                = "lied.log"
 	FILE_CONFIG             = "lied.json"
+	FILE_INI                = "lied.ini"
 	FILE_MRU                = "mru"
-	FKEY_LABELS             = "F1=Help F2=Panel F3=Close F6=Previous F7=Next F10=Menu F12=Exit"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Close F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
 )
 
 var Cwd string
 var LogFile *os.File
+var Workspace string
+
+type Config struct {
+	Theme         string
+	GitUser       string
+	GitPassword   string
+	LastWorkspace string
+	ShowHidden    bool
+}

@@ -38,6 +38,7 @@ import (
 // ****************************************************************************
 type editfile struct {
 	Buffer   *femto.Buffer
+	View     *femto.View
 	FName    string
 	Encoding string
 }
@@ -87,18 +88,32 @@ func SwitchToEditor(fName string) {
 }
 
 // ****************************************************************************
+// OpenWorkspace()
+// ****************************************************************************
+func OpenWorkspace() {
+
+}
+
+// ****************************************************************************
+// SetTheme()
+// ****************************************************************************
+func SetTheme(theme string) {
+	if monokai := runtime.Files.FindFile(femto.RTColorscheme, theme); monokai != nil {
+		if data, err := monokai.Data(); err == nil {
+			var colorscheme femto.Colorscheme
+			colorscheme = femto.ParseColorscheme(string(data))
+			ui.EdtMain.SetColorscheme(colorscheme)
+		}
+	}
+}
+
+// ****************************************************************************
 // OpenFile()
 // ****************************************************************************
 func OpenFile(fName string) {
 	if isFileAlreadyOpen(fName) {
 		SwitchOpenFile(fName)
 	} else {
-		var colorscheme femto.Colorscheme
-		if monokai := runtime.Files.FindFile(femto.RTColorscheme, "monokai"); monokai != nil {
-			if data, err := monokai.Data(); err == nil {
-				colorscheme = femto.ParseColorscheme(string(data))
-			}
-		}
 		ui.EdtMain.SetRuntimeFiles(runtime.Files)
 		content, err := ioutil.ReadFile(fName)
 		if err != nil {
@@ -118,8 +133,9 @@ func OpenFile(fName string) {
 
 			CurrentFile.FName = fName
 			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
+			CurrentFile.View = femto.NewView(CurrentFile.Buffer)
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-			ui.EdtMain.SetColorscheme(colorscheme)
+			SetTheme("monokai")
 			ui.EdtMain.SetTitleAlign(tview.AlignRight)
 			ui.LblScreen.SetText(CurrentFile.Encoding)
 			OpenFiles = append(OpenFiles, CurrentFile)
@@ -516,15 +532,17 @@ func addDirToNode(target *tview.TreeNode, path string) {
 	if err != nil {
 		ui.SetStatus(err.Error())
 	} else {
-		if fileInfo.IsDir() {
+		if fileInfo.IsDir() || (fileInfo.Mode()&os.ModeSymlink != 0) {
 			files, err := os.ReadDir(path)
 			if err != nil {
 				ui.SetStatus(err.Error())
 			}
 			for _, file := range files {
+				// fi, _ := os.Stat(filepath.Join(path, file.Name()))
 				node := tview.NewTreeNode(file.Name()).
 					SetReference(filepath.Join(path, file.Name())).
-					SetSelectable(file.IsDir() || file.Type().IsRegular())
+					SetSelectable(true)
+					// SetSelectable(file.IsDir() || file.Type().IsRegular() || (fi.Mode()&os.ModeSymlink == 0))
 				if file.IsDir() {
 					node.SetColor(tcell.ColorGreen)
 				}

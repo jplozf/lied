@@ -5,7 +5,9 @@
 
 ## Roadmap
 * Copy / Cut / Paste
+* Undo and Redo
 * Find & Replace
 * Macros with files
 * Favorites
-
+* GIT integration
+* Workspaces				
