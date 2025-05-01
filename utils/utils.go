@@ -455,3 +455,13 @@ func RandomHex(n int) (string, error) {
 	}
 	return hex.EncodeToString(bytes), nil
 }
+
+// ****************************************************************************
+// If() Ternary Operator
+// ****************************************************************************
+func If[T any](cond bool, vtrue, vfalse T) T {
+	if cond {
+		return vtrue
+	}
+	return vfalse
+}

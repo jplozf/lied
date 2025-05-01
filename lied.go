@@ -16,10 +16,8 @@ package main
 // ****************************************************************************
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"os/user"
@@ -54,6 +52,10 @@ var (
 	MnuInputTheme       *menu.Menu
 	DlgInputGitUser     *dialog.Dialog
 	DlgInputGitPassword *dialog.Dialog
+	DlgInputFormatTime  *dialog.Dialog
+	DlgInputFormatDate  *dialog.Dialog
+	DlgInputFileOpen    *dialog.Dialog
+	DlgInputShell       *dialog.Dialog
 )
 
 // ****************************************************************************
@@ -86,7 +88,7 @@ func init() {
 		log.Fatal(err)
 	}
 	// Set the Current Working Directory
-	conf.Cwd, _ = os.Getwd()
+	config.Workspace, _ = os.Getwd()
 	appDir = filepath.Join(userDir, conf.APP_FOLDER)
 	if _, err := os.Stat(appDir); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(appDir, os.ModePerm)
@@ -100,22 +102,24 @@ func init() {
 		panic(err)
 	}
 
-	jsonFile, err := os.Open(filepath.Join(appDir, conf.FILE_CONFIG))
-	if err == nil {
-		// Read config from json file
-		defer jsonFile.Close()
-		bValues, _ := ioutil.ReadAll(jsonFile)
-		json.Unmarshal(bValues, &ui.MyConfig)
-		ui.SetStatus("Reading config from json")
-	} else {
-		// Set default config (Sorry, default time and date formats are the French way ;)
-		ui.MyConfig.FormatDate = "02/01/2006"
-		ui.MyConfig.FormatTime = "15:04:05"
-		ui.SetStatus("Set default config")
-		// Write config to json file
-		jsonFile, _ := json.MarshalIndent(ui.MyConfig, "", " ")
-		_ = ioutil.WriteFile(filepath.Join(appDir, conf.FILE_CONFIG), jsonFile, 0644)
-	}
+	/*
+		jsonFile, err := os.Open(filepath.Join(appDir, conf.FILE_CONFIG))
+		if err == nil {
+			// Read config from json file
+			defer jsonFile.Close()
+			bValues, _ := ioutil.ReadAll(jsonFile)
+			json.Unmarshal(bValues, &ui.MyConfig)
+			ui.SetStatus("Reading config from json")
+		} else {
+			// Set default config (Sorry, default time and date formats are the French way ;)
+			ui.MyConfig.FormatDate = "02/01/2006"
+			ui.MyConfig.FormatTime = "15:04:05"
+			ui.SetStatus("Set default config")
+			// Write config to json file
+			jsonFile, _ := json.MarshalIndent(ui.MyConfig, "", " ")
+			_ = ioutil.WriteFile(filepath.Join(appDir, conf.FILE_CONFIG), jsonFile, 0644)
+		}
+	*/
 
 	ui.SetStatus(fmt.Sprintf("Starting session #%s", ui.SessionID))
 	readSettings()
@@ -133,14 +137,16 @@ func main() {
 			SwitchHelp()
 		case tcell.KeyF8:
 			ShowConfigMenu()
-		case tcell.KeyF3:
-			ui.CloseCurrentScreen()
 		case tcell.KeyF6:
-			ui.ShowPreviousScreen()
+			// ui.ShowPreviousScreen()
+			edit.SwitchPreviousFile()
 		case tcell.KeyF7:
-			ui.ShowNextScreen()
+			// ui.ShowNextScreen()
+			edit.SwitchNextFile()
 		case tcell.KeyF10:
 			ShowMainMenu()
+		case tcell.KeyF4:
+			InputShell(nil)
 		case tcell.KeyF12:
 			ShowQuitDialog(nil)
 		case tcell.KeyCtrlC:
@@ -168,14 +174,19 @@ func main() {
 			edit.SaveFile()
 			return nil
 		case tcell.KeyCtrlN:
-			edit.NewFile(conf.Cwd)
+			edit.NewFile(config.Workspace)
+			return nil
+		case tcell.KeyCtrlO:
+			InputFileOpen(config.Workspace)
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
 			return nil
-		case tcell.KeyEsc:
-			ui.App.SetFocus(ui.TblOpenFiles)
-			return nil
+			/*
+				case tcell.KeyEsc:
+					ui.App.SetFocus(ui.TblOpenFiles)
+					return nil
+			*/
 		}
 		return event
 	})
@@ -192,7 +203,10 @@ func main() {
 			edit.SaveFile()
 			return nil
 		case tcell.KeyCtrlN:
-			edit.NewFile(conf.Cwd)
+			edit.NewFile(config.Workspace)
+			return nil
+		case tcell.KeyCtrlO:
+			InputFileOpen(config.Workspace)
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
@@ -235,13 +249,13 @@ func main() {
 		return event
 	})
 
-	edit.ShowTreeDir(conf.Cwd)
+	edit.ShowTreeDir(config.Workspace, config.ShowHidden)
 
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
 	if len(args) > 1 {
-		edit.NewFileOrLastFile(conf.Cwd)
+		edit.NewFileOrLastFile(config.Workspace)
 		fName, _ := filepath.Abs(args[1])
 		if utils.IsFileExist(fName) {
 			edit.OpenFile(fName)
@@ -255,11 +269,11 @@ func main() {
 			}
 		}
 	} else {
-		edit.NewFileOrLastFile(conf.Cwd)
+		edit.NewFileOrLastFile(config.Workspace)
 	}
 
 	ui.SetTitle(conf.APP_STRING)
-	ui.SetStatus("Welcome.")
+	ui.SetStatus("Welcome")
 	ui.LblHostname.SetText("♯" + greeting)
 
 	go ui.UpdateTime()
@@ -293,7 +307,8 @@ func ShowMainMenu() {
 	// MnuMain.AddItem("mnuOpenWorkspace", "Open Workspace", edit.OpenWorkspace, nil, true, false)
 	MnuMain.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, true, false)
 	MnuMain.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
-	MnuMain.AddItem("mnuNew", "New", edit.NewAnyFile, conf.Cwd, true, false)
+	MnuMain.AddItem("mnuNew", "New", edit.NewAnyFile, config.Workspace, true, false)
+	MnuMain.AddItem("mnuOpen", "Open…", InputFileOpen, config.Workspace, true, false)
 	MnuMain.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
 	MnuMain.AddSeparator()
 	MnuMain.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
@@ -311,6 +326,10 @@ func ShowConfigMenu() {
 	MnuConfig.AddItem("mnuCfgTheme", "Theme", InputConfigTheme, nil, true, false)
 	MnuConfig.AddItem("mnuCfgGitUser", "Git User", InputConfigGitUser, nil, true, false)
 	MnuConfig.AddItem("mnuCfgGitPassword", "Git Password", InputConfigGitPassword, nil, true, false)
+	MnuConfig.AddItem("mnuCfgConfirmExit", "Confirm Exit", SwitchConfirmExit, nil, true, config.ConfirmExit)
+	MnuConfig.AddItem("mnuCfgShowHidden", "Show Hidden", SwitchShowHidden, nil, true, config.ShowHidden)
+	MnuConfig.AddItem("mnuCfgFormatTime", "Time Format", InputConfigFormatTime, nil, true, false)
+	MnuConfig.AddItem("mnuCfgFormatDate", "Date Format", InputConfigFormatDate, nil, true, false)
 	// Popup menu
 	ui.PgsApp.AddPage("dlgConfigMenu", MnuConfig.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgConfigMenu")
@@ -326,7 +345,7 @@ func appQuit() {
 	saveSettings()
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
 	ui.App.Stop()
-	fmt.Printf("♯%s\n", conf.APP_STRING)
+	fmt.Printf("♯%s - %s\n", conf.APP_STRING, conf.APP_URL)
 }
 
 // ****************************************************************************
@@ -355,9 +374,27 @@ func readSettings() {
 		config.Theme = section.Key("Theme").String()
 		config.GitUser = section.Key("GitUser").String()
 		config.GitPassword = section.Key("GitPassword").String()
-		config.LastWorkspace = section.Key("Workspace").String()
+		config.Workspace = section.Key("Workspace").String()
+		config.ShowHidden, _ = section.Key("ShowHidden").Bool()
+		config.ConfirmExit, _ = section.Key("ConfirmExit").Bool()
+		config.FormatTime = section.Key("FormatTime").String()
+		config.FormatDate = section.Key("FormatDate").String()
 		// Set them
 		setTheme(config.Theme)
+		if config.FormatTime == "" {
+			config.FormatTime = "15:04:05"
+		}
+		ui.MyConfig.FormatTime = config.FormatTime
+		if config.FormatDate == "" {
+			config.FormatDate = "02/01/2006"
+		}
+		ui.MyConfig.FormatDate = config.FormatDate
+		if config.Workspace == "" {
+			config.Workspace, _ = os.Getwd()
+		}
+		edit.SwitchOpenFile(section.Key("CurrentFile").String())
+		edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
+		edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
 	}
 }
 
@@ -383,7 +420,14 @@ func saveSettings() {
 	sec.NewKey("Theme", config.Theme)
 	sec.NewKey("GitUser", config.GitUser)
 	sec.NewKey("GitPassword", config.GitPassword)
-	sec.NewKey("Workspace", config.LastWorkspace)
+	sec.NewKey("Workspace", edit.CurrentWorkspace)
+	sec.NewKey("ShowHidden", utils.If(config.ShowHidden, "True", "False"))
+	sec.NewKey("ConfirmExit", utils.If(config.ConfirmExit, "True", "False"))
+	sec.NewKey("FormatTime", config.FormatTime)
+	sec.NewKey("FormatDate", config.FormatDate)
+	sec.NewKey("CurrentFile", edit.CurrentFile.FName)
+	sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
+	sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
@@ -395,7 +439,11 @@ func saveSettings() {
 // ShowQuitDialog()
 // ****************************************************************************
 func ShowQuitDialog(p any) {
-	ui.PgsApp.SwitchToPage("dlgQuit")
+	if config.ConfirmExit {
+		ui.PgsApp.SwitchToPage("dlgQuit")
+	} else {
+		appQuit()
+	}
 }
 
 // ****************************************************************************
@@ -419,7 +467,7 @@ func SwitchHelp() {
 		ui.SetStatus(fmt.Sprintf("Editor IDX=%s", idx))
 		if idx == "NIL" {
 			// There is no TextEdit mode yet
-			ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, nil)
+			ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, config.Workspace)
 		} else {
 			i, _ := strconv.Atoi(idx)
 			ui.ShowScreen(i)
@@ -475,36 +523,167 @@ func InputConfigTheme(f any) {
 func setTheme(theme any) {
 	edit.SetTheme(theme.(string))
 	config.Theme = theme.(string)
+	ui.SetStatus(fmt.Sprintf("Theme is set to %s", config.Theme))
 }
 
 // ****************************************************************************
 // InputConfigGitUser()
 // ****************************************************************************
 func InputConfigGitUser(f any) {
-	/*
-		DlgInputGitUser = DlgInputGitUser.Input("Git User", // Title
-			"Please, enter the Git user :", // Message
-			CurrentFile.FName,
-			confirmSaveAs,
-			0,
-			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
-		ui.PgsApp.AddPage("dlgInputGitUser", DlgInputGitUser.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgInputGitUser")
-	*/
+	DlgInputGitUser = DlgInputGitUser.Input("Git User", // Title
+		"Please, enter the Git user :", // Message
+		config.GitUser,
+		setGitUser,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputGitUser", DlgInputGitUser.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputGitUser")
+}
+
+// ****************************************************************************
+// setGitUser()
+// ****************************************************************************
+func setGitUser(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		config.GitUser = DlgInputGitUser.Value
+		ui.SetStatus(fmt.Sprintf("Git User is set to %s", config.GitUser))
+	}
 }
 
 // ****************************************************************************
 // InputConfigGitPassword()
 // ****************************************************************************
 func InputConfigGitPassword(f any) {
-	/*
-		DlgInputGitPassword = DlgInputGitPassword.Input("Git Password", // Title
-			"Please, enter the Git password :", // Message
-			CurrentFile.FName,
-			confirmSaveAs,
-			0,
-			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
-		ui.PgsApp.AddPage("dlgInputGitPassword", DlgInputGitPassword.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgInputGitPassword")
-	*/
+	DlgInputGitPassword = DlgInputGitPassword.Input("Git Password", // Title
+		"Please, enter the Git password :", // Message
+		config.GitPassword,
+		setGitPassword,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputGitPassword", DlgInputGitPassword.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputGitPassword")
+}
+
+// ****************************************************************************
+// setGitPassword()
+// ****************************************************************************
+func setGitPassword(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		config.GitPassword = DlgInputGitPassword.Value
+		ui.SetStatus(fmt.Sprintf("Git Password is set to %s", config.GitPassword))
+	}
+}
+
+// ****************************************************************************
+// InputConfigFormatTime()
+// ****************************************************************************
+func InputConfigFormatTime(f any) {
+	DlgInputFormatTime = DlgInputFormatTime.Input("Time Format", // Title
+		"Please, enter the time format :", // Message
+		config.FormatTime,
+		setFormatTime,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputFormatTime", DlgInputFormatTime.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFormatTime")
+}
+
+// ****************************************************************************
+// setFormatTime()
+// ****************************************************************************
+func setFormatTime(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		config.FormatTime = DlgInputFormatTime.Value
+		ui.SetStatus(fmt.Sprintf("Time Format is set to %s", config.FormatTime))
+		ui.MyConfig.FormatTime = config.FormatTime
+	}
+}
+
+// ****************************************************************************
+// InputConfigFormatDate()
+// ****************************************************************************
+func InputConfigFormatDate(f any) {
+	DlgInputFormatDate = DlgInputFormatDate.Input("Date Format", // Title
+		"Please, enter the date format :", // Message
+		config.FormatDate,
+		setFormatDate,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputFormatDate", DlgInputFormatDate.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFormatDate")
+}
+
+// ****************************************************************************
+// setFormatDate()
+// ****************************************************************************
+func setFormatDate(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		config.FormatDate = DlgInputFormatDate.Value
+		ui.SetStatus(fmt.Sprintf("Date Format is set to %s", config.FormatDate))
+		ui.MyConfig.FormatDate = config.FormatDate
+	}
+}
+
+// ****************************************************************************
+// InputFileOpen()
+// ****************************************************************************
+func InputFileOpen(f any) {
+	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Open File", // Title
+		edit.CurrentWorkspace,
+		doOpenFile,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFileOpen")
+}
+
+// ****************************************************************************
+// doOpenFile()
+// ****************************************************************************
+func doOpenFile(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		fn := DlgInputFileOpen.Value
+		ui.SetStatus("Opening " + fn)
+	}
+}
+
+// ****************************************************************************
+// SwitchShowHidden()
+// ****************************************************************************
+func SwitchShowHidden(dummy any) {
+	config.ShowHidden = !config.ShowHidden
+	ui.SetStatus(fmt.Sprintf("Show Hidden is set to %t", config.ShowHidden))
+	edit.ShowTreeDir(config.Workspace, config.ShowHidden)
+}
+
+// ****************************************************************************
+// SwitchConfirmExit()
+// ****************************************************************************
+func SwitchConfirmExit(dummy any) {
+	config.ConfirmExit = !config.ConfirmExit
+	ui.SetStatus(fmt.Sprintf("Confirm Exit is set to %t", config.ConfirmExit))
+}
+
+// ****************************************************************************
+// InputShell()
+// ****************************************************************************
+func InputShell(f any) {
+	sh := ""
+	DlgInputShell = DlgInputShell.Input("Shell", // Title
+		"$> ", // Message
+		sh,
+		runShell,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputShell", DlgInputShell.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputShell")
+}
+
+// ****************************************************************************
+// runShell()
+// ****************************************************************************
+func runShell(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		ui.SetStatus(fmt.Sprintf("Running %s", DlgInputShell.Value))
+	}
 }

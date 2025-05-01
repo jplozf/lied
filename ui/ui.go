@@ -50,8 +50,8 @@ type MyScreen struct {
 }
 
 type Config struct {
-	FormatDate string `json:"format_date"`
-	FormatTime string `json:"format_time"`
+	FormatDate string
+	FormatTime string
 }
 
 // ****************************************************************************
@@ -92,6 +92,10 @@ var (
 	TblOpenFiles *tview.Table
 	TrvExplorer  *tview.TreeView
 	MyConfig     Config
+	LblEncoding  *tview.TextView
+	LblCursor    *tview.TextView
+	LblDirty     *tview.TextView
+	LblPercent   *tview.TextView
 )
 
 // ****************************************************************************
@@ -136,6 +140,7 @@ func SetUI(fQuit Fn, hostname string) {
 
 	lblTime = tview.NewTextView().SetText(currentTimeString())
 	lblTime.SetBorder(false)
+	lblTime.SetTextAlign(tview.AlignRight)
 
 	LblKeys = tview.NewTextView()
 	LblKeys.SetBorder(false)
@@ -180,6 +185,26 @@ func SetUI(fQuit Fn, hostname string) {
 	LblHostname.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblHostname.SetTextColor(tcell.ColorBlack)
 
+	LblEncoding = tview.NewTextView()
+	LblEncoding.SetBorder(false)
+	LblEncoding.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblEncoding.SetTextColor(tcell.ColorWheat)
+
+	LblCursor = tview.NewTextView()
+	LblCursor.SetBorder(false)
+	LblCursor.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblCursor.SetTextColor(tcell.ColorWheat)
+
+	LblDirty = tview.NewTextView()
+	LblDirty.SetBorder(false)
+	LblDirty.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblDirty.SetTextColor(tcell.ColorWheat)
+
+	LblPercent = tview.NewTextView()
+	LblPercent.SetBorder(false)
+	LblPercent.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblPercent.SetTextColor(tcell.ColorWheat)
+
 	TxtHelp = tview.NewTextView().Clear()
 	TxtHelp.SetBorder(true)
 	TxtHelp.SetDynamicColors(true)
@@ -222,7 +247,7 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
 			AddItem(lblTitle, 0, 1, false).
-			AddItem(lblTime, 8, 0, false), 1, 0, false).
+			AddItem(lblTime, 10, 0, false), 1, 0, false).
 		AddItem(tview.NewFlex().
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TxtEditName, 3, 0, false).
@@ -234,7 +259,10 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(tview.NewFlex().
 			AddItem(LblHostname, len(hostname)+3, 0, false).
 			AddItem(lblStatus, 0, 1, false).
-			AddItem(LblScreen, 10, 0, false).
+			AddItem(LblPercent, 6, 0, false).
+			AddItem(LblCursor, 15, 0, false).
+			AddItem(LblEncoding, 10, 0, false).
+			AddItem(LblDirty, 10, 0, false).
 			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
 
 	//*************************************************************************
@@ -447,7 +475,7 @@ func AddNewScreen(mode Mode, selfInit FnAny, param any) {
 	switch mode {
 	case ModeTextEdit:
 		screen.Title = "Editor"
-		screen.Keys = "Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+T=Close"
+		screen.Keys = conf.CKEY_LABELS
 		PgsApp.AddPage(screen.Title+"_"+screen.ID, FlxEditor, true, true)
 	case ModeHelp:
 		screen.Title = "Help"

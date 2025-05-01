@@ -54,11 +54,13 @@ const (
 // GLOBALS
 // ****************************************************************************
 var (
-	OpenFiles     []editfile
-	CurrentFile   editfile
-	DlgSaveFile   *dialog.Dialog
-	DlgSaveFileAs *dialog.Dialog
-	currentFlow   int
+	OpenFiles        []editfile
+	CurrentFile      editfile
+	DlgSaveFile      *dialog.Dialog
+	DlgSaveFileAs    *dialog.Dialog
+	currentFlow      int
+	showHidden       bool
+	CurrentWorkspace string
 )
 
 // ****************************************************************************
@@ -67,14 +69,14 @@ var (
 func SwitchToEditor(fName string) {
 	ui.CurrentMode = ui.ModeTextEdit
 	ui.SetTitle(conf.APP_NAME)
-	ui.LblKeys.SetText(conf.FKEY_LABELS + "\nCtrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+T=Close")
+	ui.LblKeys.SetText(conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS)
 	scr := ui.GetScreenFromTitle(conf.APP_NAME)
 	if scr == "NIL" {
 		var screen ui.MyScreen
 		screen.ID, _ = utils.RandomHex(3)
 		screen.Mode = ui.ModeTextEdit
 		screen.Title = conf.APP_NAME
-		screen.Keys = "Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+T=Close"
+		screen.Keys = conf.CKEY_LABELS
 		ui.PgsApp.AddPage(screen.Title+"_"+screen.ID, ui.FlxEditor, true, true)
 		scr = screen.Title + "_" + screen.ID
 		ui.ArrScreens = append(ui.ArrScreens, screen)
@@ -91,7 +93,7 @@ func SwitchToEditor(fName string) {
 // OpenWorkspace()
 // ****************************************************************************
 func OpenWorkspace() {
-
+	// DO IT
 }
 
 // ****************************************************************************
@@ -111,6 +113,7 @@ func SetTheme(theme string) {
 // OpenFile()
 // ****************************************************************************
 func OpenFile(fName string) {
+	CurrentWorkspace = filepath.Dir(fName)
 	if isFileAlreadyOpen(fName) {
 		SwitchOpenFile(fName)
 	} else {
@@ -146,6 +149,7 @@ func OpenFile(fName string) {
 			ui.App.SetFocus(ui.EdtMain)
 		}
 	}
+	ShowTreeDir(CurrentWorkspace, showHidden)
 }
 
 // ****************************************************************************
@@ -242,12 +246,16 @@ func UpdateStatus() {
 			ui.TxtEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
 			if CurrentFile.Buffer.Modified() {
 				status = conf.ICON_MODIFIED
+				ui.LblDirty.SetText("*modified*")
 			} else {
 				status = " "
+				ui.LblDirty.SetText("")
 			}
 			x := CurrentFile.Buffer.Cursor.X + 1
 			y := CurrentFile.Buffer.Cursor.Y + 1
 			ui.EdtMain.SetTitle(fmt.Sprintf("[ Ln %d, Col %d %s ]", y, x, status))
+			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
 			for i, f := range OpenFiles {
 				if f.Buffer.Modified() {
@@ -267,19 +275,21 @@ func UpdateStatus() {
 // SwitchOpenFile()
 // ****************************************************************************
 func SwitchOpenFile(fName string) {
+	CurrentWorkspace = filepath.Dir(fName)
 	for _, e := range OpenFiles {
 		if e.FName == fName {
 			CurrentFile.FName = e.FName
 			CurrentFile.Buffer = e.Buffer
 			CurrentFile.Encoding = e.Encoding
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-			ui.LblScreen.SetText(CurrentFile.Encoding)
+			ui.LblEncoding.SetText(CurrentFile.Encoding)
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
 			go focusOpenFile(fName)
 			break
 		}
 	}
+	ShowTreeDir(CurrentWorkspace, showHidden)
 }
 
 // ****************************************************************************
@@ -287,6 +297,38 @@ func SwitchOpenFile(fName string) {
 // ****************************************************************************
 func SwitchAnyFile(fName any) {
 	SwitchOpenFile(fName.(string))
+}
+
+// ****************************************************************************
+// SwitchPreviousFile()
+// ****************************************************************************
+func SwitchPreviousFile() {
+	for i, e := range OpenFiles {
+		if e.FName == CurrentFile.FName {
+			prev := i - 1
+			if prev < 0 {
+				prev = len(OpenFiles) - 1
+			}
+			SwitchOpenFile(OpenFiles[prev].FName)
+			break
+		}
+	}
+}
+
+// ****************************************************************************
+// SwitchNextFile()
+// ****************************************************************************
+func SwitchNextFile() {
+	for i, e := range OpenFiles {
+		if e.FName == CurrentFile.FName {
+			next := i + 1
+			if next == len(OpenFiles) {
+				next = 0
+			}
+			SwitchOpenFile(OpenFiles[next].FName)
+			break
+		}
+	}
 }
 
 // ****************************************************************************
@@ -457,10 +499,11 @@ func CloseAnyFile(f any) {
 // ****************************************************************************
 // ShowTreeDir()
 // ****************************************************************************
-func ShowTreeDir(rootDir string) {
+func ShowTreeDir(rootDir string, sh bool) {
 	root := tview.NewTreeNode(rootDir).
 		SetColor(tcell.ColorYellow)
 	ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
+	showHidden = sh
 
 	// A helper function which adds the files and directories of the given path
 	// to the given target node.
@@ -499,7 +542,7 @@ func ShowTreeDir(rootDir string) {
 	*/
 
 	// Add the current directory to the root node.
-	addDirToNode(root, rootDir)
+	addDirToNode(root, rootDir, showHidden)
 
 	// If a directory was selected, open it.
 	ui.TrvExplorer.SetSelectedFunc(selectNode)
@@ -517,7 +560,7 @@ func selectNode(node *tview.TreeNode) {
 	if len(children) == 0 {
 		// Load and show files in this directory.
 		path := reference.(string)
-		addDirToNode(node, path)
+		addDirToNode(node, path, showHidden)
 	} else {
 		// Collapse if visible, expand if collapsed.
 		node.SetExpanded(!node.IsExpanded())
@@ -527,7 +570,7 @@ func selectNode(node *tview.TreeNode) {
 // ****************************************************************************
 // addDirToNode()
 // ****************************************************************************
-func addDirToNode(target *tview.TreeNode, path string) {
+func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		ui.SetStatus(err.Error())
@@ -538,15 +581,26 @@ func addDirToNode(target *tview.TreeNode, path string) {
 				ui.SetStatus(err.Error())
 			}
 			for _, file := range files {
-				// fi, _ := os.Stat(filepath.Join(path, file.Name()))
 				node := tview.NewTreeNode(file.Name()).
 					SetReference(filepath.Join(path, file.Name())).
 					SetSelectable(true)
-					// SetSelectable(file.IsDir() || file.Type().IsRegular() || (fi.Mode()&os.ModeSymlink == 0))
+				fi, er := os.Lstat(filepath.Join(path, file.Name()))
+				if er == nil {
+					if fi.Mode()&os.ModeSymlink == os.ModeSymlink {
+						node.SetColor(tcell.ColorBlue)
+					}
+				}
 				if file.IsDir() {
 					node.SetColor(tcell.ColorGreen)
 				}
-				target.AddChild(node)
+				if !showHidden {
+					if file.Name()[0:1] != "." {
+						target.AddChild(node)
+					}
+				} else {
+					target.AddChild(node)
+				}
+
 			}
 		} else {
 			mtype := utils.GetMimeType(path)
@@ -568,7 +622,7 @@ func addDirToNode(target *tview.TreeNode, path string) {
 // SelfInit()
 // ****************************************************************************
 func SelfInit(a any) {
-	NewFileOrLastFile(conf.Cwd)
+	NewFileOrLastFile(a.(string))
 }
 
 // ****************************************************************************

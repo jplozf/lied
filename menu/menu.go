@@ -208,6 +208,7 @@ func (m *Menu) Popup() tview.Primitive {
 		case tcell.KeyEsc:
 			ui.PgsApp.SwitchToPage(m.parent)
 			ui.App.SetFocus(m.focus)
+			ui.SetStatus("Escape from menu")
 			return nil
 		}
 		return event

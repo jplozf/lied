@@ -18,7 +18,12 @@
 * Manage MRU files
 * Manage MRU workspaces
 * Manage workspaces (delete file, add file, rename file, add subfolder, delete subfolder... )
-* Change theme
-* Show / Hide hidden files and directories
-* Change date and time formats
-* Remember opened file and line position on exit
+* ~~Change theme~~
+* ~~Show / Hide hidden files and directories~~
+* ~~Change date and time formats~~
+* ~~Remember opened file and line position on exit~~
+* ~~Move JSON parameters to INI file~~
+* Reload modified file (tail -f)
+* Check if modified file on exit
+* ~~Add percentage of scrolled file into status bar~~
+* Add command line input box
