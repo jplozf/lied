@@ -145,8 +145,8 @@ func OpenFile(fName string) {
 			SetTheme("monokai")
 			ui.EdtMain.SetTitleAlign(tview.AlignRight)
 			ui.LblScreen.SetText(CurrentFile.Encoding)
+			CurrentFile = UpdateGITInfos(CurrentFile)
 			OpenFiles = append(OpenFiles, CurrentFile)
-			UpdateGITInfos()
 			go UpdateStatus()
 			go focusOpenFile(fName)
 			ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
@@ -259,7 +259,7 @@ func UpdateStatus() {
 			}
 			x := CurrentFile.Buffer.Cursor.X + 1
 			y := CurrentFile.Buffer.Cursor.Y + 1
-			UpdateGITInfos()
+			CurrentFile = UpdateGITInfos(CurrentFile)
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
 			ui.LblCommit.SetText("# " + CurrentFile.GitCommit)
 			ui.LblGITStatus.SetText("⚠ " + CurrentFile.GitStatus)
@@ -269,6 +269,7 @@ func UpdateStatus() {
 			ui.TblOpenFiles.Clear()
 			for i, f := range OpenFiles {
 				if f.Buffer.Modified() {
+					f = UpdateGITInfos(f)
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
 				} else {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
@@ -284,35 +285,38 @@ func UpdateStatus() {
 // ****************************************************************************
 // UpdateGITInfos()
 // ****************************************************************************
-func UpdateGITInfos() {
+func UpdateGITInfos(f editfile) editfile {
+	ws := filepath.Dir(f.FName)
 	// Get GIT Commit
-	commit, err2 := utils.Xeq(CurrentWorkspace, "git", "rev-parse", "--short", "HEAD")
+	commit, err2 := utils.Xeq(ws, "git", "rev-parse", "--short", "HEAD")
 	if err2 != "" {
 		commit = "No GIT"
 	}
-	CurrentFile.GitCommit = commit
+	f.GitCommit = commit
 	// Get GIT Status
-	status, _ := utils.Xeq(CurrentWorkspace, "git", "status", "-s")
+	status, _ := utils.Xeq(ws, "git", "status", "-s")
 	if status != "" {
 		status = "Pending Commit"
 	} else {
 		status = "Up to date"
 	}
-	CurrentFile.GitStatus = status
+	f.GitStatus = status
 	// Get GIT Branch
-	branch, err3 := utils.Xeq(CurrentWorkspace, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	branch, err3 := utils.Xeq(ws, "git", "rev-parse", "--abbrev-ref", "HEAD")
 	if err3 != "" {
 		branch = "Unknown"
 	}
-	CurrentFile.GitBranch = branch
+	f.GitBranch = branch
 	// Get GIT File Status
-	fstatus, _ := utils.Xeq(CurrentWorkspace, "git", "status", "-s", CurrentFile.FName)
+	fstatus, _ := utils.Xeq(ws, "git", "status", "-s", f.FName)
 	if fstatus != "" {
 		fstatus = fstatus[0:2]
 	} else {
 		fstatus = "  "
 	}
-	CurrentFile.GitFileStatus = fstatus
+	f.GitFileStatus = fstatus
+
+	return f
 }
 
 // ****************************************************************************
