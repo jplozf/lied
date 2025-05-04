@@ -268,8 +268,8 @@ func UpdateStatus() {
 			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
 			for i, f := range OpenFiles {
+				f = UpdateGITInfos(f)
 				if f.Buffer.Modified() {
-					f = UpdateGITInfos(f)
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
 				} else {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
