@@ -37,10 +37,14 @@ import (
 // TYPES
 // ****************************************************************************
 type editfile struct {
-	Buffer   *femto.Buffer
-	View     *femto.View
-	FName    string
-	Encoding string
+	Buffer        *femto.Buffer
+	View          *femto.View
+	FName         string
+	Encoding      string
+	GitCommit     string
+	GitStatus     string
+	GitBranch     string
+	GitFileStatus string
 }
 
 const (
@@ -142,6 +146,7 @@ func OpenFile(fName string) {
 			ui.EdtMain.SetTitleAlign(tview.AlignRight)
 			ui.LblScreen.SetText(CurrentFile.Encoding)
 			OpenFiles = append(OpenFiles, CurrentFile)
+			UpdateGITInfos()
 			go UpdateStatus()
 			go focusOpenFile(fName)
 			ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
@@ -176,6 +181,7 @@ func SaveAnyFile(f any) {
 // SaveFileAs()
 // ****************************************************************************
 func SaveFileAs() {
+	ui.SetStatus("Save as...")
 	currentFlow = FLOW_SELF
 	DlgSaveFileAs = DlgSaveFileAs.Input("Save File as...", // Title
 		"Please, enter the new name for this file :", // Message
@@ -253,15 +259,19 @@ func UpdateStatus() {
 			}
 			x := CurrentFile.Buffer.Cursor.X + 1
 			y := CurrentFile.Buffer.Cursor.Y + 1
+			UpdateGITInfos()
+			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
+			ui.LblCommit.SetText("# " + CurrentFile.GitCommit)
+			ui.LblGITStatus.SetText("⚠ " + CurrentFile.GitStatus)
 			ui.EdtMain.SetTitle(fmt.Sprintf("[ Ln %d, Col %d %s ]", y, x, status))
 			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
 			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
 			for i, f := range OpenFiles {
 				if f.Buffer.Modified() {
-					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED))
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
 				} else {
-					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "))
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
 				}
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
@@ -269,6 +279,40 @@ func UpdateStatus() {
 			}
 		})
 	}
+}
+
+// ****************************************************************************
+// UpdateGITInfos()
+// ****************************************************************************
+func UpdateGITInfos() {
+	// Get GIT Commit
+	commit, err2 := utils.Xeq(CurrentWorkspace, "git", "rev-parse", "--short", "HEAD")
+	if err2 != "" {
+		commit = "No GIT"
+	}
+	CurrentFile.GitCommit = commit
+	// Get GIT Status
+	status, _ := utils.Xeq(CurrentWorkspace, "git", "status", "-s")
+	if status != "" {
+		status = "Pending Commit"
+	} else {
+		status = "Up to date"
+	}
+	CurrentFile.GitStatus = status
+	// Get GIT Branch
+	branch, err3 := utils.Xeq(CurrentWorkspace, "git", "rev-parse", "--abbrev-ref", "HEAD")
+	if err3 != "" {
+		branch = "Unknown"
+	}
+	CurrentFile.GitBranch = branch
+	// Get GIT File Status
+	fstatus, _ := utils.Xeq(CurrentWorkspace, "git", "status", "-s", CurrentFile.FName)
+	if fstatus != "" {
+		fstatus = fstatus[0:2]
+	} else {
+		fstatus = "  "
+	}
+	CurrentFile.GitFileStatus = fstatus
 }
 
 // ****************************************************************************
@@ -281,6 +325,9 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.FName = e.FName
 			CurrentFile.Buffer = e.Buffer
 			CurrentFile.Encoding = e.Encoding
+			CurrentFile.GitCommit = e.GitCommit
+			CurrentFile.GitStatus = e.GitStatus
+			CurrentFile.GitBranch = e.GitBranch
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			ui.LblEncoding.SetText(CurrentFile.Encoding)
 			// FocusOnPath(fName)

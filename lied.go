@@ -47,6 +47,7 @@ var (
 	err                 error
 	MnuMain             *menu.Menu
 	MnuConfig           *menu.Menu
+	MnuGIT              *menu.Menu
 	args                []string
 	config              conf.Config
 	MnuInputTheme       *menu.Menu
@@ -131,6 +132,11 @@ func init() {
 func main() {
 	// Main keyboard's events manager
 	ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		evkSaveAs := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt)
+		if event.Key() == evkSaveAs.Key() && event.Rune() == evkSaveAs.Rune() && event.Modifiers() == evkSaveAs.Modifiers() {
+			edit.SaveFileAs()
+			return nil
+		}
 		switch event.Key() {
 		case tcell.KeyF1:
 			// ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
@@ -145,6 +151,8 @@ func main() {
 			edit.SwitchNextFile()
 		case tcell.KeyF10:
 			ShowMainMenu()
+		case tcell.KeyF3:
+			ShowGITMenu()
 		case tcell.KeyF4:
 			InputShell(nil)
 		case tcell.KeyF12:
@@ -333,6 +341,25 @@ func ShowConfigMenu() {
 	// Popup menu
 	ui.PgsApp.AddPage("dlgConfigMenu", MnuConfig.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgConfigMenu")
+}
+
+// ****************************************************************************
+// ShowGITMenu()
+// ****************************************************************************
+func ShowGITMenu() {
+	MnuGIT = MnuGIT.New(" GIT Tracking ", ui.GetCurrentScreen(), ui.EdtMain)
+	// Menu Options
+	MnuGIT.AddItem("mnuGITStatus", "Status", InputConfigTheme, nil, true, false)
+	MnuGIT.AddItem("mnuGITCommit", "Commit", InputConfigGitUser, nil, true, false)
+	MnuGIT.AddItem("mnuGITPush", "Push", InputConfigGitPassword, nil, true, false)
+	MnuGIT.AddItem("mnuGITCommitPush", "Commit & Push", SwitchConfirmExit, nil, true, config.ConfirmExit)
+	MnuGIT.AddItem("mnuGITFetch", "Fetch", SwitchShowHidden, nil, true, config.ShowHidden)
+	MnuGIT.AddItem("mnuGITPull", "Pull (Fetch & Merge)", InputConfigFormatTime, nil, true, false)
+	MnuGIT.AddItem("mnuGITBang", "Initialize (GIT Bang)", InputConfigFormatDate, nil, true, false)
+	MnuGIT.AddItem("mnuGITConfigure", "Configure", InputConfigFormatDate, nil, true, false)
+	// Popup menu
+	ui.PgsApp.AddPage("dlgGITMenu", MnuGIT.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgGITMenu")
 }
 
 // ****************************************************************************

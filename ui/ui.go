@@ -96,6 +96,9 @@ var (
 	LblCursor    *tview.TextView
 	LblDirty     *tview.TextView
 	LblPercent   *tview.TextView
+	LblCommit    *tview.TextView
+	LblGITStatus *tview.TextView
+	LblGITBranch *tview.TextView
 )
 
 // ****************************************************************************
@@ -205,6 +208,21 @@ func SetUI(fQuit Fn, hostname string) {
 	LblPercent.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblPercent.SetTextColor(tcell.ColorWheat)
 
+	LblCommit = tview.NewTextView()
+	LblCommit.SetBorder(false)
+	LblCommit.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblCommit.SetTextColor(tcell.ColorWheat)
+
+	LblGITStatus = tview.NewTextView()
+	LblGITStatus.SetBorder(false)
+	LblGITStatus.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblGITStatus.SetTextColor(tcell.ColorWheat)
+
+	LblGITBranch = tview.NewTextView()
+	LblGITBranch.SetBorder(false)
+	LblGITBranch.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblGITBranch.SetTextColor(tcell.ColorWheat)
+
 	TxtHelp = tview.NewTextView().Clear()
 	TxtHelp.SetBorder(true)
 	TxtHelp.SetDynamicColors(true)
@@ -254,7 +272,12 @@ func SetUI(fQuit Fn, hostname string) {
 				AddItem(EdtMain, 0, 1, true), 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
-				AddItem(TrvExplorer, 0, 1, false), 0, 1, false), 0, 1, false).
+				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+					AddItem(TrvExplorer, 0, 1, false).
+					AddItem(tview.NewFlex().
+						AddItem(LblGITBranch, 0, 1, false).
+						AddItem(LblCommit, 0, 1, false).
+						AddItem(LblGITStatus, 0, 1, false), 1, 0, false), 0, 1, false), 0, 1, false), 0, 1, false).
 		AddItem(LblKeys, 2, 1, false).
 		AddItem(tview.NewFlex().
 			AddItem(LblHostname, len(hostname)+3, 0, false).

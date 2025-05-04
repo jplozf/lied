@@ -13,6 +13,7 @@ package utils
 import (
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -24,6 +25,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -464,4 +466,19 @@ func If[T any](cond bool, vtrue, vfalse T) T {
 		return vtrue
 	}
 	return vfalse
+}
+
+// ****************************************************************************
+// Xeq()
+// ****************************************************************************
+func Xeq(dir string, args ...string) (string, string) {
+	baseCmd := args[0]
+	cmdArgs := args[1:]
+	xeq := exec.Command(baseCmd, cmdArgs...)
+	xeq.Dir = dir
+	var outb, errb bytes.Buffer
+	xeq.Stdout = &outb
+	xeq.Stderr = &errb
+	xeq.Run()
+	return outb.String(), errb.String()
 }

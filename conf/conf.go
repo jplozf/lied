@@ -28,8 +28,8 @@ const (
 	FILE_CONFIG             = "lied.json"
 	FILE_INI                = "lied.ini"
 	FILE_MRU                = "mru"
-	FKEY_LABELS             = "F1=Help F2=Panel F4=Shell F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
-	CKEY_LABELS             = "Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=GIT F4=Shell F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
+	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close"
 )
 
 // var Cwd string
