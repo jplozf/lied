@@ -273,7 +273,6 @@ func UpdateStatus() {
 				if count == 10 {
 					// Update GIT infos only 1 call upon 10
 					f = UpdateGITInfos(f)
-					count = 0
 				}
 				if f.Buffer.Modified() {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
@@ -283,6 +282,9 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
+			}
+			if count == 10 {
+				count = 0
 			}
 		})
 	}
