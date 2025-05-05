@@ -283,7 +283,7 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
-			if count == 10 {
+			if count >= 10 {
 				count = 0
 			}
 		})
