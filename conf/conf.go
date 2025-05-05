@@ -18,7 +18,7 @@ import (
 const (
 	STATUS_MESSAGE_DURATION = 3
 	APP_NAME                = "Lied"
-	APP_STRING              = "Lied © jpl@ozf.fr 2024"
+	APP_STRING              = "Lied © jpl@ozf.fr 1964"
 	APP_VERSION             = "0.1.0"
 	APP_URL                 = "https://github.com/jplozf/lied"
 	APP_FOLDER              = ".lied"

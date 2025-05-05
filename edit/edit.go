@@ -245,6 +245,7 @@ func NewFileOrLastFile(dir string) {
 // ****************************************************************************
 func UpdateStatus() {
 	var status string
+	var count int = 0
 	for {
 		time.Sleep(100 * time.Millisecond)
 		ui.App.QueueUpdateDraw(func() {
@@ -261,14 +262,19 @@ func UpdateStatus() {
 			y := CurrentFile.Buffer.Cursor.Y + 1
 			CurrentFile = UpdateGITInfos(CurrentFile)
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
-			ui.LblCommit.SetText("# " + CurrentFile.GitCommit)
-			ui.LblGITStatus.SetText("⚠ " + CurrentFile.GitStatus)
+			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
+			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
 			ui.EdtMain.SetTitle(fmt.Sprintf("[ Ln %d, Col %d %s ]", y, x, status))
 			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
 			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
+			count++
 			for i, f := range OpenFiles {
-				f = UpdateGITInfos(f)
+				if count == 10 {
+					// Update GIT infos only 1 call upon 10
+					f = UpdateGITInfos(f)
+					count = 0
+				}
 				if f.Buffer.Modified() {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
 				} else {
