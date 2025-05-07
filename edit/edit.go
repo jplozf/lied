@@ -270,7 +270,7 @@ func UpdateStatus() {
 			ui.TblOpenFiles.Clear()
 			count++
 			for i, f := range OpenFiles {
-				if count == 10 {
+				if count%10 == 0 {
 					// Update GIT infos only 1 call upon 10
 					f = UpdateGITInfos(f)
 				}
@@ -282,9 +282,6 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
-			}
-			if count >= 10 {
-				count = 0
 			}
 		})
 	}
