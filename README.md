@@ -1,5 +1,5 @@
 # ♯ Lied
-
+![lied](./lied_logo.png)
 ## Summary
 * Lied is a simple text editor running in a TUI (Text User Interface)
 

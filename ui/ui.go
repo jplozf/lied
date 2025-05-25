@@ -92,10 +92,12 @@ var (
 	TblOpenFiles *tview.Table
 	TrvExplorer  *tview.TreeView
 	MyConfig     Config
+	LblReadWrite *tview.TextView
 	LblEncoding  *tview.TextView
 	LblCursor    *tview.TextView
 	LblDirty     *tview.TextView
 	LblPercent   *tview.TextView
+	LblSize      *tview.TextView
 	LblCommit    *tview.TextView
 	LblGITStatus *tview.TextView
 	LblGITBranch *tview.TextView
@@ -188,6 +190,11 @@ func SetUI(fQuit Fn, hostname string) {
 	LblHostname.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblHostname.SetTextColor(tcell.ColorBlack)
 
+	LblReadWrite = tview.NewTextView()
+	LblReadWrite.SetBorder(false)
+	LblReadWrite.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblReadWrite.SetTextColor(tcell.ColorWheat)
+
 	LblEncoding = tview.NewTextView()
 	LblEncoding.SetBorder(false)
 	LblEncoding.SetBackgroundColor(tcell.ColorDarkGreen)
@@ -207,6 +214,11 @@ func SetUI(fQuit Fn, hostname string) {
 	LblPercent.SetBorder(false)
 	LblPercent.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblPercent.SetTextColor(tcell.ColorWheat)
+
+	LblSize = tview.NewTextView()
+	LblSize.SetBorder(false)
+	LblSize.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblSize.SetTextColor(tcell.ColorWheat)
 
 	LblCommit = tview.NewTextView()
 	LblCommit.SetBorder(false)
@@ -282,8 +294,10 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(tview.NewFlex().
 			AddItem(LblHostname, len(hostname)+3, 0, false).
 			AddItem(lblStatus, 0, 1, false).
+			AddItem(LblSize, 10, 0, false).
 			AddItem(LblPercent, 6, 0, false).
-			AddItem(LblCursor, 15, 0, false).
+			AddItem(LblCursor, 20, 0, false).
+			AddItem(LblReadWrite, 4, 0, false).
 			AddItem(LblEncoding, 10, 0, false).
 			AddItem(LblDirty, 10, 0, false).
 			AddItem(LblHourglass, 2, 0, false), 1, 0, false)

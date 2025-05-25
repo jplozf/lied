@@ -1,5 +1,7 @@
 # TODO ♯ Lied
 
+![lied](./lied_logo.png)
+
 * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 * Launching lied with file name as argument : Open this file into its directory as workspace

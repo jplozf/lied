@@ -22,7 +22,9 @@ import (
 	"lied/ui"
 	"lied/utils"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +47,9 @@ type editfile struct {
 	GitStatus     string
 	GitBranch     string
 	GitFileStatus string
+	ReadWrite     bool
+	Follow        bool
+	RWBackup      bool
 }
 
 const (
@@ -89,7 +94,7 @@ func SwitchToEditor(fName string) {
 	ui.PgsApp.SwitchToPage(scr) // ???
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
-	OpenFile(fName)
+	OpenFile(fName, true)
 	ui.App.SetFocus(ui.EdtMain)
 }
 
@@ -116,7 +121,7 @@ func SetTheme(theme string) {
 // ****************************************************************************
 // OpenFile()
 // ****************************************************************************
-func OpenFile(fName string) {
+func OpenFile(fName string, rw bool) {
 	CurrentWorkspace = filepath.Dir(fName)
 	if isFileAlreadyOpen(fName) {
 		SwitchOpenFile(fName)
@@ -141,6 +146,8 @@ func OpenFile(fName string) {
 			CurrentFile.FName = fName
 			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
 			CurrentFile.View = femto.NewView(CurrentFile.Buffer)
+			CurrentFile.ReadWrite = rw
+			CurrentFile.Follow = false
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			SetTheme("monokai")
 			ui.EdtMain.SetTitleAlign(tview.AlignRight)
@@ -266,12 +273,27 @@ func UpdateStatus() {
 			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
 			ui.EdtMain.SetTitle(fmt.Sprintf("[ Ln %d, Col %d %s ]", y, x, status))
 			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+			if CurrentFile.ReadWrite {
+				ui.LblReadWrite.SetText("RW")
+			} else {
+				ui.LblReadWrite.SetText("RO")
+			}
+			if CurrentFile.Follow {
+				_, _, _, lines := ui.EdtMain.GetInnerRect()
+				ui.LblReadWrite.SetText("FL")
+				c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentFile.FName)
+				output, _ := c.Output()
+				CurrentFile.Buffer = femto.NewBufferFromString(string(output), CurrentFile.FName)
+				CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
+				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			}
+			ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
 			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
 			count++
 			for i, f := range OpenFiles {
-				if count%10 == 0 {
-					// Update GIT infos only 1 call upon 10
+				if count%20 == 0 {
+					// Update GIT infos only once in 20 to prevent huge CPU use
 					f = UpdateGITInfos(f)
 					OpenFiles[i] = f
 				}
@@ -338,6 +360,8 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.GitCommit = e.GitCommit
 			CurrentFile.GitStatus = e.GitStatus
 			CurrentFile.GitBranch = e.GitBranch
+			CurrentFile.ReadWrite = e.ReadWrite
+			CurrentFile.Follow = e.Follow
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			ui.LblEncoding.SetText(CurrentFile.Encoding)
 			// FocusOnPath(fName)
@@ -490,7 +514,7 @@ func confirmSaveAs(rc dialog.DlgButton, idx int) {
 				}
 				copy(OpenFiles[n:], OpenFiles[n+1:])
 				OpenFiles = OpenFiles[:len(OpenFiles)-1]
-				OpenFile(newName)
+				OpenFile(newName, true)
 			}
 		} else {
 			ui.SetStatus(err.Error())
@@ -551,6 +575,38 @@ func CloseCurrentFile() {
 // ****************************************************************************
 func CloseAnyFile(f any) {
 	CloseCurrentFile()
+}
+
+// ****************************************************************************
+// SwitchReadWrite()
+// ****************************************************************************
+func SwitchReadWrite(f any) {
+	CurrentFile.ReadWrite = !CurrentFile.ReadWrite
+	ui.SetStatus(fmt.Sprintf("Read Only attribute is set to %t", !CurrentFile.ReadWrite))
+}
+
+// ****************************************************************************
+// SwitchFollow()
+// ****************************************************************************
+func SwitchFollow(f any) {
+	CurrentFile.Follow = !CurrentFile.Follow
+	ui.SetStatus(fmt.Sprintf("Follow mode is set to %t", CurrentFile.Follow))
+	if CurrentFile.Follow {
+		CurrentFile.RWBackup = CurrentFile.ReadWrite
+		CurrentFile.ReadWrite = false
+	} else {
+		ui.SetStatus("Restoring buffer")
+		CurrentFile.ReadWrite = CurrentFile.RWBackup
+		content, err := ioutil.ReadFile(CurrentFile.FName)
+		if err != nil {
+			ui.SetStatus(fmt.Sprintf("Could not read %v", CurrentFile.FName))
+			ui.SetStatus(fmt.Sprintf("%v", err))
+		} else {
+			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
+			CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
+			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+		}
+	}
 }
 
 // ****************************************************************************
@@ -663,7 +719,7 @@ func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 			mtype := utils.GetMimeType(path)
 			if len(mtype) >= 4 {
 				if mtype[:4] == "text" {
-					OpenFile(path)
+					OpenFile(path, true)
 					ui.SetStatus(fmt.Sprintf("Opening %s", path))
 				} else {
 					ui.SetStatus(fmt.Sprintf("%s is not a text file", path))
