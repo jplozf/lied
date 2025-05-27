@@ -60,6 +60,7 @@ var (
 	DlgInputFormatDate  *dialog.Dialog
 	DlgInputFileOpen    *dialog.Dialog
 	DlgInputShell       *dialog.Dialog
+	DlgInputColorAccent *dialog.Dialog
 	ACmd                []string
 	ICmd                int
 )
@@ -129,6 +130,7 @@ func init() {
 
 	ui.SetStatus(fmt.Sprintf("Starting session #%s", ui.SessionID))
 	readSettings()
+	ui.SetColorAccent(configGeneral.ColorAccent)
 }
 
 // ****************************************************************************
@@ -362,6 +364,7 @@ func ShowConfigMenu() {
 	MnuConfig = MnuConfig.New(" Settings ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Menu Options
 	MnuConfig.AddItem("mnuCfgTheme", "Theme", InputConfigTheme, nil, true, false)
+	MnuConfig.AddItem("mnuCfgColorAccent", "Color Accent", InputColorAccent, nil, true, false)
 	MnuConfig.AddItem("mnuCfgGitUser", "Git User", InputConfigGitUser, nil, true, false)
 	MnuConfig.AddItem("mnuCfgGitPassword", "Git Password", InputConfigGitPassword, nil, true, false)
 	MnuConfig.AddItem("mnuCfgConfirmExit", "Confirm Exit", SwitchConfirmExit, nil, true, configGeneral.ConfirmExit)
@@ -452,6 +455,7 @@ func readSettings() {
 		configGeneral.ConfirmExit, _ = section.Key("ConfirmExit").Bool()
 		configGeneral.FormatTime = section.Key("FormatTime").String()
 		configGeneral.FormatDate = section.Key("FormatDate").String()
+		configGeneral.ColorAccent = section.Key("ColorAccent").String()
 		// Set them
 		setTheme(configGeneral.Theme)
 		if configGeneral.FormatTime == "" {
@@ -468,6 +472,9 @@ func readSettings() {
 		edit.SwitchOpenFile(section.Key("CurrentFile").String())
 		edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
 		edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
+	}
+	if configGeneral.ColorAccent == "" {
+		configGeneral.ColorAccent = conf.DEFAULT_COLOR_ACCENT
 	}
 }
 
@@ -517,6 +524,7 @@ func saveSettings() {
 	sec.NewKey("CurrentFile", edit.CurrentFile.FName)
 	sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
 	sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
+	sec.NewKey("ColorAccent", configGeneral.ColorAccent)
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
@@ -613,6 +621,31 @@ func setTheme(theme any) {
 	edit.SetTheme(theme.(string))
 	configGeneral.Theme = theme.(string)
 	ui.SetStatus(fmt.Sprintf("Theme is set to %s", configGeneral.Theme))
+}
+
+// ****************************************************************************
+// InputColorAccent()
+// ****************************************************************************
+func InputColorAccent(f any) {
+	DlgInputColorAccent = DlgInputColorAccent.Input("Color Accent", // Title
+		"Please, enter the color accent :", // Message
+		configGeneral.ColorAccent,
+		setColorAccent,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputColorAccent", DlgInputColorAccent.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputColorAccent")
+}
+
+// ****************************************************************************
+// setColorAccent()
+// ****************************************************************************
+func setColorAccent(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		configGeneral.ColorAccent = DlgInputColorAccent.Value
+		ui.SetColorAccent(configGeneral.ColorAccent)
+		ui.SetStatus(fmt.Sprintf("Color accent is set to %s", configGeneral.ColorAccent))
+	}
 }
 
 // ****************************************************************************
@@ -807,6 +840,8 @@ func Xeq(c string) {
 			edit.SwitchPreviousFile()
 		case "!clos":
 			edit.CloseCurrentFile()
+		case "!save":
+			edit.SaveFile()
 		default:
 			ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 		}

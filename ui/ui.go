@@ -138,6 +138,7 @@ func (m Mode) String() string {
 // setUI defines the user interface's fields
 // ****************************************************************************
 func SetUI(fQuit Fn, hostname string) {
+	color := "#41ab5d"
 	PgsApp = tview.NewPages()
 
 	lblDate = tview.NewTextView().SetText(currentDateString())
@@ -197,7 +198,7 @@ func SetUI(fQuit Fn, hostname string) {
 
 	LblEncoding = tview.NewTextView()
 	LblEncoding.SetBorder(false)
-	LblEncoding.SetBackgroundColor(tcell.ColorDarkGreen)
+	LblEncoding.SetBackgroundColor(tcell.GetColor(color))
 	LblEncoding.SetTextColor(tcell.ColorWheat)
 
 	LblCursor = tview.NewTextView()
@@ -365,6 +366,31 @@ func UpdateTime() {
 // ****************************************************************************
 func SetTitle(t string) {
 	lblTitle.SetText(t)
+}
+
+// ****************************************************************************
+// SetColorAccent()
+// ****************************************************************************
+func SetColorAccent(c string) {
+	color := tcell.GetColor(c)
+	lblDate.SetTextColor(color)
+	lblTime.SetTextColor(color)
+	lblTitle.SetTextColor(color)
+	lblStatus.SetBackgroundColor(color)
+	LblHostname.SetBackgroundColor(color)
+	LblScreen.SetBackgroundColor(color)
+	LblPID.SetBackgroundColor(color)
+	LblRC.SetBackgroundColor(color)
+	LblHourglass.SetBackgroundColor(color)
+	LblReadWrite.SetBackgroundColor(color)
+	LblEncoding.SetBackgroundColor(color)
+	LblCursor.SetBackgroundColor(color)
+	LblDirty.SetBackgroundColor(color)
+	LblPercent.SetBackgroundColor(color)
+	LblSize.SetBackgroundColor(color)
+	LblCommit.SetBackgroundColor(color)
+	LblGITStatus.SetBackgroundColor(color)
+	LblGITBranch.SetBackgroundColor(color)
 }
 
 // ****************************************************************************
