@@ -159,6 +159,9 @@ func OpenFile(fName string, rw bool) {
 			ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
 			ui.App.SetFocus(ui.EdtMain)
+
+			ui.SetStatus(CurrentFile.Buffer.Settings["filetype"].(string))
+			ui.SetStatus(CurrentFile.Buffer.Settings["fileformat"].(string))
 		}
 	}
 	ShowTreeDir(CurrentWorkspace, showHidden)

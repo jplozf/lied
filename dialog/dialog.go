@@ -335,7 +335,7 @@ func (m *Dialog) setUI() {
 		}
 		m.AddInputField(">", m.Value, 0, nil, nil)
 	default:
-		m.AddTextView("", m.message, 0, 1, true, false)
+		m.AddTextView("", m.message, 60, 30, false, true)
 	}
 
 	if m.dtype != INPUT_CLI {
@@ -379,6 +379,10 @@ func (m *Dialog) setUI() {
 		m.width += 10
 		m.height = 7
 	}
+	if m.dtype == INPUT_NONE {
+		m.width = 64
+		m.height = 36
+	}
 }
 
 // ****************************************************************************
@@ -420,7 +424,9 @@ func (m *Dialog) Popup() tview.Primitive {
 func (m *Dialog) doYes() {
 	ui.PgsApp.SwitchToPage(m.parent)
 	ui.App.SetFocus(m.focus)
-	m.done(BUTTON_YES, m.idx)
+	if m.done != nil {
+		m.done(BUTTON_YES, m.idx)
+	}
 }
 
 // ****************************************************************************
@@ -429,7 +435,9 @@ func (m *Dialog) doYes() {
 func (m *Dialog) doNo() {
 	ui.PgsApp.SwitchToPage(m.parent)
 	ui.App.SetFocus(m.focus)
-	m.done(BUTTON_NO, m.idx)
+	if m.done != nil {
+		m.done(BUTTON_NO, m.idx)
+	}
 }
 
 // ****************************************************************************
@@ -438,7 +446,9 @@ func (m *Dialog) doNo() {
 func (m *Dialog) doCancel() {
 	ui.PgsApp.SwitchToPage(m.parent)
 	ui.App.SetFocus(m.focus)
-	m.done(BUTTON_CANCEL, m.idx)
+	if m.done != nil {
+		m.done(BUTTON_CANCEL, m.idx)
+	}
 }
 
 // ****************************************************************************
@@ -459,5 +469,7 @@ func (m *Dialog) doOK() {
 	default:
 		m.Value = ""
 	}
-	m.done(BUTTON_OK, m.idx)
+	if m.done != nil {
+		m.done(BUTTON_OK, m.idx)
+	}
 }

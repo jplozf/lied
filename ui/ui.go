@@ -138,7 +138,6 @@ func (m Mode) String() string {
 // setUI defines the user interface's fields
 // ****************************************************************************
 func SetUI(fQuit Fn, hostname string) {
-	color := "#41ab5d"
 	PgsApp = tview.NewPages()
 
 	lblDate = tview.NewTextView().SetText(currentDateString())
@@ -198,7 +197,7 @@ func SetUI(fQuit Fn, hostname string) {
 
 	LblEncoding = tview.NewTextView()
 	LblEncoding.SetBorder(false)
-	LblEncoding.SetBackgroundColor(tcell.GetColor(color))
+	LblEncoding.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblEncoding.SetTextColor(tcell.ColorWheat)
 
 	LblCursor = tview.NewTextView()

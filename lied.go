@@ -16,10 +16,12 @@ package main
 // ****************************************************************************
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -49,7 +51,7 @@ var (
 	err                 error
 	MnuMain             *menu.Menu
 	MnuConfig           *menu.Menu
-	MnuGIT              *menu.Menu
+	MnuGit              *menu.Menu
 	args                []string
 	configGeneral       conf.ConfigGeneral
 	configPrivate       conf.ConfigPrivate
@@ -61,8 +63,10 @@ var (
 	DlgInputFileOpen    *dialog.Dialog
 	DlgInputShell       *dialog.Dialog
 	DlgInputColorAccent *dialog.Dialog
+	DlgInput            *dialog.Dialog
 	ACmd                []string
 	ICmd                int
+	MsgBox              *dialog.Dialog
 )
 
 // ****************************************************************************
@@ -159,7 +163,7 @@ func main() {
 		case tcell.KeyF10:
 			ShowMainMenu()
 		case tcell.KeyF3:
-			ShowGITMenu()
+			ShowGitMenu()
 		case tcell.KeyF4:
 			InputShell(nil)
 		case tcell.KeyF12:
@@ -377,22 +381,22 @@ func ShowConfigMenu() {
 }
 
 // ****************************************************************************
-// ShowGITMenu()
+// ShowGitMenu()
 // ****************************************************************************
-func ShowGITMenu() {
-	MnuGIT = MnuGIT.New(" GIT Tracking ", ui.GetCurrentScreen(), ui.EdtMain)
+func ShowGitMenu() {
+	MnuGit = MnuGit.New(" Git Tracking ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Menu Options
-	MnuGIT.AddItem("mnuGITStatus", "Status", InputConfigTheme, nil, true, false)
-	MnuGIT.AddItem("mnuGITCommit", "Commit", InputConfigGitUser, nil, true, false)
-	MnuGIT.AddItem("mnuGITPush", "Push", InputConfigGitPassword, nil, true, false)
-	MnuGIT.AddItem("mnuGITCommitPush", "Commit & Push", SwitchConfirmExit, nil, true, configGeneral.ConfirmExit)
-	MnuGIT.AddItem("mnuGITFetch", "Fetch", SwitchShowHidden, nil, true, configGeneral.ShowHidden)
-	MnuGIT.AddItem("mnuGITPull", "Pull (Fetch & Merge)", InputConfigFormatTime, nil, true, false)
-	MnuGIT.AddItem("mnuGITBang", "Initialize (GIT Bang)", InputConfigFormatDate, nil, true, false)
-	MnuGIT.AddItem("mnuGITConfigure", "Configure", InputConfigFormatDate, nil, true, false)
+	MnuGit.AddItem("mnuGitStatus", "Status", DoGitStatus, nil, true, false)
+	MnuGit.AddItem("mnuGitCommit", "Commit", DoGitCommit, nil, true, false)
+	MnuGit.AddItem("mnuGitPush", "Push", DoGitPush, nil, true, false)
+	MnuGit.AddItem("mnuGitCommitPush", "Commit & Push", DoGitCommitPush, nil, true, false)
+	MnuGit.AddItem("mnuGitFetch", "Fetch", DoGitFetch, nil, true, false)
+	MnuGit.AddItem("mnuGitPull", "Pull (Fetch & Merge)", DoGitPull, nil, true, false)
+	MnuGit.AddItem("mnuGitBang", "Initialize (Git Bang)", DoGitBang, nil, true, false)
+	MnuGit.AddItem("mnuGitConfigure", "Configure", DoGitConfigure, nil, true, false)
 	// Popup menu
-	ui.PgsApp.AddPage("dlgGITMenu", MnuGIT.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgGITMenu")
+	ui.PgsApp.AddPage("dlgGitMenu", MnuGit.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgGitMenu")
 }
 
 // ****************************************************************************
@@ -832,7 +836,7 @@ func Xeq(c string) {
 		case "!out":
 			edit.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
 			edit.SwitchFollow("dummy")
-		case "!foll":
+		case "!foll", "!tail":
 			edit.SwitchFollow("dummy")
 		case "!next":
 			edit.SwitchNextFile()
@@ -901,4 +905,150 @@ func Xeq(c string) {
 		wOut.Flush()
 		ui.SetStatus(fmt.Sprintf("Done [%s]", c))
 	}
+}
+
+// ****************************************************************************
+// XeqOut()
+// ****************************************************************************
+func XeqOut(c string) string {
+	sCmd := strings.Fields(c)
+	ui.SetStatus(fmt.Sprintf("Executing [%s]", c))
+	cmd := exec.Command(sCmd[0], sCmd[1:]...)
+	var outb, errb bytes.Buffer
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	out := ""
+	err := cmd.Run()
+	if err != nil {
+		out = err.Error()
+	} else {
+		out = outb.String()
+		out = out + errb.String()
+	}
+	ui.SetStatus(out)
+	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
+	return out
+}
+
+/*
+cmd := exec.Command("date")
+var outb, errb bytes.Buffer
+cmd.Stdout = &outb
+cmd.Stderr = &errb
+err := cmd.Run()
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("out:", outb.String(), "err:", errb.String())
+*/
+
+// ****************************************************************************
+// DoGitStatus()
+// ****************************************************************************
+func DoGitStatus(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitBang()
+// ****************************************************************************
+func DoGitBang(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitCommitPush()
+// ****************************************************************************
+func DoGitCommitPush(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitConfigure()
+// ****************************************************************************
+func DoGitConfigure(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitFetch()
+// ****************************************************************************
+func DoGitFetch(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitPull()
+// ****************************************************************************
+func DoGitPull(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitPush()
+// ****************************************************************************
+func DoGitPush(f any) {
+	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+	out += fmt.Sprintf("%s\n", XeqOut("git status"))
+	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+	// out := XeqOut("git rev-parse --short HEAD")
+	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// DoGitCommit()
+// ****************************************************************************
+func DoGitCommit(f any) {
+	DlgInput = DlgInput.Input("Git Commit", // Title
+		"Please, enter the message :", // Message
+		"",                            // Sefault value
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_OK {
+				out := fmt.Sprintf("Commiting... %s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
+				MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+				ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+				ui.PgsApp.ShowPage("msgBox")
+			}
+		},
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInput")
 }

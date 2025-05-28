@@ -29,7 +29,7 @@ const (
 	FILE_SHELL_HISTORY      = "history"
 	FILE_SHELL_OUTPUT       = "output"
 	FILE_MRU                = "mru"
-	FKEY_LABELS             = "F1=Help F2=Panel F3=GIT F4=Shell F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Shell F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
 	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 )
