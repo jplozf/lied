@@ -254,7 +254,7 @@ func NewFileOrLastFile(dir string) {
 // UpdateStatus()
 // ****************************************************************************
 func UpdateStatus() {
-	var status string
+	// var status string
 	var count int = 0
 	for {
 		time.Sleep(100 * time.Millisecond)
@@ -262,10 +262,10 @@ func UpdateStatus() {
 			// ui.TxtEditName.SetText(currentFile.FName)
 			ui.TxtEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
 			if CurrentFile.Buffer.Modified() {
-				status = conf.ICON_MODIFIED
+				// status = conf.ICON_MODIFIED
 				ui.LblDirty.SetText("*modified*")
 			} else {
-				status = " "
+				// status = " "
 				ui.LblDirty.SetText("")
 			}
 			x := CurrentFile.Buffer.Cursor.X + 1
@@ -274,7 +274,7 @@ func UpdateStatus() {
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
 			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
 			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
-			ui.EdtMain.SetTitle(fmt.Sprintf("[ Ln %d, Col %d %s ]", y, x, status))
+			ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
 			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
 			if CurrentFile.ReadWrite {
 				ui.LblReadWrite.SetText("RW")
@@ -366,7 +366,7 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-			ui.LblEncoding.SetText(CurrentFile.Encoding)
+			CurrentWorkspace = filepath.Dir(CurrentFile.FName)
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
 			go focusOpenFile(fName)

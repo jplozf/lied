@@ -93,7 +93,7 @@ var (
 	TrvExplorer  *tview.TreeView
 	MyConfig     Config
 	LblReadWrite *tview.TextView
-	LblEncoding  *tview.TextView
+	// LblEncoding  *tview.TextView
 	LblCursor    *tview.TextView
 	LblDirty     *tview.TextView
 	LblPercent   *tview.TextView
@@ -195,11 +195,6 @@ func SetUI(fQuit Fn, hostname string) {
 	LblReadWrite.SetBackgroundColor(tcell.ColorDarkGreen)
 	LblReadWrite.SetTextColor(tcell.ColorWheat)
 
-	LblEncoding = tview.NewTextView()
-	LblEncoding.SetBorder(false)
-	LblEncoding.SetBackgroundColor(tcell.ColorDarkGreen)
-	LblEncoding.SetTextColor(tcell.ColorWheat)
-
 	LblCursor = tview.NewTextView()
 	LblCursor.SetBorder(false)
 	LblCursor.SetBackgroundColor(tcell.ColorDarkGreen)
@@ -298,7 +293,6 @@ func SetUI(fQuit Fn, hostname string) {
 			AddItem(LblPercent, 6, 0, false).
 			AddItem(LblCursor, 20, 0, false).
 			AddItem(LblReadWrite, 4, 0, false).
-			AddItem(LblEncoding, 10, 0, false).
 			AddItem(LblDirty, 10, 0, false).
 			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
 
@@ -382,7 +376,6 @@ func SetColorAccent(c string) {
 	LblRC.SetBackgroundColor(color)
 	LblHourglass.SetBackgroundColor(color)
 	LblReadWrite.SetBackgroundColor(color)
-	LblEncoding.SetBackgroundColor(color)
 	LblCursor.SetBackgroundColor(color)
 	LblDirty.SetBackgroundColor(color)
 	LblPercent.SetBackgroundColor(color)

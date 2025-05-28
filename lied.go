@@ -797,7 +797,7 @@ func SwitchConfirmExit(dummy any) {
 func InputShell(f any) {
 	sh := ""
 	DlgInputShell = DlgInputShell.Command("Shell", // Title
-		"CWD:"+configGeneral.Workspace,
+		"CWD:"+edit.CurrentWorkspace,
 		sh,
 		runShell,
 		0,
@@ -856,7 +856,7 @@ func Xeq(c string) {
 		}
 
 		xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
-		xCmd.Dir = configGeneral.Workspace
+		xCmd.Dir = edit.CurrentWorkspace
 		fOut, _ := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		defer fOut.Close()
 		wOut := bufio.NewWriter(fOut)
@@ -912,15 +912,16 @@ func Xeq(c string) {
 // ****************************************************************************
 func XeqOut(c string) string {
 	sCmd := strings.Fields(c)
-	ui.SetStatus(fmt.Sprintf("Executing [%s]", c))
 	cmd := exec.Command(sCmd[0], sCmd[1:]...)
+	cmd.Dir = edit.CurrentWorkspace
+	ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
 	var outb, errb bytes.Buffer
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 	out := ""
 	err := cmd.Run()
 	if err != nil {
-		out = err.Error()
+		out = "Error : " + err.Error()
 	} else {
 		out = outb.String()
 		out = out + errb.String()
@@ -929,18 +930,6 @@ func XeqOut(c string) string {
 	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
 	return out
 }
-
-/*
-cmd := exec.Command("date")
-var outb, errb bytes.Buffer
-cmd.Stdout = &outb
-cmd.Stderr = &errb
-err := cmd.Run()
-if err != nil {
-    log.Fatal(err)
-}
-fmt.Println("out:", outb.String(), "err:", errb.String())
-*/
 
 // ****************************************************************************
 // DoGitStatus()
@@ -1038,10 +1027,10 @@ func DoGitPush(f any) {
 func DoGitCommit(f any) {
 	DlgInput = DlgInput.Input("Git Commit", // Title
 		"Please, enter the message :", // Message
-		"",                            // Sefault value
+		"",                            // Default value
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				out := fmt.Sprintf("Commiting... %s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
+				out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
 				MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 				ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 				ui.PgsApp.ShowPage("msgBox")
