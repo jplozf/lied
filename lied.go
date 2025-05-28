@@ -911,7 +911,16 @@ func Xeq(c string) {
 // XeqOut()
 // ****************************************************************************
 func XeqOut(c string) string {
-	sCmd := strings.Fields(c)
+	// sCmd := strings.Fields(c)
+	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
+	quoted := false
+	sCmd := strings.FieldsFunc(c, func(r rune) bool {
+		if r == '"' {
+			quoted = !quoted
+		}
+		return !quoted && r == ' '
+	})
+
 	cmd := exec.Command(sCmd[0], sCmd[1:]...)
 	cmd.Dir = edit.CurrentWorkspace
 	ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
