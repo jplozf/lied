@@ -935,9 +935,10 @@ func XeqOut(c string) string {
 		out = outb.String()
 		out = out + errb.String()
 	}
+	out = strings.TrimSpace(out)
 	ui.SetStatus(out)
 	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
-	return strings.TrimSpace(out)
+	return out
 }
 
 // ****************************************************************************
@@ -945,7 +946,7 @@ func XeqOut(c string) string {
 // ****************************************************************************
 func DoGitStatus(f any) {
 	if IsInsideGitWorkTree() {
-		out := fmt.Sprintf("Current local commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+		out := fmt.Sprintf("Current local commit : %s\n\n", XeqOut("git rev-parse --short HEAD"))
 		out += fmt.Sprintf("%s\n", XeqOut("git status"))
 		out += fmt.Sprintf("%s\n", XeqOut("git diff"))
 		MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)

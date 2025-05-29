@@ -335,7 +335,7 @@ func (m *Dialog) setUI() {
 		}
 		m.AddInputField(">", m.Value, 0, nil, nil)
 	default:
-		m.AddTextView("", m.message, 60, 30, false, true)
+		m.AddTextView("", m.message, 60, 21, false, true)
 	}
 
 	if m.dtype != INPUT_CLI {
@@ -381,7 +381,7 @@ func (m *Dialog) setUI() {
 	}
 	if m.dtype == INPUT_NONE {
 		m.width = 64
-		m.height = 36
+		m.height = 27
 	}
 }
 

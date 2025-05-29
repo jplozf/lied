@@ -9,5 +9,5 @@
 * Find & Replace
 * Macros with files
 * Favorites
-* GIT integration
+* GIT integration
 * Workspaces				
