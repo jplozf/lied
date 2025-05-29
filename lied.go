@@ -982,7 +982,7 @@ func DoGitCommitPush(f any) {
 				if rc == dialog.BUTTON_OK {
 					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
 					branch := XeqOut("git rev-parse --abbrev-ref HEAD")
-					out += fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+branch))
+					out += fmt.Sprintf("\n\nPushing...\n%s", XeqOut("git push origin "+branch))
 
 					MsgBox = MsgBox.OK("Git Commit & Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
