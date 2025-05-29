@@ -974,13 +974,28 @@ func DoGitBang(f any) {
 // DoGitCommitPush()
 // ****************************************************************************
 func DoGitCommitPush(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if IsInsideGitWorkTree() {
+		DlgInput = DlgInput.Input("Git Commit & Push", // Title
+			"Please, enter the message :", // Message
+			"",                            // Default value
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_OK {
+					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
+					branch := XeqOut("git rev-parse --abbrev-ref HEAD")
+					out += fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+branch))
+
+					MsgBox = MsgBox.OK("Git Commit & Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgInput")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
 }
 
 // ****************************************************************************
