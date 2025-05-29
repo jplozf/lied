@@ -937,19 +937,23 @@ func XeqOut(c string) string {
 	}
 	ui.SetStatus(out)
 	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
-	return out
+	return strings.TrimSpace(out)
 }
 
 // ****************************************************************************
 // DoGitStatus()
 // ****************************************************************************
 func DoGitStatus(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if IsInsideGitWorkTree() {
+		out := fmt.Sprintf("Current local commit : %s\n", XeqOut("git rev-parse --short HEAD"))
+		out += fmt.Sprintf("%s\n", XeqOut("git status"))
+		out += fmt.Sprintf("%s\n", XeqOut("git diff"))
+		MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+		ui.PgsApp.ShowPage("msgBox")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
 }
 
 // ****************************************************************************
@@ -1021,32 +1025,50 @@ func DoGitPull(f any) {
 // DoGitPush()
 // ****************************************************************************
 func DoGitPush(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if IsInsideGitWorkTree() {
+		branch := XeqOut("git rev-parse --abbrev-ref HEAD")
+		out := fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+branch))
+		MsgBox = MsgBox.OK("Git Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+		ui.PgsApp.ShowPage("msgBox")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
 }
 
 // ****************************************************************************
 // DoGitCommit()
 // ****************************************************************************
 func DoGitCommit(f any) {
-	DlgInput = DlgInput.Input("Git Commit", // Title
-		"Please, enter the message :", // Message
-		"",                            // Default value
-		func(rc dialog.DlgButton, idx int) {
-			if rc == dialog.BUTTON_OK {
-				out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
-				MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-				ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-				ui.PgsApp.ShowPage("msgBox")
-			}
-		},
-		0,
-		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
-	ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgInput")
+	if IsInsideGitWorkTree() {
+		DlgInput = DlgInput.Input("Git Commit", // Title
+			"Please, enter the message :", // Message
+			"",                            // Default value
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_OK {
+					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
+					MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgInput")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
+}
+
+// ****************************************************************************
+// IsInsideGitWorkTree()
+// ****************************************************************************
+func IsInsideGitWorkTree() bool {
+	rc := false
+	out := XeqOut("git rev-parse --is-inside-work-tree")
+	if out == "true" {
+		rc = true
+	}
+	return rc
 }
