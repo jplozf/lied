@@ -38,3 +38,8 @@
 * ~~Rotate / clean log file~~
 * ~~Generate System Info report~~
 * Add new sub folder option
+* Lorem Ipsum generator (!lorm n)
+* Queneau Poem generator (!quen)
+* UUID generator (!uuid n)
+* Add Prefix/suffix to selected lines
+* Add !b and !t commands for go bottom and go top of the current file
