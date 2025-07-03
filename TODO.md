@@ -11,12 +11,14 @@
 * Manage find & replace
 * ~~Delete line~~
 * ~~Manage Undo & Redo~~
-* Add tools linked to open file (%F% = full file name, %f% = file name without extension, %D% = current directory, ...)
+* ~~Add tools linked to open file (%F% = full file name, %f% = file name without extension, %D% = current directory, ...)~~
 * Remove empty temporary files on exit
 * ~~Show GIT status~~
-* Add GIT commands
-* Add Help
-* Add Archive option
+* ~~Add GIT commands~~
+* Add Help (embedded)
+* Add Help (html)
+* Add Help (markdown)
+* ~~Add Archive option~~
 * Manage MRU files
 * Manage MRU workspaces
 * Manage workspaces (delete file, add file, rename file, add subfolder, delete subfolder... )
@@ -25,7 +27,14 @@
 * ~~Change date and time formats~~
 * ~~Remember opened file and line position on exit~~
 * ~~Move JSON parameters to INI file~~
-* Reload modified file (tail -f)
+* ~~Reload modified file (tail -f)~~
+* Detect change on file
 * Check if modified file on exit
 * ~~Add percentage of scrolled file into status bar~~
-* Add command line input box
+* ~~Add command line input box with history browsing~~
+* ~~Add "git add file" command~~
+* Add "git add folder" command
+* Add "git clone" command
+* ~~Rotate / clean log file~~
+* ~~Generate System Info report~~
+* Add new sub folder option

@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+PACKAGE="lied"
+# VERSION="$(git describe --tags --always --abbrev=0 --match='v[0-9]*.[0-9]*.[0-9]*' 2> /dev/null | sed 's/^.//')"
+VERSION="$(git rev-parse HEAD)"
+COMMIT_HASH="$(git rev-parse --short HEAD)"
+BUILD_TIME=$(date '+%Y%m%d-%H%M%S')
+
+LDFLAGS=(
+  "-X '${PACKAGE}/version.Version=${VERSION}'"
+  "-X '${PACKAGE}/version.CommitHash=${COMMIT_HASH}'"
+  "-X '${PACKAGE}/version.BuildTime=${BUILD_TIME}'"
+)
+
+go build -ldflags="${LDFLAGS[*]}"

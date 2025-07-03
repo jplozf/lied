@@ -24,16 +24,21 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"lied/conf"
 	"lied/dialog"
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
+	"lied/sysinfo"
 	"lied/ui"
 	"lied/utils"
+	"lied/version"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
@@ -45,16 +50,16 @@ import (
 // GLOBALS
 // ****************************************************************************
 var (
-	appDir              string
-	hostname            string
-	greeting            string
-	err                 error
-	MnuMain             *menu.Menu
-	MnuConfig           *menu.Menu
-	MnuGit              *menu.Menu
-	args                []string
-	configGeneral       conf.ConfigGeneral
-	configPrivate       conf.ConfigPrivate
+	appDir    string
+	hostname  string
+	greeting  string
+	err       error
+	MnuMacros *menu.Menu
+	MnuConfig *menu.Menu
+	MnuGit    *menu.Menu
+	args      []string
+	// conf.ConfigGeneral       conf.SConfigGeneral
+	// configPrivate       conf.SConfigPrivate
 	MnuInputTheme       *menu.Menu
 	DlgInputGitUser     *dialog.Dialog
 	DlgInputGitPassword *dialog.Dialog
@@ -64,9 +69,13 @@ var (
 	DlgInputShell       *dialog.Dialog
 	DlgInputColorAccent *dialog.Dialog
 	DlgInput            *dialog.Dialog
+	DlgYesNo            *dialog.Dialog
+	DlgYesNo1           *dialog.Dialog
+	DlgYesNo2           *dialog.Dialog
 	ACmd                []string
 	ICmd                int
 	MsgBox              *dialog.Dialog
+	Macros              map[string]string
 )
 
 // ****************************************************************************
@@ -99,7 +108,7 @@ func init() {
 		log.Fatal(err)
 	}
 	// Set the Current Working Directory
-	configGeneral.Workspace, _ = os.Getwd()
+	conf.ConfigGeneral.Workspace, _ = os.Getwd()
 	appDir = filepath.Join(userDir, conf.APP_FOLDER)
 	if _, err := os.Stat(appDir); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(appDir, os.ModePerm)
@@ -113,28 +122,10 @@ func init() {
 		panic(err)
 	}
 
-	/*
-		jsonFile, err := os.Open(filepath.Join(appDir, conf.FILE_CONFIG))
-		if err == nil {
-			// Read config from json file
-			defer jsonFile.Close()
-			bValues, _ := ioutil.ReadAll(jsonFile)
-			json.Unmarshal(bValues, &ui.MyConfig)
-			ui.SetStatus("Reading config from json")
-		} else {
-			// Set default config (Sorry, default time and date formats are the French way ;)
-			ui.MyConfig.FormatDate = "02/01/2006"
-			ui.MyConfig.FormatTime = "15:04:05"
-			ui.SetStatus("Set default config")
-			// Write config to json file
-			jsonFile, _ := json.MarshalIndent(ui.MyConfig, "", " ")
-			_ = ioutil.WriteFile(filepath.Join(appDir, conf.FILE_CONFIG), jsonFile, 0644)
-		}
-	*/
-
 	ui.SetStatus(fmt.Sprintf("Starting session #%s", ui.SessionID))
+	Macros = make(map[string]string)
 	readSettings()
-	ui.SetColorAccent(configGeneral.ColorAccent)
+	ui.SetColorAccent(conf.ConfigGeneral.ColorAccent)
 }
 
 // ****************************************************************************
@@ -143,6 +134,12 @@ func init() {
 func main() {
 	// Main keyboard's events manager
 	ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		evkMacros := tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModAlt)
+		if event.Key() == evkMacros.Key() && event.Rune() == evkMacros.Rune() && event.Modifiers() == evkMacros.Modifiers() {
+			ShowMacrosMenu()
+			return nil
+		}
+
 		evkSaveAs := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt)
 		if event.Key() == evkSaveAs.Key() && event.Rune() == evkSaveAs.Rune() && event.Modifiers() == evkSaveAs.Modifiers() {
 			edit.SaveFileAs()
@@ -150,15 +147,12 @@ func main() {
 		}
 		switch event.Key() {
 		case tcell.KeyF1:
-			// ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
-			SwitchHelp()
+			ShowHelp()
 		case tcell.KeyF8:
 			ShowConfigMenu()
 		case tcell.KeyF6:
-			// ui.ShowPreviousScreen()
 			edit.SwitchPreviousFile()
 		case tcell.KeyF7:
-			// ui.ShowNextScreen()
 			edit.SwitchNextFile()
 		case tcell.KeyF10:
 			ShowMainMenu()
@@ -201,10 +195,10 @@ func main() {
 			}
 			return nil
 		case tcell.KeyCtrlN:
-			edit.NewFile(configGeneral.Workspace)
+			edit.NewFile(conf.ConfigGeneral.Workspace)
 			return nil
 		case tcell.KeyCtrlO:
-			InputFileOpen(configGeneral.Workspace)
+			InputFileOpen(conf.ConfigGeneral.Workspace)
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
@@ -230,10 +224,10 @@ func main() {
 			edit.SaveFile()
 			return nil
 		case tcell.KeyCtrlN:
-			edit.NewFile(configGeneral.Workspace)
+			edit.NewFile(conf.ConfigGeneral.Workspace)
 			return nil
 		case tcell.KeyCtrlO:
-			InputFileOpen(configGeneral.Workspace)
+			InputFileOpen(conf.ConfigGeneral.Workspace)
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
@@ -243,6 +237,13 @@ func main() {
 			return nil
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		case tcell.KeyCtrlF:
+			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
+			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
+			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
+			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
+			ui.App.SetFocus(ui.FrmFind)
 			return nil
 		}
 		if edit.CurrentFile.ReadWrite == true {
@@ -268,7 +269,7 @@ func main() {
 	ui.TblOpenFiles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			ui.App.SetFocus(ui.TrvExplorer)
+			ui.App.SetFocus(ui.FrmFind)
 			return nil
 		case tcell.KeyEnter:
 			idx, _ := ui.TblOpenFiles.GetSelection()
@@ -276,6 +277,39 @@ func main() {
 			edit.SwitchOpenFile(fName)
 			edit.SetFocusOnPath(fName)
 			ui.App.SetFocus(ui.EdtMain)
+			return nil
+		case tcell.KeyCtrlF:
+			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
+			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
+			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
+			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
+			ui.App.SetFocus(ui.FrmFind)
+			return nil
+		}
+		return event
+	})
+
+	// Find Panel keyboard's events manager
+	ui.FrmFind.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TrvExplorer)
+			return nil
+		case tcell.KeyCtrlF:
+			ui.App.SetFocus(ui.EdtMain)
+			return nil
+		}
+		return event
+	})
+
+	// Text Find Field keyboard's events manager
+	ui.TxtFind.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyUp:
+			edit.RecallFind(edit.FIND_UP)
+			return nil
+		case tcell.KeyDown:
+			edit.RecallFind(edit.FIND_DOWN)
 			return nil
 		}
 		return event
@@ -287,17 +321,24 @@ func main() {
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.EdtMain)
 			return nil
+		case tcell.KeyCtrlF:
+			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
+			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
+			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
+			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
+			ui.App.SetFocus(ui.FrmFind)
+			return nil
 		}
 		return event
 	})
 
-	edit.ShowTreeDir(configGeneral.Workspace, configGeneral.ShowHidden)
+	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
 	if len(args) > 1 {
-		edit.NewFileOrLastFile(configGeneral.Workspace)
+		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 		fName, _ := filepath.Abs(args[1])
 		if utils.IsFileExist(fName) {
 			edit.OpenFile(fName, true)
@@ -311,11 +352,11 @@ func main() {
 			}
 		}
 	} else {
-		edit.NewFileOrLastFile(configGeneral.Workspace)
+		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 	}
 
-	ui.SetTitle(conf.APP_STRING)
-	ui.SetStatus("Welcome")
+	ui.SetTitle(fmt.Sprintf("%s v.%s (%s)", conf.APP_NAME, version.CommitHash, version.BuildTime))
+	ui.SetStatus(fmt.Sprintf("Welcome on %s", conf.APP_STRING))
 	ui.LblHostname.SetText("♯" + greeting)
 
 	go ui.UpdateTime()
@@ -329,7 +370,7 @@ func main() {
 // ShowMainMenu()
 // ****************************************************************************
 func ShowMainMenu() {
-	MnuMain = MnuMain.New(" "+conf.APP_NAME+" ", ui.GetCurrentScreen(), ui.EdtMain)
+	MnuMacros = MnuMacros.New(" "+conf.APP_NAME+" ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Dynamic options (files currently open)
 	for i, e := range edit.OpenFiles {
 		chk := false
@@ -337,7 +378,7 @@ func ShowMainMenu() {
 			chk = true
 		}
 		sha, _ := utils.GetSha256(e.FName)
-		MnuMain.AddItem(sha,
+		MnuMacros.AddItem(sha,
 			fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName)),
 			edit.SwitchAnyFile,
 			e.FName,
@@ -345,19 +386,23 @@ func ShowMainMenu() {
 			chk)
 	}
 	// Fixed options
-	MnuMain.AddSeparator()
+	MnuMacros.AddSeparator()
 	// MnuMain.AddItem("mnuOpenWorkspace", "Open Workspace", edit.OpenWorkspace, nil, true, false)
-	MnuMain.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, edit.CurrentFile.ReadWrite, false)
-	MnuMain.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
-	MnuMain.AddItem("mnuNew", "New", edit.NewAnyFile, configGeneral.Workspace, true, false)
-	MnuMain.AddItem("mnuOpen", "Open…", InputFileOpen, configGeneral.Workspace, true, false)
-	MnuMain.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
-	MnuMain.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentFile.ReadWrite)
-	MnuMain.AddItem("mnuFollow", "Follow", edit.SwitchFollow, nil, true, edit.CurrentFile.Follow)
-	MnuMain.AddSeparator()
-	MnuMain.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
+	MnuMacros.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, edit.CurrentFile.ReadWrite, false)
+	MnuMacros.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
+	MnuMacros.AddItem("mnuNew", "New", edit.NewAnyFile, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuOpen", "Open File…", InputFileOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuOpen", "Open Workspace…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
+	MnuMacros.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentFile.ReadWrite)
+	MnuMacros.AddItem("mnuFollow", "Follow", edit.SwitchFollow, nil, true, edit.CurrentFile.Follow)
+	MnuMacros.AddSeparator()
+	MnuMacros.AddItem("mnuGitAdd", "Git add…", DoGitAdd, edit.CurrentFile.FName, !IsFileGitTracked(edit.CurrentFile.FName), false)
+	MnuMacros.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddSeparator()
+	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
-	ui.PgsApp.AddPage("dlgMainMenu", MnuMain.Popup(), true, false)
+	ui.PgsApp.AddPage("dlgMainMenu", MnuMacros.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgMainMenu")
 }
 
@@ -369,10 +414,12 @@ func ShowConfigMenu() {
 	// Menu Options
 	MnuConfig.AddItem("mnuCfgTheme", "Theme", InputConfigTheme, nil, true, false)
 	MnuConfig.AddItem("mnuCfgColorAccent", "Color Accent", InputColorAccent, nil, true, false)
-	MnuConfig.AddItem("mnuCfgGitUser", "Git User", InputConfigGitUser, nil, true, false)
-	MnuConfig.AddItem("mnuCfgGitPassword", "Git Password", InputConfigGitPassword, nil, true, false)
-	MnuConfig.AddItem("mnuCfgConfirmExit", "Confirm Exit", SwitchConfirmExit, nil, true, configGeneral.ConfirmExit)
-	MnuConfig.AddItem("mnuCfgShowHidden", "Show Hidden", SwitchShowHidden, nil, true, configGeneral.ShowHidden)
+	// These two options are now into the Git Menu :
+	// MnuConfig.AddItem("mnuCfgGitUser", "Git User", InputConfigGitUser, nil, true, false)
+	// MnuConfig.AddItem("mnuCfgGitPassword", "Git Password", InputConfigGitPassword, nil, true, false)
+	MnuConfig.AddItem("mnuCfgConfirmExit", "Confirm Exit", SwitchConfirmExit, nil, true, conf.ConfigGeneral.ConfirmExit)
+	MnuConfig.AddItem("mnuCfgCleanUpOnExit", "Clean Up on Exit", SwitchCleanUpOnExit, nil, true, conf.ConfigGeneral.CleanUpOnExit)
+	MnuConfig.AddItem("mnuCfgShowHidden", "Show Hidden", SwitchShowHidden, nil, true, conf.ConfigGeneral.ShowHidden)
 	MnuConfig.AddItem("mnuCfgFormatTime", "Time Format", InputConfigFormatTime, nil, true, false)
 	MnuConfig.AddItem("mnuCfgFormatDate", "Date Format", InputConfigFormatDate, nil, true, false)
 	// Popup menu
@@ -400,6 +447,38 @@ func ShowGitMenu() {
 }
 
 // ****************************************************************************
+// ShowMacrosMenu()
+// ****************************************************************************
+func ShowMacrosMenu() {
+	ReadMacros()
+	MnuMacros = MnuMacros.New(" Macros ", ui.GetCurrentScreen(), ui.EdtMain)
+	// Sort macros
+	keys := make([]string, 0, len(Macros))
+	for k := range Macros {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	// Read macros
+	for _, k := range keys {
+		MnuMacros.AddItem(k,
+			k,
+			XeqMacro,
+			k,
+			true,
+			false)
+	}
+	// Fixed options
+	if len(Macros) == 0 {
+		MnuMacros.AddItem("mnuEmpty", "Empty", nil, nil, false, false)
+	}
+	MnuMacros.AddSeparator()
+	MnuMacros.AddItem("mnuEditMacros", "Edit", editMacrosFile, nil, edit.CurrentFile.ReadWrite, false)
+	// Popup menu
+	ui.PgsApp.AddPage("dlgMacrosMenu", MnuMacros.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgMacrosMenu")
+}
+
+// ****************************************************************************
 // appQuit()
 // appQuit performs some cleanup and saves persistent data before quitting application
 // ****************************************************************************
@@ -410,6 +489,7 @@ func appQuit() {
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
 	ui.App.Stop()
 	fmt.Printf("♯%s - %s\n", conf.APP_STRING, conf.APP_URL)
+	ArchiveLogs()
 }
 
 // ****************************************************************************
@@ -443,6 +523,17 @@ func readSettings() {
 		}
 	}
 
+	// Read find history
+	ui.SetStatus("Reading find history")
+	fFind, err := os.Open(filepath.Join(appDir, conf.FILE_FIND_HISTORY))
+	if err == nil {
+		defer fFind.Close()
+		sFind := bufio.NewScanner(fFind)
+		for sFind.Scan() {
+			edit.AFind = append(edit.AFind, sFind.Text())
+		}
+	}
+
 	// Read INI file
 	ui.SetStatus("Reading INI file")
 	inidata, err := ini.Load(filepath.Join(appDir, conf.FILE_INI))
@@ -451,35 +542,37 @@ func readSettings() {
 	} else {
 		// Read them
 		section := inidata.Section("general")
-		configGeneral.Theme = section.Key("Theme").String()
-		configGeneral.GitUser = section.Key("GitUser").String()
-		configGeneral.GitPassword = section.Key("GitPassword").String()
-		configGeneral.Workspace = section.Key("Workspace").String()
-		configGeneral.ShowHidden, _ = section.Key("ShowHidden").Bool()
-		configGeneral.ConfirmExit, _ = section.Key("ConfirmExit").Bool()
-		configGeneral.FormatTime = section.Key("FormatTime").String()
-		configGeneral.FormatDate = section.Key("FormatDate").String()
-		configGeneral.ColorAccent = section.Key("ColorAccent").String()
+		conf.ConfigGeneral.Theme = section.Key("Theme").String()
+		conf.ConfigGeneral.GitUser = section.Key("GitUser").String()
+		conf.ConfigGeneral.GitKey = section.Key("GitKey").String()
+		conf.ConfigGeneral.Workspace = section.Key("Workspace").String()
+		conf.ConfigGeneral.ShowHidden, _ = section.Key("ShowHidden").Bool()
+		conf.ConfigGeneral.ConfirmExit, _ = section.Key("ConfirmExit").Bool()
+		conf.ConfigGeneral.CleanUpOnExit, _ = section.Key("CleanUpOnExit").Bool()
+		conf.ConfigGeneral.FormatTime = section.Key("FormatTime").String()
+		conf.ConfigGeneral.FormatDate = section.Key("FormatDate").String()
+		conf.ConfigGeneral.ColorAccent = section.Key("ColorAccent").String()
 		// Set them
-		setTheme(configGeneral.Theme)
-		if configGeneral.FormatTime == "" {
-			configGeneral.FormatTime = "15:04:05"
+		setTheme(conf.ConfigGeneral.Theme)
+		if conf.ConfigGeneral.FormatTime == "" {
+			conf.ConfigGeneral.FormatTime = "15:04:05"
 		}
-		ui.MyConfig.FormatTime = configGeneral.FormatTime
-		if configGeneral.FormatDate == "" {
-			configGeneral.FormatDate = "02/01/2006"
+		ui.MyConfig.FormatTime = conf.ConfigGeneral.FormatTime
+		if conf.ConfigGeneral.FormatDate == "" {
+			conf.ConfigGeneral.FormatDate = "02/01/2006"
 		}
-		ui.MyConfig.FormatDate = configGeneral.FormatDate
-		if configGeneral.Workspace == "" {
-			configGeneral.Workspace, _ = os.Getwd()
+		ui.MyConfig.FormatDate = conf.ConfigGeneral.FormatDate
+		if conf.ConfigGeneral.Workspace == "" {
+			conf.ConfigGeneral.Workspace, _ = os.Getwd()
 		}
 		edit.SwitchOpenFile(section.Key("CurrentFile").String())
 		edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
 		edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
 	}
-	if configGeneral.ColorAccent == "" {
-		configGeneral.ColorAccent = conf.DEFAULT_COLOR_ACCENT
+	if conf.ConfigGeneral.ColorAccent == "" {
+		conf.ConfigGeneral.ColorAccent = conf.DEFAULT_COLOR_ACCENT
 	}
+	ReadMacros()
 }
 
 // ****************************************************************************
@@ -514,65 +607,50 @@ func saveSettings() {
 		wCmd.Flush()
 	}
 
+	// Save find history
+	ui.SetStatus("Saving find history")
+	fFind, err := os.Create(filepath.Join(appDir, conf.FILE_FIND_HISTORY))
+	if err == nil {
+		defer fFind.Close()
+		wFind := bufio.NewWriter(fFind)
+		for _, line := range edit.AFind {
+			fmt.Fprintln(wFind, line)
+		}
+		wFind.Flush()
+	}
+
 	// Save INI file
 	inidata := ini.Empty()
 	sec, _ := inidata.NewSection("general")
-	sec.NewKey("Theme", configGeneral.Theme)
-	sec.NewKey("GitUser", configGeneral.GitUser)
-	sec.NewKey("GitPassword", configGeneral.GitPassword)
+	sec.NewKey("Theme", conf.ConfigGeneral.Theme)
+	sec.NewKey("GitUser", conf.ConfigGeneral.GitUser)
+	sec.NewKey("GitKey", conf.ConfigGeneral.GitKey)
 	sec.NewKey("Workspace", edit.CurrentWorkspace)
-	sec.NewKey("ShowHidden", utils.If(configGeneral.ShowHidden, "True", "False"))
-	sec.NewKey("ConfirmExit", utils.If(configGeneral.ConfirmExit, "True", "False"))
-	sec.NewKey("FormatTime", configGeneral.FormatTime)
-	sec.NewKey("FormatDate", configGeneral.FormatDate)
+	sec.NewKey("ShowHidden", utils.If(conf.ConfigGeneral.ShowHidden, "True", "False"))
+	sec.NewKey("ConfirmExit", utils.If(conf.ConfigGeneral.ConfirmExit, "True", "False"))
+	sec.NewKey("CleanUpOnExit", utils.If(conf.ConfigGeneral.CleanUpOnExit, "True", "False"))
+	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
+	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
 	sec.NewKey("CurrentFile", edit.CurrentFile.FName)
 	sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
 	sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
-	sec.NewKey("ColorAccent", configGeneral.ColorAccent)
+	sec.NewKey("ColorAccent", conf.ConfigGeneral.ColorAccent)
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
 		ui.SetStatus(err.Error())
 	}
+	SaveMacros()
 }
 
 // ****************************************************************************
 // ShowQuitDialog()
 // ****************************************************************************
 func ShowQuitDialog(p any) {
-	if configGeneral.ConfirmExit {
+	if conf.ConfigGeneral.ConfirmExit {
 		ui.PgsApp.SwitchToPage("dlgQuit")
 	} else {
 		appQuit()
-	}
-}
-
-// ****************************************************************************
-// SwitchHelp()
-// ****************************************************************************
-func SwitchHelp() {
-	if ui.CurrentMode == ui.ModeTextEdit {
-		// We are in TextEdit mode, so we want to switch to Help mode (if any)
-		idx := ui.GetScreenFromTitle("Help")
-		ui.SetStatus(fmt.Sprintf("Help IDX=%s", idx))
-		if idx == "NIL" {
-			// There is no Help mode yet
-			ui.AddNewScreen(ui.ModeHelp, help.SelfInit, nil)
-		} else {
-			i, _ := strconv.Atoi(idx)
-			ui.ShowScreen(i)
-		}
-	} else {
-		// We are in Help mode, so we want to go back to TextEdit mode (if any)
-		idx := ui.GetScreenFromTitle("Editor")
-		ui.SetStatus(fmt.Sprintf("Editor IDX=%s", idx))
-		if idx == "NIL" {
-			// There is no TextEdit mode yet
-			ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, configGeneral.Workspace)
-		} else {
-			i, _ := strconv.Atoi(idx)
-			ui.ShowScreen(i)
-		}
 	}
 }
 
@@ -603,7 +681,7 @@ func InputConfigTheme(f any) {
 
 	for _, thm := range arrThemes {
 		chk := false
-		if thm == configGeneral.Theme {
+		if thm == conf.ConfigGeneral.Theme {
 			chk = true
 		}
 		MnuInputTheme.AddItem(thm,
@@ -623,8 +701,8 @@ func InputConfigTheme(f any) {
 // ****************************************************************************
 func setTheme(theme any) {
 	edit.SetTheme(theme.(string))
-	configGeneral.Theme = theme.(string)
-	ui.SetStatus(fmt.Sprintf("Theme is set to %s", configGeneral.Theme))
+	conf.ConfigGeneral.Theme = theme.(string)
+	ui.SetStatus(fmt.Sprintf("Theme is set to %s", conf.ConfigGeneral.Theme))
 }
 
 // ****************************************************************************
@@ -633,7 +711,7 @@ func setTheme(theme any) {
 func InputColorAccent(f any) {
 	DlgInputColorAccent = DlgInputColorAccent.Input("Color Accent", // Title
 		"Please, enter the color accent :", // Message
-		configGeneral.ColorAccent,
+		conf.ConfigGeneral.ColorAccent,
 		setColorAccent,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -646,9 +724,9 @@ func InputColorAccent(f any) {
 // ****************************************************************************
 func setColorAccent(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
-		configGeneral.ColorAccent = DlgInputColorAccent.Value
-		ui.SetColorAccent(configGeneral.ColorAccent)
-		ui.SetStatus(fmt.Sprintf("Color accent is set to %s", configGeneral.ColorAccent))
+		conf.ConfigGeneral.ColorAccent = DlgInputColorAccent.Value
+		ui.SetColorAccent(conf.ConfigGeneral.ColorAccent)
+		ui.SetStatus(fmt.Sprintf("Color accent is set to %s", conf.ConfigGeneral.ColorAccent))
 	}
 }
 
@@ -658,7 +736,7 @@ func setColorAccent(rc dialog.DlgButton, idx int) {
 func InputConfigGitUser(f any) {
 	DlgInputGitUser = DlgInputGitUser.Input("Git User", // Title
 		"Please, enter the Git user :", // Message
-		configGeneral.GitUser,
+		conf.ConfigGeneral.GitUser,
 		setGitUser,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -671,8 +749,8 @@ func InputConfigGitUser(f any) {
 // ****************************************************************************
 func setGitUser(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
-		configGeneral.GitUser = DlgInputGitUser.Value
-		ui.SetStatus(fmt.Sprintf("Git User is set to %s", configGeneral.GitUser))
+		conf.ConfigGeneral.GitUser = DlgInputGitUser.Value
+		ui.SetStatus(fmt.Sprintf("Git User is set to %s", conf.ConfigGeneral.GitUser))
 	}
 }
 
@@ -682,7 +760,7 @@ func setGitUser(rc dialog.DlgButton, idx int) {
 func InputConfigGitPassword(f any) {
 	DlgInputGitPassword = DlgInputGitPassword.Input("Git Password", // Title
 		"Please, enter the Git password :", // Message
-		configGeneral.GitPassword,
+		conf.ConfigGeneral.GitKey,
 		setGitPassword,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -695,8 +773,8 @@ func InputConfigGitPassword(f any) {
 // ****************************************************************************
 func setGitPassword(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
-		configGeneral.GitPassword = DlgInputGitPassword.Value
-		ui.SetStatus(fmt.Sprintf("Git Password is set to %s", configGeneral.GitPassword))
+		conf.ConfigGeneral.GitKey = DlgInputGitPassword.Value
+		ui.SetStatus(fmt.Sprintf("Git Password is set to %s", conf.ConfigGeneral.GitKey))
 	}
 }
 
@@ -706,7 +784,7 @@ func setGitPassword(rc dialog.DlgButton, idx int) {
 func InputConfigFormatTime(f any) {
 	DlgInputFormatTime = DlgInputFormatTime.Input("Time Format", // Title
 		"Please, enter the time format :", // Message
-		configGeneral.FormatTime,
+		conf.ConfigGeneral.FormatTime,
 		setFormatTime,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -719,9 +797,9 @@ func InputConfigFormatTime(f any) {
 // ****************************************************************************
 func setFormatTime(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
-		configGeneral.FormatTime = DlgInputFormatTime.Value
-		ui.SetStatus(fmt.Sprintf("Time Format is set to %s", configGeneral.FormatTime))
-		ui.MyConfig.FormatTime = configGeneral.FormatTime
+		conf.ConfigGeneral.FormatTime = DlgInputFormatTime.Value
+		ui.SetStatus(fmt.Sprintf("Time Format is set to %s", conf.ConfigGeneral.FormatTime))
+		ui.MyConfig.FormatTime = conf.ConfigGeneral.FormatTime
 	}
 }
 
@@ -731,7 +809,7 @@ func setFormatTime(rc dialog.DlgButton, idx int) {
 func InputConfigFormatDate(f any) {
 	DlgInputFormatDate = DlgInputFormatDate.Input("Date Format", // Title
 		"Please, enter the date format :", // Message
-		configGeneral.FormatDate,
+		conf.ConfigGeneral.FormatDate,
 		setFormatDate,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -744,9 +822,9 @@ func InputConfigFormatDate(f any) {
 // ****************************************************************************
 func setFormatDate(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
-		configGeneral.FormatDate = DlgInputFormatDate.Value
-		ui.SetStatus(fmt.Sprintf("Date Format is set to %s", configGeneral.FormatDate))
-		ui.MyConfig.FormatDate = configGeneral.FormatDate
+		conf.ConfigGeneral.FormatDate = DlgInputFormatDate.Value
+		ui.SetStatus(fmt.Sprintf("Date Format is set to %s", conf.ConfigGeneral.FormatDate))
+		ui.MyConfig.FormatDate = conf.ConfigGeneral.FormatDate
 	}
 }
 
@@ -765,12 +843,27 @@ func InputFileOpen(f any) {
 }
 
 // ****************************************************************************
+// InputWorkspaceOpen()
+// ****************************************************************************
+func InputWorkspaceOpen(f any) {
+	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Open Workspace", // Title
+		edit.CurrentWorkspace,
+		doOpenFile,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFileOpen")
+	ui.App.SetFocus(&DlgInputFileOpen.UIList)
+}
+
+// ****************************************************************************
 // doOpenFile()
 // ****************************************************************************
 func doOpenFile(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
 		fn := DlgInputFileOpen.Value
 		ui.SetStatus("Opening " + fn)
+		edit.OpenFile(fn, utils.IsTextFile(fn))
 	}
 }
 
@@ -778,17 +871,25 @@ func doOpenFile(rc dialog.DlgButton, idx int) {
 // SwitchShowHidden()
 // ****************************************************************************
 func SwitchShowHidden(dummy any) {
-	configGeneral.ShowHidden = !configGeneral.ShowHidden
-	ui.SetStatus(fmt.Sprintf("Show Hidden is set to %t", configGeneral.ShowHidden))
-	edit.ShowTreeDir(configGeneral.Workspace, configGeneral.ShowHidden)
+	conf.ConfigGeneral.ShowHidden = !conf.ConfigGeneral.ShowHidden
+	ui.SetStatus(fmt.Sprintf("Show Hidden is set to %t", conf.ConfigGeneral.ShowHidden))
+	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 }
 
 // ****************************************************************************
 // SwitchConfirmExit()
 // ****************************************************************************
 func SwitchConfirmExit(dummy any) {
-	configGeneral.ConfirmExit = !configGeneral.ConfirmExit
-	ui.SetStatus(fmt.Sprintf("Confirm Exit is set to %t", configGeneral.ConfirmExit))
+	conf.ConfigGeneral.ConfirmExit = !conf.ConfigGeneral.ConfirmExit
+	ui.SetStatus(fmt.Sprintf("Confirm Exit is set to %t", conf.ConfigGeneral.ConfirmExit))
+}
+
+// ****************************************************************************
+// SwitchCleanUpOnExit()
+// ****************************************************************************
+func SwitchCleanUpOnExit(dummy any) {
+	conf.ConfigGeneral.CleanUpOnExit = !conf.ConfigGeneral.CleanUpOnExit
+	ui.SetStatus(fmt.Sprintf("Clean Up on Exit is set to %t", conf.ConfigGeneral.CleanUpOnExit))
 }
 
 // ****************************************************************************
@@ -801,7 +902,7 @@ func InputShell(f any) {
 		sh,
 		runShell,
 		0,
-		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.GetCurrentScreen(), ui.EdtMain, ACmd) // Focus return
 	ui.PgsApp.AddPage("dlgInputShell", DlgInputShell.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputShell")
 }
@@ -820,90 +921,109 @@ func runShell(rc dialog.DlgButton, idx int) {
 // ****************************************************************************
 func Xeq(c string) {
 	sCmd := strings.Fields(c)
-	ACmd = append(ACmd, c)
-	ICmd++
-
-	ui.SetStatus(fmt.Sprintf("Running [%s]", c))
-	if sCmd[0][0] == '!' {
-		xCmd := sCmd[0] + "     "
-		xCmd = xCmd[:5]
-		xCmd = strings.TrimSpace(xCmd)
-		switch xCmd {
-		case "!quit", "!exit", "!bye":
-			ui.PgsApp.SwitchToPage("dlgQuit")
-		case "!log":
-			edit.OpenFile(filepath.Join(appDir, conf.FILE_LOG), false)
-		case "!out":
-			edit.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
-			edit.SwitchFollow("dummy")
-		case "!foll", "!tail":
-			edit.SwitchFollow("dummy")
-		case "!next":
-			edit.SwitchNextFile()
-		case "!prev":
-			edit.SwitchPreviousFile()
-		case "!clos":
-			edit.CloseCurrentFile()
-		case "!save":
-			edit.SaveFile()
-		default:
-			ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
+	if len(ACmd) > 0 {
+		if ACmd[len(ACmd)-1] != c {
+			ACmd = append(ACmd, c)
+			ICmd++
 		}
 	} else {
-		cmdOptions := cmd.Options{
-			Buffered:  false,
-			Streaming: true,
-		}
+		ACmd = append(ACmd, c)
+		ICmd++
+	}
 
-		xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
-		xCmd.Dir = edit.CurrentWorkspace
-		fOut, _ := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-		defer fOut.Close()
-		wOut := bufio.NewWriter(fOut)
-		fmt.Fprintln(wOut, "> "+c+"\n")
-		wOut.Flush()
-		doneChan := make(chan struct{})
-		go func() {
-			defer close(doneChan)
-			// Done when both channels have been closed
-			// https://dave.cheney.net/2013/04/30/curious-channels
-			for xCmd.Stdout != nil || xCmd.Stderr != nil {
-				select {
-				case line, open := <-xCmd.Stdout:
-					if !open {
-						xCmd.Stdout = nil
-						continue
-					}
-					wOut := bufio.NewWriter(fOut)
-					fmt.Fprintln(wOut, line)
-					wOut.Flush()
-					ui.SetStatus(line)
-					ui.App.ForceDraw()
-				case line, open := <-xCmd.Stderr:
-					if !open {
-						xCmd.Stderr = nil
-						continue
-					}
-					wOut := bufio.NewWriter(fOut)
-					fmt.Fprintln(wOut, line)
-					wOut.Flush()
-					ui.SetStatus(line)
-					ui.App.ForceDraw()
-				}
+	if len(sCmd) > 0 {
+		ui.SetStatus(fmt.Sprintf("Running [%s]", c))
+		if sCmd[0][0] == '!' {
+			xCmd := sCmd[0] + "     "
+			xCmd = xCmd[:5]
+			xCmd = strings.TrimSpace(xCmd)
+			switch xCmd {
+			case "!quit", "!exit", "!bye":
+				ui.PgsApp.SwitchToPage("dlgQuit")
+			case "!log":
+				edit.OpenFile(filepath.Join(appDir, conf.FILE_LOG), false)
+			case "!out":
+				edit.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
+				edit.SwitchFollow("dummy")
+			case "!foll", "!tail":
+				edit.SwitchFollow("dummy")
+			case "!next":
+				edit.SwitchNextFile()
+			case "!prev":
+				edit.SwitchPreviousFile()
+			case "!clos":
+				edit.CloseCurrentFile()
+			case "!save":
+				edit.SaveFile()
+			case "!conf":
+				edit.OpenFile(filepath.Join(appDir, conf.FILE_INI), false)
+			case "!macr":
+				edit.OpenFile(filepath.Join(appDir, conf.FILE_MACROS), false)
+			case "!help":
+				ShowHelp()
+			case "!info":
+				ShowSysInfo()
+			default:
+				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 			}
-			// conf.Cwd = getWorkingDirectoryOfPID(xCmd.Status().PID)
-		}()
+		} else {
+			cmdOptions := cmd.Options{
+				Buffered:  false,
+				Streaming: true,
+			}
 
-		// Run and wait for Cmd to return
-		<-xCmd.Start()
+			xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
+			xCmd.Dir = edit.CurrentWorkspace
+			fOut, _ := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			defer fOut.Close()
+			wOut := bufio.NewWriter(fOut)
+			fmt.Fprintln(wOut, time.Now().Format("20060102-150405")+" ⯈ "+c+"\n")
+			wOut.Flush()
+			doneChan := make(chan struct{})
+			go func() {
+				defer close(doneChan)
+				// Done when both channels have been closed
+				// https://dave.cheney.net/2013/04/30/curious-channels
+				for xCmd.Stdout != nil || xCmd.Stderr != nil {
+					select {
+					case line, open := <-xCmd.Stdout:
+						if !open {
+							xCmd.Stdout = nil
+							continue
+						}
+						wOut := bufio.NewWriter(fOut)
+						fmt.Fprintln(wOut, line)
+						wOut.Flush()
+						ui.SetStatus(line)
+						ui.App.ForceDraw()
+					case line, open := <-xCmd.Stderr:
+						if !open {
+							xCmd.Stderr = nil
+							continue
+						}
+						wOut := bufio.NewWriter(fOut)
+						fmt.Fprintln(wOut, line)
+						wOut.Flush()
+						ui.SetStatus(line)
+						ui.App.ForceDraw()
+					}
+				}
+				// conf.Cwd = getWorkingDirectoryOfPID(xCmd.Status().PID)
+			}()
 
-		// Wait for goroutine to print everything
-		<-doneChan
+			// Run and wait for Cmd to return
+			<-xCmd.Start()
 
-		// Job's done !
-		fmt.Fprintln(wOut, "\n")
-		wOut.Flush()
-		ui.SetStatus(fmt.Sprintf("Done [%s]", c))
+			// Wait for goroutine to print everything
+			<-doneChan
+
+			// Job's done !
+			fmt.Fprintln(wOut, "\n")
+			wOut.Flush()
+			ui.SetStatus(fmt.Sprintf("Done [%s]", c))
+		}
+	} else {
+		ui.SetStatus("Nothing to run")
 	}
 }
 
@@ -921,20 +1041,28 @@ func XeqOut(c string) string {
 		return !quoted && r == ' '
 	})
 
-	cmd := exec.Command(sCmd[0], sCmd[1:]...)
-	cmd.Dir = edit.CurrentWorkspace
-	ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
-	var outb, errb bytes.Buffer
-	cmd.Stdout = &outb
-	cmd.Stderr = &errb
 	out := ""
-	err := cmd.Run()
-	if err != nil {
-		out = "Error : " + err.Error()
+	if len(sCmd) > 0 {
+		cmd := exec.Command(sCmd[0], sCmd[1:]...)
+		cmd.Dir = edit.CurrentWorkspace
+		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
+		var outb, errb bytes.Buffer
+		cmd.Stdout = &outb
+		cmd.Stderr = &errb
+		if err := cmd.Run(); err != nil {
+			out = "Error : " + err.Error()
+			if exitError, ok := err.(*exec.ExitError); ok {
+				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
+			}
+		} else {
+			out = outb.String()
+			out = out + errb.String()
+			out = out + "\nExit code 0"
+		}
 	} else {
-		out = outb.String()
-		out = out + errb.String()
+		out = "Nothing to run\n\nExit code 0"
 	}
+
 	out = strings.TrimSpace(out)
 	ui.SetStatus(out)
 	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
@@ -961,13 +1089,140 @@ func DoGitStatus(f any) {
 // DoGitBang()
 // ****************************************************************************
 func DoGitBang(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if !IsInsideGitWorkTree() {
+		pjname := filepath.Base(filepath.Dir(edit.CurrentFile.FName))
+		DlgYesNo1 = DlgYesNo1.YesNo("Git Bang", // Title
+			"This will initialize a Git environment for your project ["+pjname+"].\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					if conf.ConfigGeneral.GitUser == "" {
+						ui.SetStatus("Git User is not yet configured")
+					} else {
+						DlgYesNo2 = DlgYesNo2.YesNo("Git Bang", // Title
+							"The following repository should already exist :\n\nhttps://github.com/"+conf.ConfigGeneral.GitUser+"/"+pjname+"\n\nHas the repository already been created ?", // Message
+							func(rc dialog.DlgButton, idx int) {
+								if rc == dialog.BUTTON_YES {
+									url := "https://" + conf.ConfigGeneral.GitKey + "@github.com/" + conf.ConfigGeneral.GitUser + "/" + pjname
+									Xeq("git add .")
+									Xeq("git commit -m \"First Commit\"")
+									Xeq("git remote add origin " + url)
+									Xeq("git branch -M main")
+									Xeq("git pull --rebase origin main")
+									Xeq("git push -u origin main")
+									currentDir := filepath.Dir(edit.CurrentFile.FName)
+									if !utils.IsFileExist(filepath.Join(currentDir, "README.md")) {
+										createFile(filepath.Join(currentDir, "README.md"), "#"+pjname)
+										Xeq("git add README.md")
+									}
+									if !utils.IsFileExist(filepath.Join(currentDir, ".gitignore")) {
+										createFile(filepath.Join(currentDir, ".gitignore"),
+											`# This file is used to ignore files which are generated
+# ----------------------------------------------------------------------------
+
+github.key
+*~
+*.autosave
+*.a
+*.core
+*.moc
+*.o
+*.obj
+*.orig
+*.rej
+*.so
+*.so.*
+*_pch.h.cpp
+*_resource.rc
+*.qm
+.#*
+*.*#
+core
+!core/
+tags
+.DS_Store
+.directory
+*.debug
+Makefile*
+*.prl
+*.app
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+Thumbs.db
+*.res
+*.rc
+/.qmake.cache
+/.qmake.stash
+
+# qtcreator generated files
+*.pro.user*
+*.qbs.user*
+CMakeLists.txt.user*
+
+# xemacs temporary files
+*.flc
+
+# Vim temporary files
+.*.swp
+
+# Visual Studio generated files
+*.ib_pdb_index
+*.idb
+*.ilk
+*.pdb
+*.sln
+*.suo
+*.vcproj
+*vcproj.*.*.user
+*.ncb
+*.sdf
+*.opensdf
+*.vcxproj
+*vcxproj.*
+
+# MinGW generated files
+*.Debug
+*.Release
+
+# Python byte code
+*.pyc
+
+# Binaries
+# --------
+*.dll
+*.exe
+
+# Directories with generated files
+.moc/
+.obj/
+.pch/
+.rcc/
+.uic/
+/build*/
+`)
+										Xeq("git add .gitignore")
+									}
+									DoGitStatus("dummy")
+								} else {
+									ui.SetStatus("Aborting Git Bang")
+								}
+							},
+							0,
+							ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+						ui.PgsApp.AddPage("dlgYesNo2", DlgYesNo2.Popup(), true, false)
+						ui.PgsApp.ShowPage("dlgYesNo2")
+					}
+				} else {
+					ui.SetStatus("Aborting Git Bang")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo1", DlgYesNo1.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo1")
+	} else {
+		ui.SetStatus("Git repository already created")
+	}
 }
 
 // ****************************************************************************
@@ -987,6 +1242,8 @@ func DoGitCommitPush(f any) {
 					MsgBox = MsgBox.OK("Git Commit & Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Commit & Push")
 				}
 			},
 			0,
@@ -1002,39 +1259,101 @@ func DoGitCommitPush(f any) {
 // DoGitConfigure()
 // ****************************************************************************
 func DoGitConfigure(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	form := tview.NewForm()
+	form.SetTitle("Git Configure")
+	form.AddInputField("User", conf.ConfigGeneral.GitUser, 40, nil, nil)
+	form.AddInputField("Key", conf.ConfigGeneral.GitKey, 40, nil, nil)
+	form.AddButton("OK", func() {
+		conf.ConfigGeneral.GitUser = form.GetFormItem(0).(*tview.InputField).GetText()
+		conf.ConfigGeneral.GitKey = form.GetFormItem(1).(*tview.InputField).GetText()
+		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+		ui.App.SetFocus(ui.EdtMain)
+	})
+	form.AddButton("Cancel", func() {
+		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+		ui.App.SetFocus(ui.EdtMain)
+	})
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc:
+			ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+			ui.App.SetFocus(ui.EdtMain)
+			return nil
+		}
+		return event
+	})
+
+	form.SetButtonsAlign(tview.AlignCenter)
+	form.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	form.SetButtonTextColor(tview.Styles.PrimaryTextColor)
+	form.SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorderPadding(0, 0, 0, 0)
+	form.SetBorder(true).
+		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
+		SetBorderPadding(1, 1, 1, 1)
+
+	ui.PgsApp.AddPage("myForm",
+		tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(form, 9, 1, true).
+				AddItem(nil, 0, 1, false), 49, 1, true).
+			AddItem(nil, 0, 1, false),
+		true, false)
+	ui.PgsApp.ShowPage("myForm")
 }
 
 // ****************************************************************************
 // DoGitFetch()
 // ****************************************************************************
 func DoGitFetch(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if IsInsideGitWorkTree() {
+		DlgYesNo = DlgYesNo.YesNo("Git Fetch", // Title
+			"The Git Fetch will fetch the remote version but no merging is processed locally.\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					out := fmt.Sprintf("Fetching...\n%s", XeqOut("git fetch origin"))
+					MsgBox = MsgBox.OK("Git Fetch", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Fetch")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
 }
 
 // ****************************************************************************
 // DoGitPull()
 // ****************************************************************************
 func DoGitPull(f any) {
-	out := fmt.Sprintf("Current commit : %s\n", XeqOut("git rev-parse --short HEAD"))
-	out += fmt.Sprintf("%s\n", XeqOut("git status"))
-	out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-	// out := XeqOut("git rev-parse --short HEAD")
-	MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
+	if IsInsideGitWorkTree() {
+		branch := XeqOut("git rev-parse --abbrev-ref HEAD")
+		DlgYesNo = DlgYesNo.YesNo("Git Pull", // Title
+			"The Git Pull will fetch the remote version and merge it with you local branch which is currently ["+branch+"].\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					out := fmt.Sprintf("Pulling...\n%s", XeqOut("git pull origin "+branch))
+					MsgBox = MsgBox.OK("Git Pull", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Pull")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
 }
 
 // ****************************************************************************
@@ -1066,6 +1385,8 @@ func DoGitCommit(f any) {
 					MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Commit")
 				}
 			},
 			0,
@@ -1078,13 +1399,263 @@ func DoGitCommit(f any) {
 }
 
 // ****************************************************************************
+// DoGitAdd()
+// ****************************************************************************
+func DoGitAdd(f any) {
+	if IsInsideGitWorkTree() {
+		DlgYesNo = DlgYesNo.YesNo("Git Add", // Title
+			"This will add the file :\n\n"+f.(string)+"\n\nto the Git tracking.\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					b := filepath.Base(f.(string))
+					out := fmt.Sprintf("Adding...\n%s", XeqOut("git add ./"+utils.EscapeSpaces(b)))
+					MsgBox = MsgBox.OK("Git Add", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Add")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
+}
+
+// ****************************************************************************
+// DoArchive()
+// ****************************************************************************
+func DoArchive(f any) {
+	ui.SetStatus("Creating archive for " + f.(string))
+	userDir, _ := os.UserHomeDir()
+	b := utils.FilenameWithoutExtension(filepath.Base(f.(string))) + "_" + time.Now().Format("20060102-150405") + ".zip"
+	if err := utils.ZipIt(f.(string), filepath.Join(userDir, b)); err != nil {
+		ui.SetStatus(err.Error())
+	} else {
+		ui.SetStatus(fmt.Sprintf("Archive [%s] created successfully into [%s]", b, userDir))
+	}
+}
+
+// ****************************************************************************
 // IsInsideGitWorkTree()
 // ****************************************************************************
 func IsInsideGitWorkTree() bool {
 	rc := false
 	out := XeqOut("git rev-parse --is-inside-work-tree")
-	if out == "true" {
+	if out[:4] == "true" {
 		rc = true
 	}
 	return rc
+}
+
+// ****************************************************************************
+// IsFileGitTracked()
+// ****************************************************************************
+func IsFileGitTracked(f string) bool {
+	rc := false
+	out := XeqOut("git ls-files --error-unmatch " + utils.EscapeSpaces(f))
+	b := filepath.Base(f)
+	if out[:len(b)] == b {
+		ui.SetStatus(fmt.Sprintf("File [%s] is git-tracked", f))
+		rc = true
+	} else {
+		ui.SetStatus(fmt.Sprintf("File [%s] is NOT git-tracked", f))
+	}
+	return rc
+}
+
+// ****************************************************************************
+// SaveMacros()
+// ****************************************************************************
+func SaveMacros() {
+	fMac, err := os.Create(filepath.Join(appDir, conf.FILE_MACROS))
+	if err == nil {
+		defer fMac.Close()
+		wMac := bufio.NewWriter(fMac)
+		fmt.Fprintln(wMac, "################################################################################")
+		fmt.Fprintln(wMac, "# Macros file generated on "+time.Now().Format("20060201-150405"))
+		fmt.Fprintln(wMac, "################################################################################")
+		fmt.Fprintln(wMac, "# These placeholders can be used into macros :")
+		fmt.Fprintln(wMac, "# %D : Full directory of current file")
+		fmt.Fprintln(wMac, "# %P : Parent directory of current file")
+		fmt.Fprintln(wMac, "# %W : Full directory of current workspace")
+		fmt.Fprintln(wMac, "# %F : Full file name with directory and extension of current file")
+		fmt.Fprintln(wMac, "# %f : File name without path and with extension of current file")
+		fmt.Fprintln(wMac, "# %e : File name without path nor extension of current file")
+		fmt.Fprintln(wMac, "# %L : Line number of current file in editor")
+		fmt.Fprintln(wMac, "# %T : Current timestamp")
+		fmt.Fprintln(wMac, "# %H : Home directory of current user")
+		fmt.Fprintln(wMac, "# %s : OS path separator")
+		fmt.Fprintln(wMac, "################################################################################")
+		fmt.Fprintln(wMac, "")
+		for k, v := range Macros {
+			fmt.Fprintln(wMac, k+" : "+v)
+		}
+		wMac.Flush()
+	}
+}
+
+// ****************************************************************************
+// ReadMacros()
+// ****************************************************************************
+func ReadMacros() {
+	fMac, err := os.Open(filepath.Join(appDir, conf.FILE_MACROS))
+	if err == nil {
+		for k := range Macros {
+			delete(Macros, k)
+		}
+		defer fMac.Close()
+		sMac := bufio.NewScanner(fMac)
+		for sMac.Scan() {
+			if strings.TrimSpace(string(sMac.Text())) != "" {
+				if strings.TrimSpace(string(sMac.Text()[0])) != "#" {
+					m := strings.Split(sMac.Text(), ":")
+					Macros[strings.TrimSpace(m[0])] = strings.TrimSpace(strings.Join(m[1:], ":"))
+				}
+			}
+		}
+	}
+}
+
+// ****************************************************************************
+// XeqMacro()
+// ****************************************************************************
+func XeqMacro(k any) {
+	ui.SetStatus("Executing macro : [" + k.(string) + "]")
+	out := fmt.Sprintf("%s\n", XeqOut(replaceVariablesInMacro(k.(string))))
+	MsgBox = MsgBox.OK("Macro : "+k.(string), out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+}
+
+// ****************************************************************************
+// replaceVariablesInMacro()
+// ****************************************************************************
+func replaceVariablesInMacro(k string) string {
+	// %D : Full directory of current file
+	// %P : Parent directory of current file
+	// %W : Full directory of current workspace
+	// %F : Full file name with directory and extension of current file
+	// %f : File name without path and with extension of current file
+	// %e : File name without path nor extension of current file
+	// %L : Line number of current file in editor
+	// %T : Current timestamp
+	// %H : Home directory of current user
+	// %s : OS path separator
+	out := Macros[k]
+	userDir, _ := os.UserHomeDir()
+	r := strings.NewReplacer(
+		"%D", utils.EscapeSpaces(filepath.Dir(edit.CurrentFile.FName)),
+		"%P", utils.EscapeSpaces(filepath.Base(filepath.Dir(edit.CurrentFile.FName))),
+		"%W", utils.EscapeSpaces(conf.ConfigGeneral.Workspace),
+		"%F", utils.EscapeSpaces(edit.CurrentFile.FName),
+		"%f", utils.EscapeSpaces(filepath.Base(edit.CurrentFile.FName)),
+		"%e", utils.EscapeSpaces(filepath.Base(strings.TrimSuffix(filepath.Base(edit.CurrentFile.FName), filepath.Ext(edit.CurrentFile.FName)))),
+		"%T", time.Now().Format("20060102-150405"),
+		"%L", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y+1),
+		"%s", string(os.PathSeparator),
+		"%H", userDir,
+	)
+	out = r.Replace(out)
+	return out
+}
+
+// ****************************************************************************
+// editMacrosFile()
+// ****************************************************************************
+func editMacrosFile(f any) {
+	edit.OpenFile(filepath.Join(appDir, conf.FILE_MACROS), true)
+}
+
+// ****************************************************************************
+// createFile()
+// ****************************************************************************
+func createFile(fName string, text string) {
+	f, err := os.Create(fName)
+	if err == nil {
+		defer f.Close()
+		fmt.Fprintln(f, text)
+	}
+}
+
+// ****************************************************************************
+// ShowHelp()
+// ****************************************************************************
+func ShowHelp() {
+	MsgBox = MsgBox.OK(" Help ", help.Help, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+	ui.SetStatus("Displaying Help screen")
+}
+
+// ****************************************************************************
+// ShowSysInfo()
+// ****************************************************************************
+func ShowSysInfo() {
+	MsgBox = MsgBox.OK(" System Info ", sysinfo.GetFullReport(), nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgBox")
+	ui.SetStatus("Displaying System Info")
+
+	// Generate HTML System Information report
+	userDir, err := os.UserHomeDir()
+	if err == nil {
+		f, err := os.Create(filepath.Join(userDir, "sysinfo.html"))
+		if err == nil {
+			defer f.Close()
+			f.WriteString(sysinfo.GetHTMLReport())
+			ui.SetStatus("Generating System Info HTML report into [" + userDir + "] folder")
+		}
+	}
+}
+
+// ****************************************************************************
+// ArchiveLogs()
+// ****************************************************************************
+func ArchiveLogs() {
+	ui.SetStatus("Archiving logs")
+	type tLogs struct {
+		yyyymm string
+		text   string
+	}
+	var logs []tLogs
+	// Opening the log file
+	file, err := os.Open(filepath.Join(appDir, conf.FILE_LOG))
+	if err != nil {
+	} else {
+		defer file.Close()
+		// Read the log file
+		scanner := bufio.NewScanner(file)
+		for scanner.Scan() {
+			line := scanner.Text()
+			logs = append(logs, tLogs{line[:6], line})
+		}
+		var currentMonth = time.Now().Format("200601")
+		var tagFiles []string
+		for _, t := range logs {
+			// Keep a trace of files we'll have to zip after
+			if !slices.Contains(tagFiles, t.yyyymm) {
+				tagFiles = append(tagFiles, t.yyyymm)
+			}
+			// If the file doesn't exist, create it, or append to the file
+			f, err := os.OpenFile(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+t.yyyymm+".log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err == nil {
+				f.WriteString(t.text + "\n")
+			}
+		}
+		// Zipping the different files except for the actual month
+		for _, tag := range tagFiles {
+			if tag != currentMonth {
+				utils.ZipIt(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".log"), filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".zip"))
+				os.Remove(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".log"))
+			} else {
+				os.Rename(filepath.Join(appDir, conf.FILE_LOG), filepath.Join(appDir, conf.FILE_LOG+".bak"))
+				os.Rename(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".log"), filepath.Join(appDir, conf.FILE_LOG))
+			}
+		}
+
+	}
 }

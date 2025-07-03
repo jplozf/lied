@@ -66,41 +66,48 @@ const (
 // GLOBALS
 // ****************************************************************************
 var (
-	SessionID    string
-	IdxScreens   int
-	ArrScreens   []MyScreen
-	CurrentMode  Mode
-	lblTime      *tview.TextView
-	lblDate      *tview.TextView
-	LblKeys      *tview.TextView
-	App          *tview.Application
-	FlxHelp      *tview.Flex
-	FlxEditor    *tview.Flex
-	TxtHelp      *tview.TextView
-	lblTitle     *tview.TextView
-	lblStatus    *tview.TextView
-	LblHostname  *tview.TextView
-	LblScreen    *tview.TextView
-	LblPID       *tview.TextView
-	LblRC        *tview.TextView
-	LblHourglass *tview.TextView
-	PgsApp       *tview.Pages
-	DlgQuit      *tview.Modal
-	StdoutBuf    bytes.Buffer
-	EdtMain      *femto.View
-	TxtEditName  *tview.TextView
-	TblOpenFiles *tview.Table
-	TrvExplorer  *tview.TreeView
-	MyConfig     Config
-	LblReadWrite *tview.TextView
+	SessionID           string
+	IdxScreens          int
+	ArrScreens          []MyScreen
+	CurrentMode         Mode
+	lblTime             *tview.TextView
+	lblDate             *tview.TextView
+	LblKeys             *tview.TextView
+	App                 *tview.Application
+	FlxHelp             *tview.Flex
+	FlxEditor           *tview.Flex
+	TxtHelp             *tview.TextView
+	lblTitle            *tview.TextView
+	lblStatus           *tview.TextView
+	LblHostname         *tview.TextView
+	LblScreen           *tview.TextView
+	LblPID              *tview.TextView
+	LblRC               *tview.TextView
+	LblHourglass        *tview.TextView
+	PgsApp              *tview.Pages
+	DlgQuit             *tview.Modal
+	DlgSave             *tview.Modal
+	StdoutBuf           bytes.Buffer
+	EdtMain             *femto.View
+	TxtCurrentWorkspace *tview.TextView
+	TxtCurrentEditName  *tview.TextView
+	TblOpenFiles        *tview.Table
+	TrvExplorer         *tview.TreeView
+	MyConfig            Config
+	LblReadWrite        *tview.TextView
 	// LblEncoding  *tview.TextView
-	LblCursor    *tview.TextView
-	LblDirty     *tview.TextView
-	LblPercent   *tview.TextView
-	LblSize      *tview.TextView
-	LblCommit    *tview.TextView
-	LblGITStatus *tview.TextView
-	LblGITBranch *tview.TextView
+	LblCursor        *tview.TextView
+	LblDirty         *tview.TextView
+	LblPercent       *tview.TextView
+	LblSize          *tview.TextView
+	LblCommit        *tview.TextView
+	LblGITStatus     *tview.TextView
+	LblGITBranch     *tview.TextView
+	FrmFind          *tview.Form
+	TxtFind          *tview.InputField
+	ChkCase          *tview.Checkbox
+	ChkToggleReplace *tview.Checkbox
+	TxtReplace       *tview.InputField
 )
 
 // ****************************************************************************
@@ -139,6 +146,7 @@ func (m Mode) String() string {
 // ****************************************************************************
 func SetUI(fQuit Fn, hostname string) {
 	PgsApp = tview.NewPages()
+	tview.Styles.ContrastBackgroundColor = tcell.Color100
 
 	lblDate = tview.NewTextView().SetText(currentDateString())
 	lblDate.SetBorder(false)
@@ -237,10 +245,19 @@ func SetUI(fQuit Fn, hostname string) {
 	buffer := femto.NewBufferFromString(string("content"), "./dummy")
 	EdtMain = femto.NewView(buffer)
 	EdtMain.SetBorder(true)
-	TxtEditName = tview.NewTextView()
-	TxtEditName.Clear()
-	TxtEditName.SetBorder(true)
-	TxtEditName.SetDynamicColors(true)
+
+	TxtCurrentWorkspace = tview.NewTextView()
+	TxtCurrentWorkspace.SetBorder(true)
+	TxtCurrentWorkspace.SetDynamicColors(true)
+	TxtCurrentWorkspace.SetTitleAlign(tview.AlignLeft)
+	TxtCurrentWorkspace.SetTitle("Workspace")
+
+	TxtCurrentEditName = tview.NewTextView()
+	TxtCurrentEditName.SetBorder(true)
+	TxtCurrentEditName.SetDynamicColors(true)
+	TxtCurrentEditName.SetTitleAlign(tview.AlignLeft)
+	TxtCurrentEditName.SetTitle("File")
+
 	TblOpenFiles = tview.NewTable()
 	TblOpenFiles.SetBorder(true)
 	TblOpenFiles.SetSelectable(true, false)
@@ -248,6 +265,39 @@ func SetUI(fQuit Fn, hostname string) {
 	TrvExplorer = tview.NewTreeView()
 	TrvExplorer.SetBorder(true)
 	TrvExplorer.SetTitle("Explorer")
+
+	FrmFind = tview.NewForm()
+	FrmFind.SetBorder(true)
+	FrmFind.SetTitle("Find & Replace")
+	TxtFind = tview.NewInputField()
+	TxtFind.SetLabel("Find")
+	TxtFind.SetBorder(false)
+	TxtReplace = tview.NewInputField()
+	TxtReplace.SetLabel("Replace")
+	TxtReplace.SetBorder(false)
+	TxtReplace.SetDisabled(true)
+	ChkToggleReplace = tview.NewCheckbox()
+	ChkToggleReplace.SetLabel("Toggle Replace")
+	ChkToggleReplace.SetBorder(false)
+	ChkToggleReplace.SetChangedFunc(func(_ bool) {
+		TxtReplace.SetDisabled(!ChkToggleReplace.IsChecked())
+		FrmFind.GetButton(2).SetDisabled(!ChkToggleReplace.IsChecked())
+		FrmFind.GetButton(3).SetDisabled(!ChkToggleReplace.IsChecked())
+	})
+	ChkCase = tview.NewCheckbox()
+	ChkCase.SetLabel("Case sensitive")
+	ChkCase.SetBorder(false)
+	FrmFind.SetItemPadding(0)
+	FrmFind.AddFormItem(TxtFind)
+	FrmFind.AddFormItem(ChkToggleReplace)
+	FrmFind.AddFormItem(TxtReplace)
+	FrmFind.AddFormItem(ChkCase)
+	FrmFind.AddButton("Next", nil)
+	FrmFind.AddButton("Previous", nil)
+	FrmFind.AddButton("Replace", nil)
+	FrmFind.AddButton("All", nil)
+	FrmFind.GetButton(2).SetDisabled(!ChkToggleReplace.IsChecked())
+	FrmFind.GetButton(3).SetDisabled(!ChkToggleReplace.IsChecked())
 
 	//*************************************************************************
 	// Help Layout
@@ -275,10 +325,13 @@ func SetUI(fQuit Fn, hostname string) {
 			AddItem(lblTime, 10, 0, false), 1, 0, false).
 		AddItem(tview.NewFlex().
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(TxtEditName, 3, 0, false).
+				AddItem(tview.NewFlex().
+					AddItem(TxtCurrentWorkspace, 0, 2, false).
+					AddItem(TxtCurrentEditName, 0, 1, false), 3, 0, false).
 				AddItem(EdtMain, 0, 1, true), 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
+				AddItem(FrmFind, 10, 0, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 					AddItem(TrvExplorer, 0, 1, false).
 					AddItem(tview.NewFlex().
@@ -309,6 +362,7 @@ func SetUI(fQuit Fn, hostname string) {
 				PgsApp.SwitchToPage(GetCurrentScreen())
 			}
 		})
+
 	IdxScreens = -1
 }
 
@@ -383,6 +437,9 @@ func SetColorAccent(c string) {
 	LblCommit.SetBackgroundColor(color)
 	LblGITStatus.SetBackgroundColor(color)
 	LblGITBranch.SetBackgroundColor(color)
+	TxtFind.SetFieldBackgroundColor(color)
+	TxtReplace.SetFieldBackgroundColor(color)
+	ChkCase.SetFieldBackgroundColor(color)
 }
 
 // ****************************************************************************
@@ -404,8 +461,16 @@ func SetStatus(txt string) {
 		lblStatus.SetText("")
 	}
 	time.AfterFunc(DurationOfTime, f)
-	current := time.Now()
-	conf.LogFile.WriteString(fmt.Sprintf("%s [%s] : %s\n", current.Format("20060102-150405"), SessionID, txt))
+	splittedText := strings.Split(txt, "\n")
+	if len(splittedText) <= 1 {
+		current := time.Now()
+		conf.LogFile.WriteString(fmt.Sprintf("%s [%s] : %s\n", current.Format("20060102-150405"), SessionID, txt))
+	} else {
+		for _, s := range splittedText {
+			current := time.Now()
+			conf.LogFile.WriteString(fmt.Sprintf("%s [%s] : %s\n", current.Format("20060102-150405"), SessionID, s))
+		}
+	}
 }
 
 // ****************************************************************************

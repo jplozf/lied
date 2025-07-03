@@ -59,7 +59,6 @@ type Dialog struct {
 	buttons []*tview.Button
 	Value   string
 	Values  []string
-	Path    string
 	parent  string
 	focus   tview.Primitive
 	width   int
@@ -69,6 +68,8 @@ type Dialog struct {
 	UIMsg   tview.TextView
 	UIList  tview.DropDown
 	uiInput tview.InputField
+	IValues int
+	Path    string
 }
 
 // ****************************************************************************
@@ -183,7 +184,7 @@ func (m *Dialog) Input(title string, message string, value string, done func(rc 
 // ****************************************************************************
 // Command()
 // ****************************************************************************
-func (m *Dialog) Command(title string, message string, value string, done func(rc DlgButton, idx int), idx int, parent string, focus tview.Primitive) *Dialog {
+func (m *Dialog) Command(title string, message string, value string, done func(rc DlgButton, idx int), idx int, parent string, focus tview.Primitive, aCommands []string) *Dialog {
 	m = &Dialog{
 		Form:    tview.NewForm(),
 		title:   title,
@@ -194,8 +195,10 @@ func (m *Dialog) Command(title string, message string, value string, done func(r
 		focus:   focus,
 		idx:     idx,
 		dtype:   INPUT_CLI,
+		Values:  aCommands,
 	}
 
+	m.IValues = 0
 	m.SetButtonsAlign(tview.AlignCenter)
 	m.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
 	m.SetButtonTextColor(tview.Styles.PrimaryTextColor)
@@ -276,7 +279,6 @@ func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, 
 // ****************************************************************************
 func (m *Dialog) setPath(option string, optionIndex int) {
 	m.Values = nil
-	// m.Path = option // CRASH !!!
 	if option[len(option)-1:] != "/" {
 		option = option + "/"
 	}
@@ -292,6 +294,8 @@ func (m *Dialog) setPath(option string, optionIndex int) {
 		ui.SetStatus("append " + filepath.Join(option, v.Name()))
 	}
 	m.UIList.SetOptions(m.Values, m.selectPath)
+	ui.SetStatus("OPTION=" + option)
+	m.Path = option // CRASH !!!
 }
 
 // ****************************************************************************
@@ -303,8 +307,8 @@ func (m *Dialog) selectPath(text string, index int) {
 	case mode.IsDir():
 		m.UIMsg.SetText(text)
 		ui.SetStatus("DIR " + text)
-		m.setPath(text, index)
-		m.setUI()
+		m.setPath(text, 0)
+		// m.refreshUI()
 
 	case mode.IsRegular():
 		ui.SetStatus("FILE " + text)
@@ -336,6 +340,8 @@ func (m *Dialog) setUI() {
 		m.AddInputField(">", m.Value, 0, nil, nil)
 	default:
 		m.AddTextView("", m.message, 60, 21, false, true)
+		m.GetFormItem(0).(*tview.TextView).SetWrap(false)
+		m.GetFormItem(0).(*tview.TextView).SetDynamicColors(true)
 	}
 
 	if m.dtype != INPUT_CLI {
@@ -401,6 +407,32 @@ func (m *Dialog) Popup() tview.Primitive {
 				ui.PgsApp.SwitchToPage(m.parent)
 				ui.App.SetFocus(m.focus)
 				m.doOK()
+				return nil
+			} else {
+				return event
+			}
+		case tcell.KeyUp:
+			if m.dtype == INPUT_CLI {
+				if len(m.Values) > 0 {
+					m.IValues--
+					if m.IValues < 0 {
+						m.IValues = len(m.Values) - 1
+					}
+					m.GetFormItem(m.GetFormItemCount() - 1).(*tview.InputField).SetText(m.Values[m.IValues])
+				}
+				return nil
+			} else {
+				return event
+			}
+		case tcell.KeyDown:
+			if m.dtype == INPUT_CLI {
+				if len(m.Values) > 0 {
+					m.IValues++
+					if m.IValues > len(m.Values)-1 {
+						m.IValues = 0
+					}
+					m.GetFormItem(m.GetFormItemCount() - 1).(*tview.InputField).SetText(m.Values[m.IValues])
+				}
 				return nil
 			} else {
 				return event

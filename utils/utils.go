@@ -80,6 +80,7 @@ func HumanFileSize(size float64) string {
 // IsTextFile()
 // ****************************************************************************
 func IsTextFile(fName string) bool {
+	// This method reads only the first line, it's faster but could failed sometimes
 	readFile, err := os.Open(fName)
 	if err != nil {
 		return false
@@ -89,6 +90,15 @@ func IsTextFile(fName string) bool {
 	fileScanner.Scan()
 
 	return (utf8.ValidString(string(fileScanner.Text())))
+}
+
+// ****************************************************************************
+// IsTextFile2()
+// ****************************************************************************
+func IsTextFile2(fName string) bool {
+	// This method reads whole file, so it can be slower on big files, but more accurate
+	b, _ := os.ReadFile(fName)
+	return (utf8.ValidString(string(b)))
 }
 
 // ****************************************************************************
@@ -481,4 +491,71 @@ func Xeq(dir string, args ...string) (string, string) {
 	xeq.Stderr = &errb
 	xeq.Run()
 	return outb.String(), errb.String()
+}
+
+// ****************************************************************************
+// EscapeSpaces()
+// ****************************************************************************
+func EscapeSpaces(s string) string {
+	return strings.ReplaceAll(s, " ", "\\ ")
+}
+
+// ****************************************************************************
+// ZipIt()
+// ****************************************************************************
+// Zips "./input" into "./output.zip"
+func ZipIt(source string, target string) error {
+	// 1. Create a ZIP file and zip.Writer
+	f, err := os.Create(target)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	writer := zip.NewWriter(f)
+	defer writer.Close()
+
+	// 2. Go through all the files of the source
+	return filepath.Walk(source, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// 3. Create a local file header
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		// set compression
+		header.Method = zip.Deflate
+
+		// 4. Set relative path of a file as the header name
+		header.Name, err = filepath.Rel(filepath.Dir(source), path)
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			header.Name += "/"
+		}
+
+		// 5. Create writer for the file header and save content of the file
+		headerWriter, err := writer.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = io.Copy(headerWriter, f)
+		return err
+	})
 }

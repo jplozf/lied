@@ -1,272 +1,167 @@
 // ****************************************************************************
 //
-//	 _____ _____ _____ _____
-//	|   __|     |   __|  |  |
-//	|  |  |  |  |__   |     |
-//	|_____|_____|_____|__|__|
+//	 _ _          _
+//	| (_) ___  __| |
+//	| | |/ _ \/ _` |
+//	| | |  __/ (_| |
+//	|_|_|\___|\__,_|
 //
 // ****************************************************************************
-// G O S H   -   Copyright © JPL 2023
+// L I E D   -   Copyright © JPL 2024
 // ****************************************************************************
 package help
 
-import "lied/ui"
+var Help = `♯ [yellow]L I E D   -   Copyright © JPL 2024
 
-// ****************************************************************************
-// SelfInit()
-// ****************************************************************************
-func SelfInit(a any) {
-	SetHelp()
-}
+[white]Lied is a TUI (Text User Interface) Editor.
+Lied is written in Go and has been tested on Linux sytem.
+Built from source, it should run on Windows or MacOS systems as well.
 
-// ****************************************************************************
-// SetHelp()
-// ****************************************************************************
-func SetHelp() {
-	ui.TxtHelp.SetDynamicColors(true).SetText(`[yellow]		 _____ _____ _____ _____
-		|   __|     |   __|  |  |
-		|  |  |  |  |__   |     |
-		|_____|_____|_____|__|__|
-        [red]Copyright jpl@ozf.fr 2024
+Pay honour to whom honour is due, packages used in this project are as follows :
+[red]rivo/tview    :[white] Package tview implements rich widgets for terminal based user interfaces.
+[red]gdamore/tcell :[white] Tcell is an alternate terminal package, similar in some ways to termbox, but better in others. 
+[red]pgavlin/femto :[white] An editor component for tview. Derived from the micro editor. 
 
-[white]Gosh is a TUI (Text User Interface) for common management functions on a Linux system.
-Gosh is written in Go. The main layout interface is inspired by [green]AS400[white] text console.
-		
-	╔════╦═══════════╦═══════╗
-	║ [yellow]F1[white] ║ [red]This Help[white] ║ [yellow]!help[white] ║
-	╚════╩═══════════╩═══════╝
-	
-	╔═══════════════════════════════════════════════════╗
- 	║           [red]Fast access to common features[white]          ║
- 	╠═════╦══════════════════════════════╦══════════════╣
- 	║ [yellow]F1[white]  ║ This help                    ║ [yellow]!help[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F2[white]  ║ Shell                        ║ [yellow]!shel[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F3[white]  ║ Files Manager                ║ [yellow]!file[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F4[white]  ║ Process and Services Manager ║ [yellow]!proc[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F5[white]  ║ (refresh)                    ║              ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F6[white]  ║ Text Editor                  ║ [yellow]!edit[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F7[white]  ║ Network Manager              ║ [yellow]!net[white]         ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F8[white]  ║ (special functions)          ║              ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F9[white]  ║ SQLite3 Manager              ║ [yellow]!sql[white]         ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F10[white] ║ Users Manager                ║ [yellow]!user[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F11[white] ║ Dashboard                    ║ [yellow]!dash[white]        ║
- 	╠═════╬══════════════════════════════╬══════════════╣
- 	║ [yellow]F12[white] ║ Exit                         ║ [yellow]!quit[white], [yellow]!exit[white] ║
- 	╚═════╩══════════════════════════════╩══════════════╝
+⯈ The main functions are reachable through function keys :
 
+[red]F1  :[white] This help screen
+[red]F2  :[white] Switch from the current panel to the next
+[red]F3  :[white] Access to Git Menu for running Git common commands
+[red]F4  :[white] Access to shell to run system and special commands
+[red]F6  :[white] Switch to the previous open file
+[red]F7  :[white] Switch to the next open file
+[red]F8  :[white] Access to the settings of Lied
+[red]F10 :[white] Access to the main menu of Lied
+[red]F12 :[white] Exit
 
-	╔════╦═══════╦═══════╗
-	║ [yellow]F2[white] ║ [red]Shell[white] ║ [yellow]!shel[white] ║
-	╚════╩═══════╩═══════╝
+⯈ Alternate common functions are also reachable through CTRL and ALT keys :
 
+[red]CTRL + F :[white] Switch to the Find & Replace panel, or go back to the Editor panel
+[red]CTRL + S :[white] Saves the current document being edited
+[red]ALT  + S :[white] Saves the current document being edited under another name
+[red]CTRL + N :[white] Opens a new blank document
+[red]CTRL + O :[white] Opens an existing document for editing
+[red]CTRL + T :[white] Closes the current document
+[red]ALT  + M :[white] Opens the macros menu
 
-	╔════╦═══════════════╦═══════╗
-	║ [yellow]F3[white] ║ [red]Files Manager[white] ║ [yellow]!file[white] ║
-	╚════╩═══════════════╩═══════╝
+⯈ When editing a text, common editing functions are of course supported :
 
-	[yellow]TAB  [white]  : Move between panels
-	[yellow]Del  [white]  : Delete the file or folder highlighted or the selection
-	[yellow]Ins  [white]  : Add the current file or folder to the selection
-	[yellow]Ctrl+A[white] : Select or unselect all the files and folders in the current folder
-	[yellow]Ctrl+C[white] : Select or unselect all the files and folders in the current folder
-	
-	╔════╦══════════════════════════════╦═══════╗
-	║ [yellow]F4[white] ║ [red]Process and Services Manager[white] ║ [yellow]!proc[white] ║
-	╚════╩══════════════════════════════╩═══════╝
+[red]CTRL + C :[white] Copy the selection
+[red]CTRL + X :[white] Cut the selection
+[red]CTRL + V :[white] Paste the selection
+[red]CTRL + Z :[white] Cancels the previous entry 
+[red]CTRL + Y :[white] Redo the previous cancelled operation
 
-	╔════╦════════╦═══════╗
-	║ [yellow]F6[white] ║ [red]Editor[white] ║ [yellow]!edit[white] ║
-	╚════╩════════╩═══════╝
-	
-	╔════╦═════════════════╦══════╗
-	║ [yellow]F7[white] ║ [red]Network Manager[white] ║ [yellow]!net[white] ║
-	╚════╩═════════════════╩══════╝
+All these commands are summarized in the two lines at the bottom of the screen.
 
- 	╔════╦═════════════════╦══════╗
- 	║ [yellow]F9[white] ║ [red]SQLite3 Manager[white] ║ [yellow]!sql[white] ║
- 	╚════╩═════════════════╩══════╝
+Let's take a look at all these features...
 
-Here are the .commands available :
- 	╔════════════════╦═══════════════════════════════════════════════════╗
- 	║ [yellow].OPEN database[white] ║ Open the database by its file name                ║
- 	╠════════════════╬═══════════════════════════════════════════════════╣
- 	║ [yellow].TABLE[white]         ║ List all tables available in the current database ║
- 	╠════════════════╬═══════════════════════════════════════════════════╣
- 	║ [yellow].DATABASE[white]      ║ List names and files of attached databases        ║
- 	╠════════════════╬═══════════════════════════════════════════════════╣
- 	║ [yellow].SCHEMA table[white]  ║ Show the CREATE statements for the matching table ║
- 	╠════════════════╬═══════════════════════════════════════════════════╣
- 	║ [yellow].COLUMNS table[white] ║ Show the columns types for the matching table     ║
- 	╚════════════════╩═══════════════════════════════════════════════════╝
+⯈ [red]H E L P[white]
+The Help panel is displayed by pressing the [red]F1[white] key. 
+This panel can also be invoked by running the special command [red]!help[white] in the Shell input box.
+You can browse this panel and all other panels with the arrow keys.
+To exit this panel, activate the [red]OK[white] button or press the Escape key.
 
-The common SQL statements are summarized as following :
-	╔════════════════════════════════════════╦════════════════════════════════════════════════════════════════════════════╗
-	║                                        ║ ANALYZE;                                                                   ║
-	║                                        ║ or                                                                         ║
-	║ SQLite [yellow]ANALYZE[white] Statement               ║ ANALYZE database_name;                                                     ║
-	║                                        ║ or                                                                         ║
-	║                                        ║ ANALYZE database_name.table_name;                                          ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2….columnN                                           ║
-	║ SQLite [yellow]AND/OR[white] Clause                   ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  CONDITION-1 {AND|OR} CONDITION-2;                                   ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]ALTER TABLE[white] Statement           ║ ALTER TABLE table_name ADD COLUMN column_def…;                             ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]ALTER TABLE[white] Statement (Rename)  ║ ALTER TABLE table_name RENAME TO new_table_name;                           ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]ATTACH DATABASE[white] Statement       ║ ATTACH DATABASE ‘DatabaseName’ As ‘Alias-Name’;                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ BEGIN;                                                                     ║
-	║ SQLite [yellow]BEGIN TRANSACTION[white] Statement     ║ or                                                                         ║
-	║                                        ║ BEGIN EXCLUSIVE TRANSACTION;                                               ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2….columnN                                           ║
-	║ SQLite [yellow]BETWEEN[white] Clause                  ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name BETWEEN val-1 AND val-2;                                ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]CREATE INDEX[white] Statement          ║ CREATE INDEX index_name                                                    ║
-	║                                        ║ ON table_name ( column_name COLLATE NOCASE );                              ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]CREATE UNIQUE INDEX[white] Statement   ║ CREATE UNIQUE INDEX index_name                                             ║
-	║                                        ║ ON table_name ( column1, column2,…columnN);                                ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ CREATE TABLE table_name(                                                   ║
-	║                                        ║    column1 datatype,                                                       ║
-	║                                        ║    column2 datatype,                                                       ║
-	║ SQLite [yellow]CREATE TABLE[white] Statement          ║    column3 datatype,                                                       ║
-	║                                        ║    …                                                                       ║
-	║                                        ║    columnN data type,                                                      ║
-	║                                        ║    PRIMARY KEY( one or more columns ));                                    ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ CREATE TRIGGER database_name.trigger_name                                  ║
-	║                                        ║ BEFORE INSERT ON table_name FOR EACH ROW                                   ║
-	║                                        ║ BEGIN                                                                      ║
-	║ SQLite [yellow]CREATE TRIGGER[white] Statement        ║    stmt1;                                                                  ║
-	║                                        ║    stmt2;                                                                  ║
-	║                                        ║    …                                                                       ║
-	║                                        ║ END;                                                                       ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]CREATE VIEW[white] Statement           ║ CREATE VIEW database_name.view_name  AS                                    ║
-	║                                        ║ SELECT statement…;                                                         ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ CREATE VIRTUAL TABLE database_name.table_name USING weblog( access.log );  ║
-	║ SQLite [yellow]CREATE VIRTUAL TABLE[white] Statement  ║ or                                                                         ║
-	║                                        ║ CREATE VIRTUAL TABLE database_name.table_name USING fts3( );               ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]COMMIT TRANSACTION[white] Statement    ║ COMMIT;                                                                    ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT COUNT(column_name)                                                  ║
-	║ SQLite [yellow]COUNT[white] Clause                    ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  CONDITION;                                                          ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DELETE FROM table_name                                                     ║
-	║ SQLite [yellow]DELETE[white] Statement                ║ WHERE  {CONDITION};                                                        ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DETACH DATABASE ‘Alias-Name’;                                              ║
-	║ SQLite [yellow]DETACH DATABASE[white] Statement       ║                                                                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT DISTINCT column1, column2… columnN                                  ║
-	║ SQLite [yellow]DISTINCT[white] Clause                 ║ FROM   table_name;                                                         ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DROP INDEX database_name.index_name;                                       ║
-	║ SQLite [yellow]DROP INDEX[white] Statement            ║                                                                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DROP TABLE database_name.table_name;                                       ║
-	║ SQLite [yellow]DROP TABLE[white] Statement            ║                                                                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DROP INDEX database_name.view_name;                                        ║
-	║ SQLite [yellow]DROP VIEW[white] Statement             ║                                                                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ DROP INDEX database_name.trigger_name;                                     ║
-	║ SQLite [yellow]DROP TRIGGER[white] Statement          ║                                                                            ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]EXISTS[white] Clause                   ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name EXISTS (SELECT * FROM   table_name );                   ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ EXPLAIN INSERT statement…;                                                 ║
-	║ SQLite [yellow]EXPLAIN[white] Statement               ║ or                                                                         ║
-	║                                        ║ EXPLAIN QUERY PLAN SELECT statement…;                                      ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]GLOB[white] Clause                     ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name GLOB { PATTERN };                                       ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT SUM(column_name)                                                    ║
-	║ SQLite [yellow]GROUP BY[white] Clause                 ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  CONDITION GROUP BY column_name;                                     ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT SUM(column_name)                                                    ║
-	║                                        ║ FROM   table_name                                                          ║
-	║ SQLite [yellow]HAVING[white] Clause                   ║ WHERE  CONDITION                                                           ║
-	║                                        ║ GROUP BY column_name                                                       ║
-	║                                        ║ HAVING (arithmetic function condition);                                    ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]INSERT INTO[white] Statement           ║ INSERT INTO table_name( column1, column2… columnN)                         ║
-	║                                        ║ VALUES ( value1, value2… valueN);                                          ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]IN[white] Clause                       ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name IN (val-1, val-2,… val-N);                              ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]LIKE[white] Clause                     ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name LIKE { PATTERN };                                       ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]NOT IN[white] Clause                   ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  column_name NOT IN (val-1, val-2,… val-N);                          ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]ORDER BY[white] Clause                 ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  CONDITION                                                           ║
-	║                                        ║ ORDER BY column_name {ASC|DESC};                                           ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]PRAGMA[white] Statement                ║ PRAGMA pragma_name;                                                        ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]RELEASE[white] SAVEPOINT Statement     ║ RELEASE savepoint_name;                                                    ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ REINDEX collation_name;                                                    ║
-	║ SQLite [yellow]REINDEX[white] Statement               ║ REINDEX database_name.index_name;                                          ║
-	║                                        ║ REINDEX database_name.table_name;                                          ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ ROLLBACK;                                                                  ║
-	║ SQLite [yellow]ROLLBACK[white] Statement              ║ or                                                                         ║
-	║                                        ║ ROLLBACK TO SAVEPOINT savepoint_name;                                      ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]SAVEPOINT[white] Statement             ║ SAVEPOINT savepoint_name;                                                  ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]SELECT[white] Statement                ║ SELECT column1, column2… columnN                                           ║
-	║                                        ║ FROM   table_name;                                                         ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ UPDATE table_name                                                          ║
-	║ SQLite [yellow]UPDATE[white] Statement                ║ SET column1 = value1, column2 = value2… columnN=valueN                     ║
-	║                                        ║ [ WHERE  CONDITION ];                                                      ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║ SQLite [yellow]VACUUM[white] Statement                ║ VACUUM;                                                                    ║
-	╠════════════════════════════════════════╬════════════════════════════════════════════════════════════════════════════╣
-	║                                        ║ SELECT column1, column2… columnN                                           ║
-	║ SQLite [yellow]WHERE[white] Clause                    ║ FROM   table_name                                                          ║
-	║                                        ║ WHERE  CONDITION;                                                          ║
-	╚════════════════════════════════════════╩════════════════════════════════════════════════════════════════════════════╝
+⯈ [red]M O V I N G   B E T W E E N   P A N E L S[white]
+The [red]F2[white] key allow you to move the focus from the current panel to the next one.
+The current panel is recognizable by its double border while the other panels only have a single border.
+Starting from the default current panel which is the Editor panel, you can move to the panel and so on, and returning to the first panel.
 
-	╔═════╦═══════════════╦═══════╗
-	║ [yellow]F10[white] ║ [red]Users Manager[white] ║ [yellow]!user[white] ║
-	╚═════╩═══════════════╩═══════╝
+These panels are in order :
+● The [red]Editor[white] panel
+● The [red]Open Files[white] panel
+● The [red]Find & Replace[white] panel
+● The [red]Explorer[white] panel
+These panels will be detailed later in this document.
 
-	╔═════╦═══════════╦═══════╗
-	║ [yellow]F11[white] ║ [red]Dashboard[white] ║ [yellow]!dash[white] ║
-	╚═════╩═══════════╩═══════╝
-`)
-}
+⯈ [red]G I T   M E N U[white]
+Some useful common git commands are accessible through the options of a dedicated menu.
+This menu is displayed when pressing the [red]F3[white] key.
+
+These options are as follows :
+● [red]Status        :[white] Displays the status of the current branch.
+● [red]Commit        :[white] Commits the current changes after prompting for the commit message.
+● [red]Push          :[white] Pushes the current commit to the remote repository.
+● [red]Commit & Push :[white] Commits the current changes and the push it to remote repository.
+● [red]Fetch         :[white] This only copies changes from remote repository into your local Git repository.
+● [red]Pull          :[white] Copies changes from remote repository to you local repository and merge them with your working copy.
+● [red]Initialize    :[white] This will initialize a local repository for a new project. The remote repository should already exists.
+● [red]Configure     :[white] This should normally only be done once, as it saves the Github username and associated password that will be used for git commands.
+
+⯈ [red]S H E L L   I N P U T   B O X[white]
+
+⯈ [red]S E T T I N G S   M E N U[white]
+
+⯈ [red]M A I N   M E N U[white]
+
+⯈ [red]M A C R O S[white]
+Useful common functions can be added to the Macros menu accessible with the ALT + M keystroke.
+This menu shows all the macros you previously recorded and the last option allows you to edit and add new macros.
+
+The syntax for the macros file is very simple :
+● One line, one macro.
+● Each line beginning with a [red]#[white] char is ignored.
+● The name of the macro which will be displayed on the menu is the first part of the line BEFORE the [red]:[white] char.
+● The command of the macro which will be runned is the second part of the line AFTER the [red]:[white] char.
+
+Macros can interact with dynamic values by using special placeholders which will be replaced by the appropriate value at run time.
+Theses placeholders, prefixed by a [red]%[white] char and case sensitive, are as follows :
+● [red]%D :[white] Full directory of current file
+● [red]%P :[white] Parent directory of current file
+● [red]%W :[white] Full directory of current workspace
+● [red]%F :[white] Full file name with directory and extension of current file
+● [red]%f :[white] File name without path and with extension of current file
+● [red]%e :[white] File name without path nor extension of current file
+● [red]%L :[white] Line number of current file in editor
+● [red]%T :[white] Current timestamp
+● [red]%H :[white] Home directory of current user
+● [red]%s :[white] OS path separator
+
+⯈ [red]P A N E L S[white]
+
+⯈ [red]S P E C I A L   C O M M A N D S[white]
+These special commands are available when entering command in the Shell input box (F4).
+These special commands all have a maximum of 4 letters and are prefixed by an exclamation point (!).
+[red]!quit :[white] Quit the editor (same as F12)
+[red]!exit :[white] ----------- idem ------------
+[red]!bye  :[white] ----------- idem ------------
+[red]!log  :[white] Opens the log file of the Lied editor
+[red]!out  :[white] Opens the output file for the Shell input box
+[red]!foll :[white] Switch the current file in following mode
+[red]!tail :[white] --------------- idem --------------------
+[red]!next :[white] Switch to the next open file (same as F7)
+[red]!prev :[white] Switch to the previous open file (same as F6)
+[red]!clos :[white] Closes the current document (same as CTRL + T)
+[red]!save :[white] Saves the current document being edited (same as CTRL + S)
+[red]!conf :[white] Opens the Lied configuration file for editing
+[red]!macr :[white] Opens the macros file for editing
+[red]!help :[white] Displays the Help panel (same as F1)
+[red]!info :[white] Displays system informations about the computer
+
+⯈ [red]I N T E R N A L   F I L E S[white]
+Some files are generated and managed internally to keep the current settings and history.
+These files are located into the [red].lied[white] directory, which is itself into the user folder.
+These files are the following :
+● [red]find            :[white] Find & replace history
+● [red]history         :[white] Commands history
+● [red]lied.ini        :[white] Settings
+● [red]lied.log        :[white] Log of the application
+● [red]lied.log.bak    :[white] Backup of the log file when archiving
+● [red]lied_YYYYMM.zip :[white] Archived log files by month and year
+● [red]macros          :[white] Macros that are runned with the ALT+M key
+● [red]mru             :[white] Most Recent Used files
+● [red]output          :[white] Commands output
+`
+
+// ----------------------------------------------------------------------------
+//    Some common useful icons
+// ----------------------------------------------------------------------------
+//   ♯
+//   ●
+//   ⯈
+//   ⎇
+//   ⟟
+//   🗨
+//   ⚠
+//   ©
+// ----------------------------------------------------------------------------

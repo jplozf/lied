@@ -23,14 +23,16 @@ const (
 	APP_URL                 = "https://github.com/jplozf/lied"
 	APP_FOLDER              = ".lied"
 	ICON_MODIFIED           = "●"
-	NEW_FILE_TEMPLATE       = "lied_"
+	NEW_FILE_TEMPLATE       = "noname_"
 	FILE_LOG                = "lied.log"
 	FILE_INI                = "lied.ini"
+	FILE_FIND_HISTORY       = "find"
 	FILE_SHELL_HISTORY      = "history"
 	FILE_SHELL_OUTPUT       = "output"
+	FILE_MACROS             = "macros"
 	FILE_MRU                = "mru"
 	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Shell F6=Previous F7=Next F8=Settings F10=Menu F12=Exit"
-	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close"
+	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 )
 
@@ -39,20 +41,24 @@ var LogFile *os.File
 
 // var Workspace string
 
-type ConfigGeneral struct {
-	Theme       string
-	GitUser     string
-	GitPassword string
-	Workspace   string
-	ShowHidden  bool
-	ConfirmExit bool
-	FormatTime  string
-	FormatDate  string
-	ColorAccent string
+type SConfigGeneral struct {
+	Theme         string
+	GitUser       string
+	GitKey        string
+	Workspace     string
+	ShowHidden    bool
+	ConfirmExit   bool
+	CleanUpOnExit bool
+	FormatTime    string
+	FormatDate    string
+	ColorAccent   string
 }
 
-type ConfigPrivate struct {
-	UISleepUpdate   int
-	UIGITUpdate     int
-	UIStatusTimeout int
+type SConfigPrivate struct {
+	UISleepUpdate        int
+	UIGITUpdate          int
+	UIStatusTimeout      int
+	ClearNullFilesOnExit bool
 }
+
+var ConfigGeneral SConfigGeneral

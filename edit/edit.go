@@ -15,6 +15,7 @@ package edit
 // IMPORTS
 // ****************************************************************************
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"lied/conf"
@@ -39,17 +40,24 @@ import (
 // TYPES
 // ****************************************************************************
 type editfile struct {
-	Buffer        *femto.Buffer
-	View          *femto.View
-	FName         string
-	Encoding      string
-	GitCommit     string
-	GitStatus     string
-	GitBranch     string
-	GitFileStatus string
-	ReadWrite     bool
-	Follow        bool
-	RWBackup      bool
+	Buffer              *femto.Buffer
+	View                *femto.View
+	FName               string
+	Encoding            string
+	GitCommit           string
+	GitStatus           string
+	GitBranch           string
+	GitFileStatus       string
+	ReadWrite           bool
+	Follow              bool
+	RWBackup            bool
+	IsMemberOfWorkspace bool
+}
+
+type found struct {
+	s string
+	l int
+	c int
 }
 
 const (
@@ -57,19 +65,33 @@ const (
 	FLOW_CLOSE
 	FLOW_QUIT
 	FLOW_NONE
+	FIND_UP
+	FIND_DOWN
 )
 
 // ****************************************************************************
 // GLOBALS
 // ****************************************************************************
 var (
-	OpenFiles        []editfile
-	CurrentFile      editfile
-	DlgSaveFile      *dialog.Dialog
-	DlgSaveFileAs    *dialog.Dialog
-	currentFlow      int
-	showHidden       bool
-	CurrentWorkspace string
+	OpenFiles         []editfile
+	CurrentFile       editfile
+	DlgSaveFile       *dialog.Dialog
+	DlgSaveFileAs     *dialog.Dialog
+	currentFlow       int
+	showHidden        bool
+	CurrentWorkspace  string
+	Founds            []found
+	iFounds           int
+	currentFoundIndex int
+	findSession       bool
+	previousWhat      string
+	whatToFind        string
+	whereToFind       *femto.Buffer
+	previousWhere     *femto.Buffer
+	caseToFind        bool
+	previousCase      bool
+	AFind             []string
+	IFind             int
 )
 
 // ****************************************************************************
@@ -223,7 +245,8 @@ func SaveAnyFileAs(f any) {
 func NewFile(dir string) {
 	f, err := os.CreateTemp(dir, conf.NEW_FILE_TEMPLATE)
 	if err == nil {
-		SwitchToEditor(f.Name())
+		// SwitchToEditor(f.Name())
+		OpenFile(f.Name(), true)
 	} else {
 		ui.SetStatus(err.Error())
 	}
@@ -257,7 +280,9 @@ func UpdateStatus() {
 		time.Sleep(100 * time.Millisecond)
 		ui.App.QueueUpdateDraw(func() {
 			// ui.TxtEditName.SetText(currentFile.FName)
-			ui.TxtEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
+			ui.TxtCurrentWorkspace.SetText(conf.ConfigGeneral.Workspace)
+			// ui.TxtCurrentEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
+			ui.TxtCurrentEditName.SetText("[yellow]" + filepath.Base(CurrentFile.FName))
 			if CurrentFile.Buffer.Modified() {
 				// status = conf.ICON_MODIFIED
 				ui.LblDirty.SetText("*modified*")
@@ -467,6 +492,36 @@ func proposeToSaveFile(idx int, flow int) {
 	ui.PgsApp.ShowPage("dlgSaveFile")
 }
 
+/*
+	DlgSave = tview.NewModal().
+		SetText("Do you want to quit the application ?").
+		AddButtons([]string{"Yes", "No", "Cancel"}).
+		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+			if buttonLabel == "Quit" {
+				fQuit()
+			} else {
+				PgsApp.SwitchToPage(GetCurrentScreen())
+			}
+		})
+
+	DlgYesNo = DlgYesNo.YesNo("Git Fetch", // Title
+		"The Git Fetch will fetch the remote version but no merging is processed locally.\n\nAre you sure you want to proceed ?", // Message
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_YES {
+				out := fmt.Sprintf("Fetching...\n%s", XeqOut("git fetch origin"))
+				MsgBox = MsgBox.OK("Git Fetch", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+				ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+				ui.PgsApp.ShowPage("msgBox")
+			} else {
+				ui.SetStatus("Aborting Git Fetch")
+			}
+		},
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+	ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgYesNo")
+*/
+
 // ****************************************************************************
 // confirmSave()
 // ****************************************************************************
@@ -535,6 +590,7 @@ func confirmSaveAs(rc dialog.DlgButton, idx int) {
 func CheckOpenFilesForSaving() {
 	for i, f := range OpenFiles {
 		if f.Buffer.Modified() {
+			ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 			proposeToSaveFile(i, FLOW_QUIT)
 			break
 		}
@@ -555,6 +611,7 @@ func CloseCurrentFile() {
 		}
 	}
 	if n >= 0 {
+		ui.SetStatus("Closing file " + CurrentFile.FName)
 		if CurrentFile.Buffer.IsModified {
 			proposeToSaveFile(n, FLOW_CLOSE)
 		} else {
@@ -768,5 +825,235 @@ func SetFocusOnPath(fName string) {
 				}
 			}
 		}
+	}
+}
+
+// ****************************************************************************
+// findStringInLines()
+// ****************************************************************************
+func findStringInLines(s string, fromLine int, fromColumn int, caseInsensitive bool) (int, int) {
+	foundColumn := -1
+	foundLine := -1
+
+	for i := fromLine; i < CurrentFile.Buffer.NumLines; i++ {
+		if caseInsensitive {
+			if strings.Contains(strings.ToLower(CurrentFile.Buffer.Line(i)), strings.ToLower(s)) {
+				idx := strings.Index(strings.ToLower(CurrentFile.Buffer.Line(i)), strings.ToLower(s))
+				if fromLine == i {
+					if fromColumn > idx {
+						foundColumn = idx
+						foundLine = i
+						break
+					} else {
+						continue
+					}
+				} else {
+					foundColumn = idx
+					foundLine = i
+					break
+				}
+			}
+		} else {
+			if strings.Contains(CurrentFile.Buffer.Line(i), s) {
+				idx := strings.Index(CurrentFile.Buffer.Line(i), s)
+				if fromLine == i {
+					if fromColumn > idx {
+						foundColumn = idx
+						foundLine = i
+						break
+					} else {
+						continue
+					}
+				} else {
+					foundColumn = idx
+					foundLine = i
+					break
+				}
+			}
+		}
+	}
+
+	return foundLine + 1, foundColumn + 1
+}
+
+// ****************************************************************************
+// startFindSession()
+// ****************************************************************************
+func startFindSession(s string, caseInsensitive bool) {
+	iFounds = 0
+	currentFoundIndex = 0
+	Founds = nil
+	fromL := 1
+	fromC := 1
+	previousWhat = s
+	previousWhere = CurrentFile.Buffer
+	previousCase = caseInsensitive
+	findSession = true
+	foundSomething := true
+	AFind = append(AFind, s)
+	for foundSomething == true {
+		l, c := findStringInLines(s, fromL, fromC, caseInsensitive)
+		if l != 0 && c != 0 {
+			Founds = append(Founds, found{s, l, c})
+			fromL = l
+			fromC = c
+			iFounds++
+		} else {
+			foundSomething = false
+		}
+	}
+}
+
+// ****************************************************************************
+// FindNext()
+// ****************************************************************************
+func FindNext() {
+	whatToFind = ui.TxtFind.GetText()
+	whereToFind = CurrentFile.Buffer
+	caseToFind = !ui.ChkCase.IsChecked()
+	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
+		go startFindSession(whatToFind, caseToFind)
+		time.Sleep(300 * time.Millisecond)
+	}
+	if iFounds > 0 {
+		if currentFoundIndex <= iFounds-1 {
+			l := Founds[currentFoundIndex].l
+			c := Founds[currentFoundIndex].c
+			ui.SetStatus("Found at Line " + strconv.Itoa(l) + ", Col " + strconv.Itoa(c))
+			var loc femto.Loc
+			loc.X = c - 1
+			loc.Y = l - 1
+			CurrentFile.Buffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			currentFoundIndex++
+			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
+		} else {
+			ui.SetStatus("No more found")
+			currentFoundIndex = 0
+		}
+	} else {
+		ui.FrmFind.SetTitle("Find & Replace")
+		ui.SetStatus("Nothing found")
+	}
+}
+
+// ****************************************************************************
+// FindPrevious()
+// ****************************************************************************
+func FindPrevious() {
+	whatToFind = ui.TxtFind.GetText()
+	whereToFind = CurrentFile.Buffer
+	caseToFind = !ui.ChkCase.IsChecked()
+	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
+		go startFindSession(whatToFind, caseToFind)
+		time.Sleep(300 * time.Millisecond)
+	}
+	if iFounds > 0 {
+		if currentFoundIndex > 0 {
+			l := Founds[currentFoundIndex].l
+			c := Founds[currentFoundIndex].c
+			ui.SetStatus("Found at Line " + strconv.Itoa(l) + ", Col " + strconv.Itoa(c))
+			var loc femto.Loc
+			loc.X = c - 1
+			loc.Y = l - 1
+			CurrentFile.Buffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			currentFoundIndex--
+			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
+		} else {
+			ui.SetStatus("No more found")
+			currentFoundIndex = iFounds - 1
+		}
+	} else {
+		ui.FrmFind.SetTitle("Find & Replace")
+		ui.SetStatus("Nothing found")
+	}
+}
+
+// ****************************************************************************
+// ReplaceOne()
+// ****************************************************************************
+func ReplaceOne() {
+	whatToFind = ui.TxtFind.GetText()
+	whereToFind = CurrentFile.Buffer
+	caseToFind = !ui.ChkCase.IsChecked()
+	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
+		go startFindSession(whatToFind, caseToFind)
+		time.Sleep(300 * time.Millisecond)
+	}
+	if iFounds > 0 {
+		// replacing
+	} else {
+		ui.FrmFind.SetTitle("Find & Replace")
+		ui.SetStatus("Nothing to replace")
+	}
+}
+
+// ****************************************************************************
+// ReplaceAll()
+// ****************************************************************************
+func ReplaceAll() {
+	whatToFind = ui.TxtFind.GetText()
+	whereToFind = CurrentFile.Buffer
+	caseToFind = !ui.ChkCase.IsChecked()
+	replaceText := ui.TxtReplace.GetText()
+	ui.SetStatus(fmt.Sprintf("Replacing [%s] by [%s]", whatToFind, replaceText))
+	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
+		go startFindSession(whatToFind, caseToFind)
+		time.Sleep(300 * time.Millisecond)
+	}
+	if iFounds > 0 {
+		b := CurrentFile.Buffer.String()
+		b = strings.Replace(b, whatToFind, replaceText, -1)
+		CurrentFile.Buffer = femto.NewBufferFromString(b, CurrentFile.FName)
+		CurrentFile.Buffer.IsModified = true
+		for i, e := range OpenFiles {
+			if e.FName == CurrentFile.FName {
+				OpenFiles[i].Buffer = CurrentFile.Buffer
+			}
+		}
+		ui.EdtMain.Buf = CurrentFile.Buffer
+		SetTheme(conf.ConfigGeneral.Theme)
+		ui.SetStatus(fmt.Sprintf("%d replacement(s) made", iFounds))
+		ui.App.SetFocus(ui.EdtMain)
+	} else {
+		ui.FrmFind.SetTitle("Find & Replace")
+		ui.SetStatus("Nothing to replace")
+	}
+}
+
+// ****************************************************************************
+// ReplaceOnlyThisOne()
+// ****************************************************************************
+func ReplaceOnlyThisOne(l int, c int, n int, subst string) {
+	array := bytes.Split([]byte(CurrentFile.Buffer.String()), []byte("\n"))
+	line := array[l-1]
+	sLine := string(line[:])
+	ui.SetStatus(sLine)
+	// nLine := sLine[:c-1] + subst + sLine[c-1+n:]
+	// outBuffer := strings.Join(string(array[:l-2]),"\n")
+}
+
+// ****************************************************************************
+// RecallFind()
+// ****************************************************************************
+func RecallFind(way int) {
+	if len(AFind) > 0 {
+		if way == FIND_UP {
+			if IFind > 0 {
+				IFind--
+			} else {
+				IFind = len(AFind) - 1
+			}
+		} else {
+			if IFind < len(AFind)-1 {
+				IFind++
+			} else {
+				IFind = 0
+			}
+		}
+		ui.TxtFind.SetText(AFind[IFind])
+	} else {
+		ui.SetStatus("Find history is empty")
 	}
 }

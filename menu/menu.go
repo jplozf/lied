@@ -162,7 +162,7 @@ func (m *Menu) refresh() {
 	m.Table.SetBorder(true)
 	m.Table.SetTitle(m.title)
 	m.Table.SetSelectable(true, false)
-	m.Table.SetBackgroundColor(tcell.ColorBlue)
+	m.Table.SetBackgroundColor(tview.Styles.ContrastBackgroundColor)
 	for i, item := range m.items {
 		prf := "  "
 		if item.Checked {
