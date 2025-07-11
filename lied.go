@@ -355,7 +355,7 @@ func main() {
 		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 	}
 
-	ui.SetTitle(fmt.Sprintf("%s v.%s (%s)", conf.APP_NAME, version.CommitHash, version.BuildTime))
+	ui.SetTitle(fmt.Sprintf("%s %s", conf.APP_NAME, version.Version))
 	ui.SetStatus(fmt.Sprintf("Welcome on %s", conf.APP_STRING))
 	ui.LblHostname.SetText("♯" + greeting)
 
