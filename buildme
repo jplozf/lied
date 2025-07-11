@@ -1,14 +1,13 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-PACKAGE="lied"
-VERSION="$(git describe --tags --always --dirty)"
-COMMIT_HASH="$(git rev-parse --short HEAD)"
-BUILD_TIME=$(date '+%Y%m%d-%H%M%S')
+VERSION=$(git describe --tags --always --dirty --abbrev=7)
 
-LDFLAGS=(
-  "-X '${PACKAGE}/version.Version=${VERSION}'"
-  "-X '${PACKAGE}/version.CommitHash=${COMMIT_HASH}'"
-  "-X '${PACKAGE}/version.BuildTime=${BUILD_TIME}'"
-)
+echo "Building lied with version: $VERSION"
 
-go build -ldflags="${LDFLAGS[*]}"
+go build -ldflags "-X version.Version=$VERSION" -o lied
+
+if [ $? -eq 0 ]; then
+    echo "Build successful! Executable: ./gosh"
+else
+    echo "Build failed!"
+fi
