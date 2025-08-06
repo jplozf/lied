@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"lied/conf"
 	"lied/utils"
-	"lied/version"
 	"math"
 	"sort"
 	"strconv"
@@ -165,9 +164,6 @@ func GetSelfReportAsArray() (string, []SysInfo) {
 	sReport = append(sReport, SysInfo{"App. String", conf.APP_STRING})
 	sReport = append(sReport, SysInfo{"App. Version", conf.APP_VERSION})
 	sReport = append(sReport, SysInfo{"App. URL", conf.APP_URL})
-	sReport = append(sReport, SysInfo{"Commit Version", version.Version})
-	sReport = append(sReport, SysInfo{"Commit Hash", version.CommitHash})
-	sReport = append(sReport, SysInfo{"Build Time", version.BuildTime})
 	self, _ := sysinfo.Self()
 	sReport = append(sReport, SysInfo{"PID", strconv.Itoa(self.PID())})
 	return strings.ToUpper(conf.APP_NAME), sReport

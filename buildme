@@ -1,13 +1,10 @@
 #!/bin/bash
 
 VERSION=$(git describe --tags --always --dirty --abbrev=7)
-
 echo "Building lied with version: $VERSION"
-
 go build -ldflags "-X version.Version=$VERSION" -o lied
-
 if [ $? -eq 0 ]; then
-    echo "Build successful! Executable: ./gosh"
+    echo "Build successful! Executable: ./lied"
 else
     echo "Build failed!"
 fi

@@ -38,7 +38,6 @@ import (
 	"lied/sysinfo"
 	"lied/ui"
 	"lied/utils"
-	"lied/version"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
@@ -355,7 +354,7 @@ func main() {
 		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 	}
 
-	ui.SetTitle(fmt.Sprintf("%s %s", conf.APP_NAME, version.Version))
+	ui.SetTitle(fmt.Sprintf("%s %s", conf.APP_NAME, Version))
 	ui.SetStatus(fmt.Sprintf("Welcome on %s", conf.APP_STRING))
 	ui.LblHostname.SetText("♯" + greeting)
 
