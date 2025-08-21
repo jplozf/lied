@@ -1,8 +1,12 @@
 #!/bin/bash
 
-VERSION=$(git describe --tags --always --dirty --abbrev=7)
+COMMIT_COUNT=$(git rev-list --count HEAD)
+COMMIT_HASH=$(git rev-parse --short HEAD)
+VERSION="0.${COMMIT_COUNT}-${COMMIT_HASH}"
+
 echo "Building lied with version: $VERSION"
-go build -ldflags "-X version.Version=$VERSION" -o lied
+go build -ldflags "-X main.CommitCount=${COMMIT_COUNT} -X main.CommitHash=${COMMIT_HASH} -X main.Version=${VERSION}" -o lied
+
 if [ $? -eq 0 ]; then
     echo "Build successful! Executable: ./lied"
 else

@@ -3,6 +3,7 @@
 //	 _ _          _
 //	| (_) ___  __| |
 //	| | |/ _ \/ _` |
+
 //	| | |  __/ (_| |
 //	|_|_|\___|\__,_|
 //
@@ -486,7 +487,7 @@ func appQuit() {
 	edit.CheckOpenFilesForSaving()
 	saveSettings()
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
-	ui.App.Stop()
+	// ui.App.Stop()
 	fmt.Printf("♯%s - %s\n", conf.APP_STRING, conf.APP_URL)
 	ArchiveLogs()
 }

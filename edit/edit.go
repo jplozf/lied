@@ -93,6 +93,7 @@ var (
 	previousCase      bool
 	AFind             []string
 	IFind             int
+	quitFlowIndex     int
 )
 
 // ****************************************************************************
@@ -542,6 +543,9 @@ func confirmSave(rc dialog.DlgButton, idx int) {
 			OpenFiles[idx].Buffer.IsModified = false
 			if currentFlow == FLOW_CLOSE {
 				CloseCurrentFile()
+			} else if currentFlow == FLOW_QUIT {
+				quitFlowIndex++
+				startQuitSaveFlow()
 			}
 		} else {
 			ui.SetStatus(err.Error())
@@ -551,9 +555,16 @@ func confirmSave(rc dialog.DlgButton, idx int) {
 		OpenFiles[idx].Buffer.IsModified = false
 		if currentFlow == FLOW_CLOSE {
 			CloseCurrentFile()
+		} else if currentFlow == FLOW_QUIT {
+			quitFlowIndex++
+			startQuitSaveFlow()
 		}
 	}
-	currentFlow = FLOW_NONE
+	if rc == dialog.BUTTON_CANCEL {
+		currentFlow = FLOW_NONE
+		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen()) // Return focus to the editor
+		ui.App.SetFocus(ui.EdtMain)
+	}
 }
 
 // ****************************************************************************
@@ -597,13 +608,24 @@ func confirmSaveAs(rc dialog.DlgButton, idx int) {
 // CheckOpenFilesForSaving()
 // ****************************************************************************
 func CheckOpenFilesForSaving() {
-	for i, f := range OpenFiles {
+	quitFlowIndex = 0
+	startQuitSaveFlow()
+}
+
+// ****************************************************************************
+// startQuitSaveFlow()
+// ****************************************************************************
+func startQuitSaveFlow() {
+	for ; quitFlowIndex < len(OpenFiles); quitFlowIndex++ {
+		f := OpenFiles[quitFlowIndex]
 		if f.Buffer.Modified() {
 			ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
-			proposeToSaveFile(i, FLOW_QUIT)
-			break
+			proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
+			return // Wait for user input from dialog
 		}
 	}
+	// All files checked, proceed to quit
+	ui.App.Stop()
 }
 
 // ****************************************************************************

@@ -1,3 +1,12 @@
 package main
 
-var Version string
+var (
+	InternalVersionMajor = "0"
+	CommitCount          = "unknown"
+	CommitHash           = "unknown"
+	Version              string
+)
+
+func init() {
+	Version = InternalVersionMajor + "." + CommitCount + "-" + CommitHash
+}
