@@ -144,7 +144,6 @@ func SetTheme(theme string) {
 // OpenFile()
 // ****************************************************************************
 func OpenFile(fName string, rw bool) {
-	CurrentWorkspace = filepath.Dir(fName)
 	if isFileAlreadyOpen(fName) {
 		SwitchOpenFile(fName)
 	} else {
@@ -183,7 +182,7 @@ func OpenFile(fName string, rw bool) {
 			ui.App.SetFocus(ui.EdtMain)
 		}
 	}
-	ShowTreeDir(CurrentWorkspace, showHidden)
+	ShowTreeDir(conf.ConfigGeneral.Workspace, showHidden)
 }
 
 // ****************************************************************************
@@ -282,7 +281,18 @@ func UpdateStatus() {
 			// ui.TxtEditName.SetText(currentFile.FName)
 			ui.TxtCurrentWorkspace.SetText(conf.ConfigGeneral.Workspace)
 			// ui.TxtCurrentEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
-			ui.TxtCurrentEditName.SetText("[yellow]" + filepath.Base(CurrentFile.FName))
+			relativePath, err := filepath.Rel(conf.ConfigGeneral.Workspace, CurrentFile.FName)
+			if err != nil {
+				// Handle error: perhaps log it or display a default value
+				relativePath = filepath.Base(CurrentFile.FName)
+			}
+			dirPath := filepath.Dir(relativePath)
+			if dirPath == "." {
+				dirPath = ""
+			} else {
+				dirPath += string(os.PathSeparator)
+			}
+			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
 			if CurrentFile.Buffer.Modified() {
 				// status = conf.ICON_MODIFIED
 				ui.LblDirty.SetText("*modified*")
@@ -376,7 +386,6 @@ func UpdateGITInfos(f editfile) editfile {
 // SwitchOpenFile()
 // ****************************************************************************
 func SwitchOpenFile(fName string) {
-	CurrentWorkspace = filepath.Dir(fName)
 	for _, e := range OpenFiles {
 		if e.FName == fName {
 			CurrentFile.FName = e.FName
@@ -388,14 +397,13 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-			CurrentWorkspace = filepath.Dir(CurrentFile.FName)
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
 			go focusOpenFile(fName)
 			break
 		}
 	}
-	ShowTreeDir(CurrentWorkspace, showHidden)
+	ShowTreeDir(conf.ConfigGeneral.Workspace, showHidden)
 }
 
 // ****************************************************************************
