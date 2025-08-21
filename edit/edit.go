@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -843,44 +844,41 @@ func findStringInLines(s string, fromLine int, fromColumn int, caseInsensitive b
 	foundColumn := -1
 	foundLine := -1
 
-	for i := fromLine; i < CurrentFile.Buffer.NumLines; i++ {
+	// Iterate from the given line (0-based)
+	for i := fromLine - 1; i < CurrentFile.Buffer.NumLines; i++ {
+		lineContent := CurrentFile.Buffer.Line(i)
+		searchString := s
+
 		if caseInsensitive {
-			if strings.Contains(strings.ToLower(CurrentFile.Buffer.Line(i)), strings.ToLower(s)) {
-				idx := strings.Index(strings.ToLower(CurrentFile.Buffer.Line(i)), strings.ToLower(s))
-				if fromLine == i {
-					if fromColumn > idx {
-						foundColumn = idx
-						foundLine = i
-						break
-					} else {
-						continue
-					}
-				} else {
-					foundColumn = idx
-					foundLine = i
-					break
-				}
+			lineContent = strings.ToLower(lineContent)
+			searchString = strings.ToLower(searchString)
+		}
+
+		// Determine the starting index for the search on the current line
+		startIndex := 0
+		if i == fromLine-1 { // If we are on the starting line
+			startIndex = fromColumn - 1 // Start searching from the given column (0-based)
+			if startIndex < 0 {
+				startIndex = 0 // Ensure startIndex is not negative
 			}
-		} else {
-			if strings.Contains(CurrentFile.Buffer.Line(i), s) {
-				idx := strings.Index(CurrentFile.Buffer.Line(i), s)
-				if fromLine == i {
-					if fromColumn > idx {
-						foundColumn = idx
-						foundLine = i
-						break
-					} else {
-						continue
-					}
-				} else {
-					foundColumn = idx
-					foundLine = i
-					break
-				}
-			}
+		}
+
+		// If the starting index is beyond the line length, no match possible on this line from this point
+		if startIndex >= len(lineContent) {
+			continue
+		}
+
+		// Search for the string from the determined startIndex
+		idx := strings.Index(lineContent[startIndex:], searchString)
+		if idx != -1 {
+			// Calculate the absolute column index
+			foundColumn = startIndex + idx
+			foundLine = i
+			break // Found it, so break the loop
 		}
 	}
 
+	// Return 1-based line and column numbers
 	return foundLine + 1, foundColumn + 1
 }
 
@@ -982,18 +980,32 @@ func FindPrevious() {
 // ReplaceOne()
 // ****************************************************************************
 func ReplaceOne() {
-	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentFile.Buffer
-	caseToFind = !ui.ChkCase.IsChecked()
-	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
-		go startFindSession(whatToFind, caseToFind)
-		time.Sleep(300 * time.Millisecond)
+	// If no search has been performed or nothing was found, try to find the next occurrence first.
+	if iFounds == 0 || currentFoundIndex == 0 {
+		FindNext()
+		// After FindNext, if still nothing found, return
+		if iFounds == 0 {
+			ui.SetStatus("Nothing found to replace")
+			return
+		}
 	}
-	if iFounds > 0 {
-		// replacing
+
+	if currentFoundIndex > 0 && currentFoundIndex <= iFounds {
+		// Get the location of the current found item
+		foundItem := Founds[currentFoundIndex-1]
+		replaceText := ui.TxtReplace.GetText()
+
+		// Perform the replacement in the buffer
+		// Note: This is a simplified replacement. For more complex scenarios,
+		// you might need to adjust cursor position and handle line changes.
+		start := femto.Loc{X: foundItem.c - 2, Y: foundItem.l - 1}
+		end := femto.Loc{X: start.X + len(foundItem.s), Y: start.Y}
+		CurrentFile.Buffer.Replace(start, end, replaceText)
+
+		// After replacing, automatically find the next occurrence
+		FindNext()
 	} else {
-		ui.FrmFind.SetTitle("Find & Replace")
-		ui.SetStatus("Nothing to replace")
+		ui.SetStatus("Nothing selected to replace")
 	}
 }
 
@@ -1001,31 +1013,59 @@ func ReplaceOne() {
 // ReplaceAll()
 // ****************************************************************************
 func ReplaceAll() {
-	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentFile.Buffer
-	caseToFind = !ui.ChkCase.IsChecked()
-	replaceText := ui.TxtReplace.GetText()
-	ui.SetStatus(fmt.Sprintf("Replacing [%s] by [%s]", whatToFind, replaceText))
-	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
-		go startFindSession(whatToFind, caseToFind)
-		time.Sleep(300 * time.Millisecond)
+	whatToFind := ui.TxtFind.GetText()
+	if whatToFind == "" {
+		ui.SetStatus("Nothing to find")
+		return
 	}
-	if iFounds > 0 {
-		b := CurrentFile.Buffer.String()
-		b = strings.Replace(b, whatToFind, replaceText, -1)
-		CurrentFile.Buffer = femto.NewBufferFromString(b, CurrentFile.FName)
+	replaceText := ui.TxtReplace.GetText()
+	caseSensitive := ui.ChkCase.IsChecked()
+
+	bufferContent := CurrentFile.Buffer.String()
+	var newBufferContent string
+	var replacements int
+
+	if caseSensitive {
+		replacements = strings.Count(bufferContent, whatToFind)
+		newBufferContent = strings.Replace(bufferContent, whatToFind, replaceText, -1)
+	} else {
+		// Use regex for case-insensitive replacement
+		re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(whatToFind))
+		if err != nil {
+			ui.SetStatus("Error in find pattern: " + err.Error())
+			return
+		}
+		matches := re.FindAllStringIndex(bufferContent, -1)
+		replacements = len(matches)
+		newBufferContent = re.ReplaceAllString(bufferContent, replaceText)
+	}
+
+	if replacements > 0 {
+		cursor := CurrentFile.Buffer.Cursor
+		CurrentFile.Buffer = femto.NewBufferFromString(newBufferContent, CurrentFile.FName)
 		CurrentFile.Buffer.IsModified = true
 		for i, e := range OpenFiles {
 			if e.FName == CurrentFile.FName {
 				OpenFiles[i].Buffer = CurrentFile.Buffer
 			}
 		}
-		ui.EdtMain.Buf = CurrentFile.Buffer
+		ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+
+		if cursor.Y < CurrentFile.Buffer.NumLines {
+			CurrentFile.Buffer.Cursor.Y = cursor.Y
+			lineLen := len(CurrentFile.Buffer.Line(cursor.Y))
+			if cursor.X < lineLen {
+				CurrentFile.Buffer.Cursor.X = cursor.X
+			} else {
+				CurrentFile.Buffer.Cursor.X = lineLen
+			}
+		}
+
 		SetTheme(conf.ConfigGeneral.Theme)
-		ui.SetStatus(fmt.Sprintf("%d replacement(s) made", iFounds))
+		ui.SetStatus(fmt.Sprintf("%d replacement(s) made", replacements))
 		ui.App.SetFocus(ui.EdtMain)
+		previousWhat = ""
 	} else {
-		ui.FrmFind.SetTitle("Find & Replace")
 		ui.SetStatus("Nothing to replace")
 	}
 }
