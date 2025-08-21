@@ -698,6 +698,30 @@ func SwitchFollow(f any) {
 }
 
 // ****************************************************************************
+// GoBottom()
+// ****************************************************************************
+func GoBottom() {
+	var loc femto.Loc
+	loc.X = 0
+	loc.Y = CurrentFile.Buffer.End().Y
+	CurrentFile.Buffer.Cursor.GotoLoc(loc)
+	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+	ui.FrmFind.SetTitle("Go to bottom")
+}
+
+// ****************************************************************************
+// GoTop()
+// ****************************************************************************
+func GoTop() {
+	var loc femto.Loc
+	loc.X = 0
+	loc.Y = 0
+	CurrentFile.Buffer.Cursor.GotoLoc(loc)
+	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+	ui.FrmFind.SetTitle("Go to top")
+}
+
+// ****************************************************************************
 // ShowTreeDir()
 // ****************************************************************************
 func ShowTreeDir(rootDir string, sh bool) {

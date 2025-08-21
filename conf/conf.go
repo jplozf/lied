@@ -19,7 +19,6 @@ const (
 	STATUS_MESSAGE_DURATION = 3
 	APP_NAME                = "Lied"
 	APP_STRING              = "Lied © jpl@ozf.fr 2024"
-	APP_VERSION             = "0.1.0"
 	APP_URL                 = "https://github.com/jplozf/lied"
 	APP_FOLDER              = ".lied"
 	ICON_MODIFIED           = "●"
@@ -35,6 +34,8 @@ const (
 	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 )
+
+var Version string
 
 // var Cwd string
 var LogFile *os.File

@@ -80,12 +80,14 @@ This menu is displayed when pressing the [red]F3[white] key.
 
 These options are as follows :
 ● [red]Status        :[white] Displays the status of the current branch.
+● [red]Add All (.)   :[white] Add all files recursively to the git tracking.
 ● [red]Commit        :[white] Commits the current changes after prompting for the commit message.
 ● [red]Push          :[white] Pushes the current commit to the remote repository.
 ● [red]Commit & Push :[white] Commits the current changes and the push it to remote repository.
 ● [red]Fetch         :[white] This only copies changes from remote repository into your local Git repository.
 ● [red]Pull          :[white] Copies changes from remote repository to you local repository and merge them with your working copy.
 ● [red]Initialize    :[white] This will initialize a local repository for a new project. The remote repository should already exists.
+● [red]Clone         :[white] Clone a remote repository into the current local folder. No local repository should exists.
 ● [red]Configure     :[white] This should normally only be done once, as it saves the Github username and associated password that will be used for git commands.
 
 ⯈ [red]S H E L L   I N P U T   B O X[white]
@@ -137,6 +139,10 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 [red]!macr :[white] Opens the macros file for editing
 [red]!help :[white] Displays the Help panel (same as F1)
 [red]!info :[white] Displays system informations about the computer
+[red]!b    :[white] Go to the bottom of the current file
+[red]!bott :[white] ------------ idem ------------------
+[red]!t    :[white] Go to the top of the current file
+[red]!top  :[white] ------------ idem ---------------
 
 ⯈ [red]I N T E R N A L   F I L E S[white]
 Some files are generated and managed internally to keep the current settings and history.

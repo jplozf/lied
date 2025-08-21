@@ -162,7 +162,7 @@ func GetMemoryReportAsArray() (string, []SysInfo) {
 func GetSelfReportAsArray() (string, []SysInfo) {
 	var sReport []SysInfo
 	sReport = append(sReport, SysInfo{"App. String", conf.APP_STRING})
-	sReport = append(sReport, SysInfo{"App. Version", conf.APP_VERSION})
+	sReport = append(sReport, SysInfo{"App. Version", conf.Version})
 	sReport = append(sReport, SysInfo{"App. URL", conf.APP_URL})
 	self, _ := sysinfo.Self()
 	sReport = append(sReport, SysInfo{"PID", strconv.Itoa(self.PID())})

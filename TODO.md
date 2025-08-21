@@ -8,7 +8,7 @@
 * Add a menu option to change (browse) the current workspace
 * Save the current workspace and current open files on exit
 * ~~Manage copy, cut & paste~~
-* Manage find & replace
+* ~~Manage find & replace~~
 * ~~Delete line~~
 * ~~Manage Undo & Redo~~
 * ~~Add tools linked to open file (%F% = full file name, %f% = file name without extension, %D% = current directory, ...)~~
@@ -29,12 +29,12 @@
 * ~~Move JSON parameters to INI file~~
 * ~~Reload modified file (tail -f)~~
 * Detect change on file
-* Check if modified file on exit
+* ~~Check if modified file on exit~~
 * ~~Add percentage of scrolled file into status bar~~
 * ~~Add command line input box with history browsing~~
 * ~~Add "git add file" command~~
-* Add "git add folder" command
-* Add "git clone" command
+* ~~Add "git add folder" command~~
+* ~~Add "git clone" command~~
 * ~~Rotate / clean log file~~
 * ~~Generate System Info report~~
 * Add new sub folder option
@@ -42,4 +42,4 @@
 * Queneau Poem generator (!quen)
 * UUID generator (!uuid n)
 * Add Prefix/suffix to selected lines
-* Add !b and !t commands for go bottom and go top of the current file
+* ~~Add !b and !t commands for go bottom and go top of the current file~~

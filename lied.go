@@ -355,6 +355,7 @@ func main() {
 		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 	}
 
+	conf.Version = Version
 	ui.SetTitle(fmt.Sprintf("%s %s", conf.APP_NAME, Version))
 	ui.SetStatus(fmt.Sprintf("Welcome on %s", conf.APP_STRING))
 	ui.LblHostname.SetText("♯" + greeting)
@@ -434,12 +435,14 @@ func ShowGitMenu() {
 	MnuGit = MnuGit.New(" Git Tracking ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Menu Options
 	MnuGit.AddItem("mnuGitStatus", "Status", DoGitStatus, nil, true, false)
+	MnuGit.AddItem("mnuGitAddAll", "Add All (.)", DoGitAddAll, nil, true, false)
 	MnuGit.AddItem("mnuGitCommit", "Commit", DoGitCommit, nil, true, false)
 	MnuGit.AddItem("mnuGitPush", "Push", DoGitPush, nil, true, false)
 	MnuGit.AddItem("mnuGitCommitPush", "Commit & Push", DoGitCommitPush, nil, true, false)
 	MnuGit.AddItem("mnuGitFetch", "Fetch", DoGitFetch, nil, true, false)
 	MnuGit.AddItem("mnuGitPull", "Pull (Fetch & Merge)", DoGitPull, nil, true, false)
 	MnuGit.AddItem("mnuGitBang", "Initialize (Git Bang)", DoGitBang, nil, true, false)
+	MnuGit.AddItem("mnuGitClone", "Clone", DoGitClone, nil, true, false)
 	MnuGit.AddItem("mnuGitConfigure", "Configure", DoGitConfigure, nil, true, false)
 	// Popup menu
 	ui.PgsApp.AddPage("dlgGitMenu", MnuGit.Popup(), true, false)
@@ -963,6 +966,10 @@ func Xeq(c string) {
 				ShowHelp()
 			case "!info":
 				ShowSysInfo()
+			case "!b", "!bott":
+				edit.GoBottom()
+			case "!t", "!top":
+				edit.GoTop()
 			default:
 				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 			}
@@ -1399,6 +1406,33 @@ func DoGitCommit(f any) {
 }
 
 // ****************************************************************************
+// DoGitClone()
+// ****************************************************************************
+func DoGitClone(f any) {
+	if !IsInsideGitWorkTree() {
+		DlgInput = DlgInput.Input("Git Clone", // Title
+			"Please, enter the distant repository to clone locally :", // Message
+			"https://github.com/repo/project.git",                     // Default value
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_OK {
+					out := fmt.Sprintf("Cloning...\n%s", XeqOut("git clone \""+DlgInput.Value+"\""))
+					MsgBox = MsgBox.OK("Git Clone", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Clone")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgInput")
+	} else {
+		ui.SetStatus("Already in a Git repository")
+	}
+}
+
+// ****************************************************************************
 // DoGitAdd()
 // ****************************************************************************
 func DoGitAdd(f any) {
@@ -1414,6 +1448,32 @@ func DoGitAdd(f any) {
 					ui.PgsApp.ShowPage("msgBox")
 				} else {
 					ui.SetStatus("Aborting Git Add")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
+}
+
+// ****************************************************************************
+// DoGitAddAll()
+// ****************************************************************************
+func DoGitAddAll(f any) {
+	if IsInsideGitWorkTree() {
+		DlgYesNo = DlgYesNo.YesNo("Git Add All", // Title
+			"This will add all the files to the Git tracking.\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					out := fmt.Sprintf("Adding...\n%s", XeqOut("git add ."))
+					MsgBox = MsgBox.OK("Git Add All", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+					ui.PgsApp.ShowPage("msgBox")
+				} else {
+					ui.SetStatus("Aborting Git Add All")
 				}
 			},
 			0,
