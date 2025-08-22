@@ -1112,6 +1112,47 @@ func XeqOut(c string) string {
 }
 
 // ****************************************************************************
+// XeqRaw()
+// ****************************************************************************
+func XeqRaw(c string) string {
+	// sCmd := strings.Fields(c)
+	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
+	quoted := false
+	sCmd := strings.FieldsFunc(c, func(r rune) bool {
+		if r == '"' {
+			quoted = !quoted
+		}
+		return !quoted && r == ' '
+	})
+
+	out := ""
+	if len(sCmd) > 0 {
+		cmd := exec.Command(sCmd[0], sCmd[1:]...)
+		cmd.Dir = edit.CurrentWorkspace
+		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
+		var outb, errb bytes.Buffer
+		cmd.Stdout = &outb
+		cmd.Stderr = &errb
+		if err := cmd.Run(); err != nil {
+			out = "Error : " + err.Error()
+			if exitError, ok := err.(*exec.ExitError); ok {
+				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
+			}
+		} else {
+			out = outb.String()
+			out = out + errb.String()
+		}
+	} else {
+		out = "Nothing to run\n\nExit code 0"
+	}
+
+	out = strings.TrimSpace(out)
+	ui.SetStatus(out)
+	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
+	return out
+}
+
+// ****************************************************************************
 // DoGitStatus()
 // ****************************************************************************
 func DoGitStatus(f any) {
@@ -1278,8 +1319,8 @@ func DoGitCommitPush(f any) {
 			func(rc dialog.DlgButton, idx int) {
 				if rc == dialog.BUTTON_OK {
 					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
-					branch := XeqOut("git rev-parse --abbrev-ref HEAD")
-					out += fmt.Sprintf("\n\nPushing...\n%s", XeqOut("git push origin "+strings.TrimSpace(branch)))
+					branch := XeqRaw("git rev-parse --abbrev-ref HEAD")
+					out += fmt.Sprintf("\n\nPushing...\n%s", XeqOut("git push origin "+branch))
 
 					MsgBox = MsgBox.OK("Git Commit & Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
@@ -1403,8 +1444,8 @@ func DoGitPull(f any) {
 // ****************************************************************************
 func DoGitPush(f any) {
 	if IsInsideGitWorkTree() {
-		branch := XeqOut("git rev-parse --abbrev-ref HEAD")
-		out := fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+strings.TrimSpace(branch)))
+		branch := XeqRaw("git rev-parse --abbrev-ref HEAD")
+		out := fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+branch))
 		MsgBox = MsgBox.OK("Git Push", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 		ui.PgsApp.ShowPage("msgBox")
