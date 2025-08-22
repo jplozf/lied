@@ -1570,11 +1570,14 @@ func DoGitAddAll(f any) {
 // ****************************************************************************
 func checkNewVersion() {
 	ui.SetStatus("Checking for new version...")
-	localCommitHash := strings.TrimSpace(XeqRaw("git rev-parse HEAD"))
-	if localCommitHash == "" || localCommitHash == "fatal: not a git repository (or any of the parent directories): .git" {
-		ui.SetStatus("Not a git repository. Skipping version check.")
+	
+	// Extract local commit hash from conf.Version
+	versionParts := strings.Split(conf.Version, "-")
+	if len(versionParts) < 2 {
+		ui.SetStatus("Invalid version string format. Skipping version check.")
 		return
 	}
+	localCommitHash := strings.TrimSpace(versionParts[1])
 
 	// Get remote commit hash
 	remoteInfo := XeqRaw("git ls-remote https://github.com/jplozf/lied HEAD")
@@ -1585,6 +1588,12 @@ func checkNewVersion() {
 
 	remoteCommitHash := strings.Fields(remoteInfo)[0]
 
+	// Truncate remote hash to match local hash length for comparison
+	if len(remoteCommitHash) > len(localCommitHash) {
+		remoteCommitHash = remoteCommitHash[:len(localCommitHash)]
+	}
+
+	ui.SetStatus(fmt.Sprintf("Local: '%s' (len %d), Remote: '%s' (len %d)", localCommitHash, len(localCommitHash), remoteCommitHash, len(remoteCommitHash)))
 	if localCommitHash != remoteCommitHash {
 		ShowNewVersionPopup(localCommitHash, remoteCommitHash)
 	} else {
@@ -1596,7 +1605,8 @@ func checkNewVersion() {
 // ShowNewVersionPopup()
 // ****************************************************************************
 func ShowNewVersionPopup(localHash, remoteHash string) {
-	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version: %s\nLatest online: %s\n\nPlease update your application.", localHash[:7], remoteHash[:7])
+	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version: %s\nLatest online: %s\n\nPlease update your application.", localHash, remoteHash)
+
 	MsgBox = MsgBox.OK("New Version Available", msg, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 	ui.PgsApp.AddPage("msgNewVersion", MsgBox.Popup(), true, false)
 	ui.PgsApp.ShowPage("msgNewVersion")
