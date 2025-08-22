@@ -440,6 +440,7 @@ func ShowGitMenu() {
 	MnuGit = MnuGit.New(" Git Tracking ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Menu Options
 	MnuGit.AddItem("mnuGitStatus", "Status", DoGitStatus, nil, true, false)
+	MnuGit.AddItem("mnuGitLog", "Log", DoGitLog, nil, true, false)
 	MnuGit.AddItem("mnuGitAddAll", "Add All (.)", DoGitAddAll, nil, true, false)
 	MnuGit.AddItem("mnuGitCommit", "Commit", DoGitCommit, nil, true, false)
 	MnuGit.AddItem("mnuGitPush", "Push", DoGitPush, nil, true, false)
@@ -463,6 +464,7 @@ func ShowWorkspaceMenu() {
 	MnuWorkspace.AddItem("mnuOpen", "Open…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuRename", "Rename…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuRemoveFolder", "Remove folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	// Popup menu
@@ -1165,6 +1167,20 @@ func DoGitStatus(f any) {
 		out += fmt.Sprintf("%s\n", XeqOut("git status"))
 		out += fmt.Sprintf("%s\n", XeqOut("git diff"))
 		MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+		ui.PgsApp.ShowPage("msgBox")
+	} else {
+		ui.SetStatus("No Git repository found")
+	}
+}
+
+// ****************************************************************************
+// DoGitLog()
+// ****************************************************************************
+func DoGitLog(f any) {
+	if IsInsideGitWorkTree() {
+		out := fmt.Sprintf("%s", XeqOut("git log"))
+		MsgBox = MsgBox.OK("Git Log", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 		ui.PgsApp.ShowPage("msgBox")
 	} else {
