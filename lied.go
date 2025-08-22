@@ -512,7 +512,7 @@ func appQuit() {
 	saveSettings()
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
 	// ui.App.Stop()
-	fmt.Printf("♯%s - %s\n", conf.APP_STRING, conf.APP_URL)
+	fmt.Printf("♯%s %s - %s\n", conf.APP_NAME, Version, conf.APP_URL)
 	ArchiveLogs()
 }
 
@@ -1570,7 +1570,7 @@ func DoGitAddAll(f any) {
 // ****************************************************************************
 func checkNewVersion() {
 	ui.SetStatus("Checking for new version...")
-	
+
 	// Extract local commit hash from conf.Version
 	versionParts := strings.Split(conf.Version, "-")
 	if len(versionParts) < 2 {
@@ -1605,13 +1605,12 @@ func checkNewVersion() {
 // ShowNewVersionPopup()
 // ****************************************************************************
 func ShowNewVersionPopup(localHash, remoteHash string) {
-	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version: %s\nLatest online: %s\n\nPlease update your application.", localHash, remoteHash)
+	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version  : %s\nLatest online : %s\n\nPlease update your application.", localHash, remoteHash)
 
 	MsgBox = MsgBox.OK("New Version Available", msg, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
 	ui.PgsApp.AddPage("msgNewVersion", MsgBox.Popup(), true, false)
 	ui.PgsApp.ShowPage("msgNewVersion")
 }
-
 
 // ****************************************************************************
 // DoArchive()
