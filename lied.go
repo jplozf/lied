@@ -234,9 +234,9 @@ func main() {
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
 			return nil
-		case tcell.KeyEsc:
-			ui.App.SetFocus(ui.TblOpenFiles)
-			return nil
+			//		case tcell.KeyEsc:
+			//			ui.App.SetFocus(ui.TblOpenFiles)
+			//			return nil
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
