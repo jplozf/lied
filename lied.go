@@ -49,14 +49,15 @@ import (
 // GLOBALS
 // ****************************************************************************
 var (
-	appDir    string
-	hostname  string
-	greeting  string
-	err       error
-	MnuMacros *menu.Menu
-	MnuConfig *menu.Menu
-	MnuGit    *menu.Menu
-	args      []string
+	appDir       string
+	hostname     string
+	greeting     string
+	err          error
+	MnuMacros    *menu.Menu
+	MnuConfig    *menu.Menu
+	MnuGit       *menu.Menu
+	MnuWorkspace *menu.Menu
+	args         []string
 	// conf.ConfigGeneral       conf.SConfigGeneral
 	// configPrivate       conf.SConfigPrivate
 	MnuInputTheme       *menu.Menu
@@ -153,6 +154,8 @@ func main() {
 			edit.SwitchPreviousFile()
 		case tcell.KeyF7:
 			edit.SwitchNextFile()
+		case tcell.KeyF9:
+			ShowWorkspaceMenu()
 		case tcell.KeyF10:
 			ShowMainMenu()
 		case tcell.KeyF3:
@@ -392,7 +395,6 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
 	MnuMacros.AddItem("mnuNew", "New", edit.NewAnyFile, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuOpen", "Open File…", InputFileOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuMacros.AddItem("mnuOpen", "Open Workspace…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
 	MnuMacros.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentFile.ReadWrite)
 	MnuMacros.AddItem("mnuFollow", "Follow", edit.SwitchFollow, nil, true, edit.CurrentFile.Follow)
@@ -446,6 +448,22 @@ func ShowGitMenu() {
 	// Popup menu
 	ui.PgsApp.AddPage("dlgGitMenu", MnuGit.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgGitMenu")
+}
+
+// ****************************************************************************
+// ShowWorkspaceMenu()
+// ****************************************************************************
+func ShowWorkspaceMenu() {
+	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), ui.EdtMain)
+	// Menu Options
+	MnuWorkspace.AddItem("mnuOpen", "Open…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuNewFolder", "New folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuRemoveFolder", "Remove folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	// Popup menu
+	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
 }
 
 // ****************************************************************************

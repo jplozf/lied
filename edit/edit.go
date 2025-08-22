@@ -282,7 +282,10 @@ func UpdateStatus() {
 		time.Sleep(100 * time.Millisecond)
 		ui.App.QueueUpdateDraw(func() {
 			// ui.TxtEditName.SetText(currentFile.FName)
-			ui.TxtCurrentWorkspace.SetText(conf.ConfigGeneral.Workspace)
+			bp := filepath.Base(conf.ConfigGeneral.Workspace)
+			dp := filepath.Dir(conf.ConfigGeneral.Workspace)
+			dp += string(os.PathSeparator)
+			ui.TxtCurrentWorkspace.SetText(dp + "[yellow]" + bp)
 			// ui.TxtCurrentEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
 			relativePath, err := filepath.Rel(conf.ConfigGeneral.Workspace, CurrentFile.FName)
 			if err != nil {
