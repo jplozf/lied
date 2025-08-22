@@ -168,6 +168,7 @@ func OpenFile(fName string, rw bool) {
 
 			CurrentFile.FName = fName
 			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
+			CurrentFile.Buffer.Settings["wordwrap"] = false
 			CurrentFile.View = femto.NewView(CurrentFile.Buffer)
 			CurrentFile.ReadWrite = rw
 			CurrentFile.Follow = false

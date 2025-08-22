@@ -360,6 +360,7 @@ func SetUI(fQuit Fn, hostname string) {
 				fQuit()
 			} else {
 				PgsApp.SwitchToPage(GetCurrentScreen())
+				App.SetFocus(EdtMain)
 			}
 		})
 
