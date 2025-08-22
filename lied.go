@@ -363,6 +363,10 @@ func main() {
 	ui.LblHostname.SetText("♯" + greeting)
 
 	go ui.UpdateTime()
+
+	// Check for new version online
+	go checkNewVersion()
+
 	if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.EdtMain).EnableMouse(true).Run(); err != nil {
 		panic(err)
 	}
@@ -1560,6 +1564,44 @@ func DoGitAddAll(f any) {
 		ui.SetStatus("No Git repository found")
 	}
 }
+
+// ****************************************************************************
+// checkNewVersion()
+// ****************************************************************************
+func checkNewVersion() {
+	ui.SetStatus("Checking for new version...")
+	localCommitHash := strings.TrimSpace(XeqRaw("git rev-parse HEAD"))
+	if localCommitHash == "" || localCommitHash == "fatal: not a git repository (or any of the parent directories): .git" {
+		ui.SetStatus("Not a git repository. Skipping version check.")
+		return
+	}
+
+	// Get remote commit hash
+	remoteInfo := XeqRaw("git ls-remote https://github.com/jplozf/lied HEAD")
+	if strings.Contains(remoteInfo, "fatal") {
+		ui.SetStatus("Could not fetch remote version. Skipping version check.")
+		return
+	}
+
+	remoteCommitHash := strings.Fields(remoteInfo)[0]
+
+	if localCommitHash != remoteCommitHash {
+		ShowNewVersionPopup(localCommitHash, remoteCommitHash)
+	} else {
+		ui.SetStatus("You are running the latest version.")
+	}
+}
+
+// ****************************************************************************
+// ShowNewVersionPopup()
+// ****************************************************************************
+func ShowNewVersionPopup(localHash, remoteHash string) {
+	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version: %s\nLatest online: %s\n\nPlease update your application.", localHash[:7], remoteHash[:7])
+	MsgBox = MsgBox.OK("New Version Available", msg, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	ui.PgsApp.AddPage("msgNewVersion", MsgBox.Popup(), true, false)
+	ui.PgsApp.ShowPage("msgNewVersion")
+}
+
 
 // ****************************************************************************
 // DoArchive()
