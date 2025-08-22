@@ -401,6 +401,12 @@ func SwitchOpenFile(fName string) {
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
+			for idx, file := range OpenFiles {
+				if file.FName == CurrentFile.FName {
+					ui.TblOpenFiles.Select(idx, 0)
+					break
+				}
+			}
 			go focusOpenFile(fName)
 			break
 		}
@@ -648,6 +654,7 @@ func CloseCurrentFile() {
 		} else {
 			copy(OpenFiles[n:], OpenFiles[n+1:])
 			OpenFiles = OpenFiles[:len(OpenFiles)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
 			if n > 0 {
 				CurrentFile = OpenFiles[n-1]
 				SwitchOpenFile(CurrentFile.FName)
