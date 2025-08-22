@@ -14,10 +14,12 @@ package dialog
 // IMPORTS
 // ****************************************************************************
 import (
+	"fmt"
+	"lied/conf"
 	"lied/ui"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -65,8 +67,8 @@ type Dialog struct {
 	height  int
 	idx     int
 	dtype   DlgInput
-	UIMsg   tview.TextView
-	UIList  tview.DropDown
+	UIMsg   *tview.TextView
+	UIList  *tview.DropDown
 	uiInput tview.InputField
 	IValues int
 	Path    string
@@ -251,15 +253,14 @@ func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, 
 		idx:    idx,
 		dtype:  INPUT_FILE,
 	}
-	m.UIMsg = *tview.NewTextView()
+	m.UIMsg = tview.NewTextView()
 	m.UIMsg.SetSize(1, 60)
 	m.UIMsg.SetLabel("Current :")
 	m.UIMsg.SetText(m.Path)
-	m.AddFormItem(&m.UIMsg)
-	m.UIList = *tview.NewDropDown()
+	m.UIList = tview.NewDropDown()
 	m.UIList.SetLabel("Browse  :")
+	m.UIList.SetOptions([]string{}, nil)
 	// m.UIList.SetSelectedFunc(m.selectPath)
-	m.AddFormItem(&m.UIList)
 
 	m.SetButtonsAlign(tview.AlignCenter)
 	m.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
@@ -278,42 +279,104 @@ func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, 
 // setPath()
 // ****************************************************************************
 func (m *Dialog) setPath(option string, optionIndex int) {
+	ui.SetStatus("setPath: Received option: " + option)
 	m.Values = nil
+	if len(option) == 0 {
+		option = "/"
+	}
 	if option[len(option)-1:] != "/" {
 		option = option + "/"
 	}
-	entries, err := os.ReadDir(option)
-	if err != nil {
-		ui.SetStatus(option + " : " + err.Error())
-	}
 
-	m.Values = append(m.Values, "..")
-	ui.SetStatus("ENTRIES=" + strconv.Itoa(len(entries)))
-	for _, v := range entries {
-		m.Values = append(m.Values, filepath.Join(option, v.Name()))
-		ui.SetStatus("append " + filepath.Join(option, v.Name()))
-	}
-	m.UIList.SetOptions(m.Values, m.selectPath)
-	ui.SetStatus("OPTION=" + option)
-	m.Path = option // CRASH !!!
+	go func(currentPath string) {
+		entries, err := os.ReadDir(currentPath)
+		if err != nil {
+			ui.SetStatus(currentPath + " : " + err.Error())
+			return
+		}
+
+		var newValues []string
+		if currentPath != "/" {
+			newValues = append(newValues, "..")
+		}
+		for _, v := range entries {
+			// Filter hidden files/folders if ShowHidden is false
+			if !conf.ConfigGeneral.ShowHidden && strings.HasPrefix(v.Name(), ".") {
+				continue
+			}
+			newValues = append(newValues, filepath.Join(currentPath, v.Name()))
+		}
+
+		ui.App.QueueUpdate(func() {
+			m.Values = newValues
+			m.UIList.SetOptions(m.Values, m.selectPath)
+			m.Path = currentPath
+			m.UIMsg.SetText(currentPath)
+			ui.SetStatus("OPTION=" + currentPath)
+			ui.App.SetFocus(m.UIList)
+		})
+	}(option)
 }
 
 // ****************************************************************************
 // selectPath()
 // ****************************************************************************
 func (m *Dialog) selectPath(text string, index int) {
-	fi, _ := os.Stat(text)
-	switch mode := fi.Mode(); {
-	case mode.IsDir():
-		m.UIMsg.SetText(text)
-		ui.SetStatus("DIR " + text)
-		m.setPath(text, 0)
-		// m.refreshUI()
+	go func(selectedText string) {
+		if selectedText == ".." {
+			ui.App.QueueUpdate(func() {
+				ui.SetStatus("selectPath: Handling '..' from m.Path: " + m.Path)
+			})
+			// Remove trailing slash before calculating parent to ensure correct behavior of filepath.Dir
+			cleanedPath := m.Path
+			if len(cleanedPath) > 1 && cleanedPath[len(cleanedPath)-1] == '/' {
+				cleanedPath = cleanedPath[:len(cleanedPath)-1]
+			}
+			parentPath := filepath.Dir(cleanedPath)
+			// Ensure parentPath also has a trailing slash if it's not the root
+			if parentPath != "/" && parentPath[len(parentPath)-1] != '/' {
+				parentPath += "/"
+			}
+			ui.App.QueueUpdate(func() {
+				ui.SetStatus("selectPath: Cleaned path: " + cleanedPath)
+				ui.SetStatus("selectPath: Calculated parentPath: " + parentPath)
+				ui.SetStatus(fmt.Sprintf("selectPath: parentPath != m.Path: %t", parentPath != m.Path))
+			})
+			if parentPath != m.Path {
+				ui.App.QueueUpdate(func() {
+					ui.SetStatus("selectPath: Navigating to parent: " + parentPath)
+				})
+				m.setPath(parentPath, 0)
+			} else {
+				ui.App.QueueUpdate(func() {
+					ui.SetStatus("selectPath: Already at root or parent is same as current: " + m.Path)
+				})
+			}
+			return
+		}
 
-	case mode.IsRegular():
-		ui.SetStatus("FILE " + text)
-		m.Value = text
-	}
+		fi, err := os.Stat(selectedText)
+		if err != nil {
+			ui.App.QueueUpdate(func() {
+				ui.SetStatus("selectPath: Error stating file: " + err.Error())
+			})
+			return
+		}
+
+		switch mode := fi.Mode(); {
+		case mode.IsDir():
+			ui.App.QueueUpdate(func() {
+				ui.SetStatus("selectPath: Selected directory: " + selectedText)
+			})
+			m.setPath(selectedText, 0)
+
+		case mode.IsRegular():
+			ui.App.QueueUpdate(func() {
+				ui.SetStatus("FILE " + selectedText)
+				m.Value = selectedText
+			})
+		}
+	}(text)
 }
 
 // ****************************************************************************
@@ -330,9 +393,8 @@ func (m *Dialog) setUI() {
 		m.AddDropDown("", m.Values, 0, nil)
 	case INPUT_FILE:
 		m.Clear(true)
-		m.setPath(m.Path, 0)
-		m.AddFormItem(&m.UIMsg)
-		m.AddFormItem(&m.UIList)
+		m.AddFormItem(m.UIMsg)
+		m.AddFormItem(m.UIList)
 	case INPUT_CLI:
 		if m.message != "" {
 			m.AddTextView("", m.message, 0, 1, true, false)
@@ -396,6 +458,8 @@ func (m *Dialog) setUI() {
 // ****************************************************************************
 func (m *Dialog) Popup() tview.Primitive {
 	m.setUI()
+	// Focus is set in setPath after options are loaded
+
 	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEsc:

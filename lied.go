@@ -3,7 +3,6 @@
 //	 _ _          _
 //	| (_) ___  __| |
 //	| | |/ _ \/ _` |
-
 //	| | |  __/ (_| |
 //	|_|_|\___|\__,_|
 //
@@ -835,28 +834,46 @@ func setFormatDate(rc dialog.DlgButton, idx int) {
 // InputFileOpen()
 // ****************************************************************************
 func InputFileOpen(f any) {
+	startPath := edit.CurrentWorkspace
+	if startPath == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			ui.SetStatus("Error getting home directory: " + err.Error())
+			return
+		}
+		startPath = userHome
+	}
 	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Open File", // Title
-		edit.CurrentWorkspace,
+		startPath,
 		doOpenFile,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
 	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputFileOpen")
-	ui.App.SetFocus(&DlgInputFileOpen.UIList)
+	ui.App.SetFocus(DlgInputFileOpen)
 }
 
 // ****************************************************************************
 // InputWorkspaceOpen()
 // ****************************************************************************
 func InputWorkspaceOpen(f any) {
+	startPath := edit.CurrentWorkspace
+	if startPath == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			ui.SetStatus("Error getting home directory: " + err.Error())
+			return
+		}
+		startPath = userHome
+	}
 	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Open Workspace", // Title
-		edit.CurrentWorkspace,
+		startPath,
 		doOpenFile,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
 	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputFileOpen")
-	ui.App.SetFocus(&DlgInputFileOpen.UIList)
+	ui.App.SetFocus(DlgInputFileOpen)
 }
 
 // ****************************************************************************
