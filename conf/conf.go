@@ -12,8 +12,12 @@
 package conf
 
 import (
+	"embed"
 	"os"
 )
+
+//go:embed licenses/*.md
+var LicensesFS embed.FS
 
 const (
 	STATUS_MESSAGE_DURATION = 3

@@ -19,6 +19,7 @@ import (
 	"lied/ui"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -55,23 +56,24 @@ type DlgRC struct {
 
 type Dialog struct {
 	*tview.Form
-	title   string
-	message string
-	done    func(rc DlgButton, idx int)
-	buttons []*tview.Button
-	Value   string
-	Values  []string
-	parent  string
-	focus   tview.Primitive
-	width   int
-	height  int
-	idx     int
-	dtype   DlgInput
-	UIMsg   *tview.TextView
-	UIList  *tview.DropDown
-	uiInput tview.InputField
-	IValues int
-	Path    string
+	title       string
+	message     string
+	done        func(rc DlgButton, idx int)
+	buttons     []*tview.Button
+	Value       string
+	Values      []string
+	parent      string
+	focus       tview.Primitive
+	width       int
+	height      int
+	idx         int
+	dtype       DlgInput
+	UIMsg       *tview.TextView
+	UIList      *tview.DropDown
+	uiInput     tview.InputField
+	IValues     int
+	Path        string
+	onlyFolders bool
 }
 
 // ****************************************************************************
@@ -242,16 +244,17 @@ func (m *Dialog) List(title string, message string, values []string, done func(r
 // ****************************************************************************
 // FileBrowser()
 // ****************************************************************************
-func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, idx int), idx int, parent string, focus tview.Primitive) *Dialog {
+func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, idx int), idx int, parent string, focus tview.Primitive, onlyFolders bool) *Dialog {
 	m = &Dialog{
-		Form:   tview.NewForm(),
-		title:  title,
-		Path:   path,
-		done:   done,
-		parent: parent,
-		focus:  focus,
-		idx:    idx,
-		dtype:  INPUT_FILE,
+		Form:        tview.NewForm(),
+		title:       title,
+		Path:        path,
+		done:        done,
+		parent:      parent,
+		focus:       focus,
+		idx:         idx,
+		dtype:       INPUT_FILE,
+		onlyFolders: onlyFolders,
 	}
 	m.UIMsg = tview.NewTextView()
 	m.UIMsg.SetSize(1, 60)
@@ -304,7 +307,24 @@ func (m *Dialog) setPath(option string, optionIndex int) {
 			if !conf.ConfigGeneral.ShowHidden && strings.HasPrefix(v.Name(), ".") {
 				continue
 			}
-			newValues = append(newValues, filepath.Join(currentPath, v.Name()))
+			// Filter files if onlyFolders is true, but allow symlinks to directories
+			if m.onlyFolders && !v.IsDir() {
+				// If it's not a directory, check if it's a symlink to a directory
+				fullPath := filepath.Join(currentPath, v.Name())
+				fileInfo, err := os.Stat(fullPath)
+				if err != nil || !fileInfo.IsDir() {
+					continue // It's not a directory and not a symlink to a directory
+				}
+			}
+			var entryName string
+			if v.Type()&os.ModeSymlink != 0 {
+				entryName = fmt.Sprintf("[yellow]%s[white]", v.Name())
+			} else if v.IsDir() {
+				entryName = fmt.Sprintf("[%s]%s[white]", conf.ConfigGeneral.ColorAccent, v.Name())
+			} else {
+				entryName = v.Name()
+			}
+			newValues = append(newValues, filepath.Join(currentPath, entryName))
 		}
 
 		ui.App.QueueUpdate(func() {
@@ -323,7 +343,11 @@ func (m *Dialog) setPath(option string, optionIndex int) {
 // ****************************************************************************
 func (m *Dialog) selectPath(text string, index int) {
 	go func(selectedText string) {
-		if selectedText == ".." {
+		// Strip tview color tags from the selectedText before using it for file system operations
+		re := regexp.MustCompile(`\[[a-zA-Z0-9#]+\]|\[[a-zA-Z0-9#]+:[a-zA-Z0-9#]+\]|\[::\]`)
+		cleanedSelectedText := re.ReplaceAllString(selectedText, "")
+
+		if cleanedSelectedText == ".." {
 			ui.App.QueueUpdate(func() {
 				ui.SetStatus("selectPath: Handling '..' from m.Path: " + m.Path)
 			})
@@ -332,6 +356,8 @@ func (m *Dialog) selectPath(text string, index int) {
 			if len(cleanedPath) > 1 && cleanedPath[len(cleanedPath)-1] == '/' {
 				cleanedPath = cleanedPath[:len(cleanedPath)-1]
 			}
+			// Strip color tags from cleanedPath before passing to filepath.Dir
+			cleanedPath = re.ReplaceAllString(cleanedPath, "")
 			parentPath := filepath.Dir(cleanedPath)
 			// Ensure parentPath also has a trailing slash if it's not the root
 			if parentPath != "/" && parentPath[len(parentPath)-1] != '/' {
@@ -355,7 +381,7 @@ func (m *Dialog) selectPath(text string, index int) {
 			return
 		}
 
-		fi, err := os.Stat(selectedText)
+		fi, err := os.Stat(cleanedSelectedText)
 		if err != nil {
 			ui.App.QueueUpdate(func() {
 				ui.SetStatus("selectPath: Error stating file: " + err.Error())
@@ -366,14 +392,15 @@ func (m *Dialog) selectPath(text string, index int) {
 		switch mode := fi.Mode(); {
 		case mode.IsDir():
 			ui.App.QueueUpdate(func() {
-				ui.SetStatus("selectPath: Selected directory: " + selectedText)
+				ui.SetStatus("selectPath: Selected directory: " + cleanedSelectedText)
+				m.Value = cleanedSelectedText // Set m.Value to the selected directory
 			})
-			m.setPath(selectedText, 0)
+			m.setPath(cleanedSelectedText, 0)
 
 		case mode.IsRegular():
 			ui.App.QueueUpdate(func() {
-				ui.SetStatus("FILE " + selectedText)
-				m.Value = selectedText
+				ui.SetStatus("FILE " + cleanedSelectedText)
+				m.Value = cleanedSelectedText
 			})
 		}
 	}(text)
@@ -559,7 +586,13 @@ func (m *Dialog) doOK() {
 	case INPUT_LIST:
 		_, m.Value = m.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
 	case INPUT_FILE:
-		_, m.Value = m.UIList.GetCurrentOption()
+		if m.onlyFolders {
+			m.Value = m.Path
+		} else {
+			_, selectedOption := m.UIList.GetCurrentOption()
+			re := regexp.MustCompile(`\[[a-zA-Z0-9#]+\]|\[[a-zA-Z0-9#]+:[a-zA-Z0-9#]+\]|\[::\]`)
+			m.Value = re.ReplaceAllString(selectedOption, "")
+		}
 	case INPUT_CLI:
 		m.Value = m.GetFormItem(m.GetFormItemCount() - 1).(*tview.InputField).GetText()
 	default:

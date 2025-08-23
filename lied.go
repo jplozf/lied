@@ -57,6 +57,7 @@ var (
 	MnuConfig    *menu.Menu
 	MnuGit       *menu.Menu
 	MnuWorkspace *menu.Menu
+	MnuLicenses  *menu.Menu
 	args         []string
 	// conf.ConfigGeneral       conf.SConfigGeneral
 	// configPrivate       conf.SConfigPrivate
@@ -461,15 +462,64 @@ func ShowGitMenu() {
 func ShowWorkspaceMenu() {
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), ui.EdtMain)
 	// Menu Options
-	MnuWorkspace.AddItem("mnuOpen", "Open…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuRename", "Rename…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuNewFolder", "New folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuRemoveFolder", "Remove folder…", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuRename", "Rename", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuNewFile", "New file", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuNewFolder", "New folder", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	// Popup menu
 	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
+}
+
+// ****************************************************************************
+// ShowLicensesMenu()
+// ****************************************************************************
+func ShowLicensesMenu(f any) {
+	// Read the directory entry for the "licenses" embedded folder
+	entries, err := conf.LicensesFS.ReadDir("licenses")
+	ui.SetStatus("Reading licences")
+	if err == nil {
+		MnuLicenses = MnuLicenses.New(" Licenses ", ui.GetCurrentScreen(), ui.EdtMain)
+		for _, entry := range entries {
+			if !entry.IsDir() { // Only list files, not subdirectories
+				lic := entry.Name()
+				MnuLicenses.AddItem(lic,
+					strings.TrimSuffix(lic, filepath.Ext(lic)),
+					AddLicense,
+					lic,
+					true,
+					false)
+			}
+		}
+		// Popup menu
+		ui.PgsApp.AddPage("dlgLicensesMenu", MnuLicenses.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgLicensesMenu")
+	} else {
+		ui.SetStatus("No license found")
+	}
+}
+
+// ****************************************************************************
+// AddLicense()
+// ****************************************************************************
+func AddLicense(l any) {
+	licenseFileName := l.(string)
+	ui.SetStatus(fmt.Sprintf("Adding license %s to the current workspace", licenseFileName))
+	sourceFileName := filepath.Join("licenses", licenseFileName)
+	destFileName := filepath.Join(edit.CurrentWorkspace, licenseFileName)
+	fileContent, err := conf.LicensesFS.ReadFile(sourceFileName)
+	if err != nil {
+		ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
+	}
+	if err := os.WriteFile(destFileName, fileContent, 0644); err != nil { // nolint: gosec
+		ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
+	}
+	// Refresh the TrvExplorer
+	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 }
 
 // ****************************************************************************
@@ -871,7 +921,7 @@ func InputFileOpen(f any) {
 		startPath,
 		doOpenFile,
 		0,
-		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.GetCurrentScreen(), ui.EdtMain, false) // Focus return
 	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputFileOpen")
 	ui.App.SetFocus(DlgInputFileOpen)
@@ -894,7 +944,7 @@ func InputWorkspaceOpen(f any) {
 		startPath,
 		doOpenFile,
 		0,
-		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.GetCurrentScreen(), ui.EdtMain, true) // Focus return
 	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputFileOpen")
 	ui.App.SetFocus(DlgInputFileOpen)

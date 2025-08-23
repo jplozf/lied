@@ -80,6 +80,7 @@ This menu is displayed when pressing the [red]F3[white] key.
 
 These options are as follows :
 ● [red]Status        :[white] Displays the status of the current branch.
+● [red]Log           :[white] Displays the log for the current repository.
 ● [red]Add All (.)   :[white] Add all files recursively to the git tracking.
 ● [red]Commit        :[white] Commits the current changes after prompting for the commit message.
 ● [red]Push          :[white] Pushes the current commit to the remote repository.
