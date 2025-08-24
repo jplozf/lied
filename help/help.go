@@ -95,6 +95,8 @@ These options are as follows :
 
 ⯈ [red]S E T T I N G S   M E N U[white]
 
+⯈ [red]W O R K S P A C E   M E N U[white]
+
 ⯈ [red]M A I N   M E N U[white]
 
 ⯈ [red]M A C R O S[white]

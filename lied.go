@@ -74,6 +74,7 @@ var (
 	DlgYesNo            *dialog.Dialog
 	DlgYesNo1           *dialog.Dialog
 	DlgYesNo2           *dialog.Dialog
+	DlgRename           *dialog.Dialog
 	ACmd                []string
 	ICmd                int
 	MsgBox              *dialog.Dialog
@@ -111,6 +112,8 @@ func init() {
 	}
 	// Set the Current Working Directory
 	conf.ConfigGeneral.Workspace, _ = os.Getwd()
+
+	// Define application folder
 	appDir = filepath.Join(userDir, conf.APP_FOLDER)
 	if _, err := os.Stat(appDir); errors.Is(err, os.ErrNotExist) {
 		err := os.Mkdir(appDir, os.ModePerm)
@@ -466,11 +469,11 @@ func ShowWorkspaceMenu() {
 	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuRename", "Rename", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuRename", "Rename", InputRename, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuNewFile", "New file", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false) // OK
+	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false)      // OK
 	// Popup menu
 	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
@@ -929,6 +932,29 @@ func InputFileOpen(f any) {
 }
 
 // ****************************************************************************
+// InputRename()
+// ****************************************************************************
+func InputRename(f any) {
+	startPath := edit.CurrentWorkspace
+	if startPath == "" {
+		userHome, err := os.UserHomeDir()
+		if err != nil {
+			ui.SetStatus("Error getting home directory: " + err.Error())
+			return
+		}
+		startPath = userHome
+	}
+	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Rename", // Title
+		startPath,
+		doRename,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain, false) // Focus return
+	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFileOpen")
+	ui.App.SetFocus(DlgInputFileOpen)
+}
+
+// ****************************************************************************
 // InputWorkspaceOpen()
 // ****************************************************************************
 func InputWorkspaceOpen(f any) {
@@ -943,7 +969,7 @@ func InputWorkspaceOpen(f any) {
 	}
 	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Open Workspace", // Title
 		startPath,
-		doOpenFile,
+		doOpenWorkspace,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain, true) // Focus return
 	ui.PgsApp.AddPage("dlgInputFileOpen", DlgInputFileOpen.Popup(), true, false)
@@ -974,6 +1000,46 @@ func doOpenFile(rc dialog.DlgButton, idx int) {
 		fn := DlgInputFileOpen.Value
 		ui.SetStatus("Opening " + fn)
 		edit.OpenFile(fn, utils.IsTextFile(fn))
+	}
+}
+
+// ****************************************************************************
+// doRename()
+// ****************************************************************************
+func doRename(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		fn := DlgInputFileOpen.Value
+		ui.SetStatus("Renaming " + fn)
+		// var v string
+		d := filepath.Dir(fn)
+		DlgRename = DlgRename.Input("Rename", // Title
+			"Renaming "+fn,    // Message
+			filepath.Base(fn), // We want to rename only the base itself, not the whole path
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_OK {
+					os.Rename(fn, filepath.Join(d, DlgRename.Value))
+				} else {
+					ui.SetStatus("Canceling rename")
+				}
+				// Refresh the TrvExplorer
+				edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgRename", DlgRename.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgRename")
+	}
+}
+
+// ****************************************************************************
+// doOpenWorkspace()
+// ****************************************************************************
+func doOpenWorkspace(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_OK {
+		fn := DlgInputFileOpen.Value
+		ui.SetStatus("Opening Workspace " + fn)
+		edit.CloseAll()
+		edit.CurrentWorkspace = fn
 	}
 }
 
