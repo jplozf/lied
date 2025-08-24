@@ -67,6 +67,7 @@ var (
 	DlgInputFormatTime  *dialog.Dialog
 	DlgInputFormatDate  *dialog.Dialog
 	DlgInputFileOpen    *dialog.Dialog
+	DlgInputFileDelete  *dialog.Dialog
 	DlgInputShell       *dialog.Dialog
 	DlgInputColorAccent *dialog.Dialog
 	DlgInput            *dialog.Dialog
@@ -469,7 +470,7 @@ func ShowWorkspaceMenu() {
 	MnuWorkspace.AddItem("mnuNewFile", "New file", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false)
 	// Popup menu
 	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
@@ -951,6 +952,21 @@ func InputWorkspaceOpen(f any) {
 }
 
 // ****************************************************************************
+// InputWorkspaceDelete()
+// ****************************************************************************
+func InputWorkspaceDelete(f any) {
+	DlgInputFileDelete = DlgInputFileDelete.DeleteFileBrowser("Delete file/folder", // Title
+		f.(string),
+		doDeleteFile,
+		0,
+		ui.GetCurrentScreen(), ui.EdtMain, // Focus return
+		false) // Files & Folders
+	ui.PgsApp.AddPage("dlgInputFileDelete", DlgInputFileDelete.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgInputFileDelete")
+	ui.App.SetFocus(DlgInputFileDelete)
+}
+
+// ****************************************************************************
 // doOpenFile()
 // ****************************************************************************
 func doOpenFile(rc dialog.DlgButton, idx int) {
@@ -958,6 +974,45 @@ func doOpenFile(rc dialog.DlgButton, idx int) {
 		fn := DlgInputFileOpen.Value
 		ui.SetStatus("Opening " + fn)
 		edit.OpenFile(fn, utils.IsTextFile(fn))
+	}
+}
+
+// ****************************************************************************
+// doDeleteFile()
+// ****************************************************************************
+func doDeleteFile(rc dialog.DlgButton, idx int) {
+	if rc == dialog.BUTTON_DELETE {
+		fn := DlgInputFileDelete.Value
+		ui.SetStatus("Deleting " + fn)
+		DlgYesNo = DlgYesNo.YesNo("Delete", // Title
+			"Deleting "+fn+"\n\nAre you sure you want to proceed ?", // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					fi, err := os.Stat(fn)
+					if err != nil {
+						ui.SetStatus(err.Error())
+					}
+					if fi.Mode().IsRegular() {
+						err := os.Remove(fn)
+						if err != nil {
+							ui.SetStatus(err.Error())
+						}
+					} else {
+						err := os.RemoveAll(fn)
+						if err != nil {
+							ui.SetStatus(err.Error())
+						}
+					}
+				} else {
+					ui.SetStatus("Canceling delete")
+				}
+				// Refresh the TrvExplorer
+				edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+			},
+			0,
+			ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
 	}
 }
 

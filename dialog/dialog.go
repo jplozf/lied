@@ -36,6 +36,7 @@ const (
 	BUTTON_YES
 	BUTTON_NO
 	BUTTON_CANCEL
+	BUTTON_DELETE
 )
 
 type DlgInput int
@@ -47,6 +48,7 @@ const (
 	INPUT_FOLDER
 	INPUT_FILE
 	INPUT_CLI
+	INPUT_DELETE
 )
 
 type DlgRC struct {
@@ -279,6 +281,43 @@ func (m *Dialog) FileBrowser(title string, path string, done func(rc DlgButton, 
 }
 
 // ****************************************************************************
+// DeleteFileBrowser()
+// ****************************************************************************
+func (m *Dialog) DeleteFileBrowser(title string, path string, done func(rc DlgButton, idx int), idx int, parent string, focus tview.Primitive, onlyFolders bool) *Dialog {
+	m = &Dialog{
+		Form:        tview.NewForm(),
+		title:       title,
+		Path:        path,
+		done:        done,
+		parent:      parent,
+		focus:       focus,
+		idx:         idx,
+		dtype:       INPUT_DELETE,
+		onlyFolders: onlyFolders,
+	}
+	m.UIMsg = tview.NewTextView()
+	m.UIMsg.SetSize(1, 60)
+	m.UIMsg.SetLabel("Current :")
+	m.UIMsg.SetText(m.Path)
+	m.UIList = tview.NewDropDown()
+	m.UIList.SetLabel("Browse  :")
+	m.UIList.SetOptions([]string{}, nil)
+	// m.UIList.SetSelectedFunc(m.selectPath)
+
+	m.SetButtonsAlign(tview.AlignCenter)
+	m.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	m.SetButtonTextColor(tview.Styles.PrimaryTextColor)
+	m.SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorderPadding(0, 0, 0, 0)
+	m.SetBorder(true).
+		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
+		SetBorderPadding(1, 1, 1, 1)
+	m.buttons = append(m.buttons, tview.NewButton("Delete").SetSelectedFunc(m.doDelete))
+	m.buttons = append(m.buttons, tview.NewButton("Cancel").SetSelectedFunc(m.doCancel))
+	m.setPath(path, 0)
+	return m
+}
+
+// ****************************************************************************
 // setPath()
 // ****************************************************************************
 func (m *Dialog) setPath(option string, optionIndex int) {
@@ -418,7 +457,7 @@ func (m *Dialog) setUI() {
 	case INPUT_LIST:
 		m.AddTextView("", m.message, 0, 1, true, false)
 		m.AddDropDown("", m.Values, 0, nil)
-	case INPUT_FILE:
+	case INPUT_FILE, INPUT_DELETE:
 		m.Clear(true)
 		m.AddFormItem(m.UIMsg)
 		m.AddFormItem(m.UIList)
@@ -443,6 +482,8 @@ func (m *Dialog) setUI() {
 				f = m.doNo
 			} else if l == "OK" {
 				f = m.doOK
+			} else if l == "Delete" {
+				f = m.doDelete
 			} else {
 				f = m.doCancel
 			}
@@ -585,7 +626,7 @@ func (m *Dialog) doOK() {
 		m.Value = m.GetFormItem(1).(*tview.InputField).GetText()
 	case INPUT_LIST:
 		_, m.Value = m.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
-	case INPUT_FILE:
+	case INPUT_FILE, INPUT_DELETE:
 		if m.onlyFolders {
 			m.Value = m.Path
 		} else {
@@ -600,5 +641,34 @@ func (m *Dialog) doOK() {
 	}
 	if m.done != nil {
 		m.done(BUTTON_OK, m.idx)
+	}
+}
+
+// ****************************************************************************
+// doDelete()
+// ****************************************************************************
+func (m *Dialog) doDelete() {
+	ui.PgsApp.SwitchToPage(m.parent)
+	ui.App.SetFocus(m.focus)
+	switch m.dtype {
+	case INPUT_TEXT:
+		m.Value = m.GetFormItem(1).(*tview.InputField).GetText()
+	case INPUT_LIST:
+		_, m.Value = m.GetFormItem(1).(*tview.DropDown).GetCurrentOption()
+	case INPUT_FILE, INPUT_DELETE:
+		if m.onlyFolders {
+			m.Value = m.Path
+		} else {
+			_, selectedOption := m.UIList.GetCurrentOption()
+			re := regexp.MustCompile(`\[[a-zA-Z0-9#]+\]|\[[a-zA-Z0-9#]+:[a-zA-Z0-9#]+\]|\[::\]`)
+			m.Value = re.ReplaceAllString(selectedOption, "")
+		}
+	case INPUT_CLI:
+		m.Value = m.GetFormItem(m.GetFormItemCount() - 1).(*tview.InputField).GetText()
+	default:
+		m.Value = ""
+	}
+	if m.done != nil {
+		m.done(BUTTON_DELETE, m.idx)
 	}
 }
