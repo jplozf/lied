@@ -935,17 +935,8 @@ func InputFileOpen(f any) {
 // InputRename()
 // ****************************************************************************
 func InputRename(f any) {
-	startPath := edit.CurrentWorkspace
-	if startPath == "" {
-		userHome, err := os.UserHomeDir()
-		if err != nil {
-			ui.SetStatus("Error getting home directory: " + err.Error())
-			return
-		}
-		startPath = userHome
-	}
 	DlgInputFileOpen = DlgInputFileOpen.FileBrowser("Rename", // Title
-		startPath,
+		f.(string),
 		doRename,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain, false) // Focus return
