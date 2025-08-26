@@ -108,6 +108,7 @@ var (
 	ChkCase          *tview.Checkbox
 	ChkToggleReplace *tview.Checkbox
 	TxtReplace       *tview.InputField
+	TblOutline       *tview.Table
 )
 
 // ****************************************************************************
@@ -266,6 +267,11 @@ func SetUI(fQuit Fn, hostname string) {
 	TrvExplorer.SetBorder(true)
 	TrvExplorer.SetTitle("Explorer")
 
+	TblOutline = tview.NewTable()
+	TblOutline.SetBorder(true)
+	TblOutline.SetSelectable(true, false)
+	TblOutline.SetTitle("Outline")
+
 	FrmFind = tview.NewForm()
 	FrmFind.SetBorder(true)
 	FrmFind.SetTitle("Find & Replace")
@@ -334,6 +340,7 @@ func SetUI(fQuit Fn, hostname string) {
 				AddItem(FrmFind, 10, 0, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 					AddItem(TrvExplorer, 0, 1, false).
+					AddItem(TblOutline, 12, 0, false).
 					AddItem(tview.NewFlex().
 						AddItem(LblGITBranch, 0, 1, false).
 						AddItem(LblCommit, 0, 1, false).

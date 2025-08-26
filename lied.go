@@ -326,7 +326,7 @@ func main() {
 	ui.TrvExplorer.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			ui.App.SetFocus(ui.EdtMain)
+			ui.App.SetFocus(ui.TblOutline)
 			return nil
 		case tcell.KeyCtrlF:
 			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
@@ -334,6 +334,23 @@ func main() {
 			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
 			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
 			ui.App.SetFocus(ui.FrmFind)
+			return nil
+		}
+		return event
+	})
+
+	// Outline Panel keyboard's events manager
+	ui.TblOutline.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.EdtMain)
+			return nil
+		case tcell.KeyEnter:
+			idx, _ := ui.TblOutline.GetSelection()
+			funcLine := ui.TblOutline.GetCell(idx, 0).Text
+			l, _ := strconv.Atoi(funcLine)
+			edit.GoLine(l)
+			ui.App.SetFocus(ui.EdtMain)
 			return nil
 		}
 		return event
@@ -705,7 +722,7 @@ func saveSettings() {
 	sec.NewKey("Theme", conf.ConfigGeneral.Theme)
 	sec.NewKey("GitUser", conf.ConfigGeneral.GitUser)
 	sec.NewKey("GitKey", conf.ConfigGeneral.GitKey)
-	sec.NewKey("Workspace", edit.CurrentWorkspace)
+	sec.NewKey("Workspace", conf.ConfigGeneral.Workspace)
 	sec.NewKey("ShowHidden", utils.If(conf.ConfigGeneral.ShowHidden, "True", "False"))
 	sec.NewKey("ConfirmExit", utils.If(conf.ConfigGeneral.ConfirmExit, "True", "False"))
 	sec.NewKey("CleanUpOnExit", utils.If(conf.ConfigGeneral.CleanUpOnExit, "True", "False"))

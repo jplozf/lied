@@ -26,6 +26,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -339,6 +340,20 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
+			}
+			// Get funcs for current file and populate the TblOutline
+			if count%20 == 0 {
+				ui.TblOutline.Clear()
+				var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
+				sort.Slice(funcs, func(i, j int) bool {
+					a := funcs[i]
+					b := funcs[j]
+					return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+				})
+				for i, f := range funcs {
+					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)))
+					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name))
+				}
 			}
 		})
 	}
@@ -720,7 +735,7 @@ func GoBottom() {
 	loc.Y = CurrentFile.Buffer.End().Y
 	CurrentFile.Buffer.Cursor.GotoLoc(loc)
 	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-	ui.FrmFind.SetTitle("Go to bottom")
+	ui.SetStatus("Go to bottom")
 }
 
 // ****************************************************************************
@@ -732,7 +747,19 @@ func GoTop() {
 	loc.Y = 0
 	CurrentFile.Buffer.Cursor.GotoLoc(loc)
 	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-	ui.FrmFind.SetTitle("Go to top")
+	ui.SetStatus("Go to top")
+}
+
+// ****************************************************************************
+// GoLine()
+// ****************************************************************************
+func GoLine(l int) {
+	var loc femto.Loc
+	loc.X = 0
+	loc.Y = l - 1
+	CurrentFile.Buffer.Cursor.GotoLoc(loc)
+	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+	ui.SetStatus(fmt.Sprintf("Go to line #%d", l))
 }
 
 // ****************************************************************************
@@ -1165,3 +1192,83 @@ func RecallFind(way int) {
 		ui.SetStatus("Find history is empty")
 	}
 }
+
+/*
+package main
+
+import (
+"fmt"
+"regexp"
+)
+
+func main() {
+// The regex pattern to extract function names
+// The function name is in the first capturing group
+
+regexPatternGolang := `func(?:\s+\([a-zA-Z_][a-zA-Z0-9_]*\s+\*?[a-zA-Z_][a-zA-Z0-9_]*\))?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
+regexPatternPython := `def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
+regexPatternC_CPP  := `\b[a-zA-Z_][a-zA-Z0-9_]*(?:\s*\*|\s*&)?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((?:[^)]|\([^)]*\))*\)`
+regexPatternJava   := `(?:public|private|protected|static|final|abstract|synchronized|native|strictfp|\s)*\s*<[a-zA-Z0-9_,?\s]+>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\([a-zA-Z0-9_,\s<>\[\]\.]*\)\s*(?:throws\s+[a-zA-Z_][a-zA-Z0-9_,\s]*\s*)?\{?`
+regexPatternRust   := `\bfn\s+(?:[a-zA-Z_][a-zA-Z0-9_]*::)*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[a-zA-Z0-9_,\s]+>)?\s*\((?:[^)]|\([^)]*\))*\)\s*(?:->\s*[a-zA-Z_][a-zA-Z0-9_<>,\s:]+)?\s*(?:where\s+.*?)?\s*\{?`
+regexPatternBash   := `(?:function\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)\s*\{`
+regexPatternJavaScriptNamed    := `function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
+regexPatternJavaScriptAssigned := `(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:function|\(?[\w,\s]*\)?\s*=>)`
+
+
+
+// Sample Go source code
+sampleCode :=`
+package main
+
+import "fmt"
+
+// This is a regular function
+func myFunction(arg1 string, arg2 int) (string, error) {
+fmt.Println"Hello from myFunction")
+return "result", nil
+}
+
+// This is a method with a receiver
+type MyStruct struct {
+	Namestring
+}
+
+func (s *MyStruct) MyMethod() {
+fmt.Printf"Hello from MyMethod, struct name: %s\n", s.Name)
+}
+
+// Another regular function
+func init() {
+fmt.Println"init function called")
+}
+
+func (m MyStruct) AnotherMethod(value int) int {
+return value * 2
+}
+
+func main() {
+myFunction"test", 123)
+s := MyStruct{Name:"TestStruct"}
+s.MyMethod()
+fmt.Println"Program finished")
+}
+`
+
+// Compile the regex
+re := regexp.MustCompile(regexPattern)
+
+// Find all matches. Each match is a slice of strings,
+// where the first element is the full match, and subsequent elements
+// are the capturing groups. Our function name is in the first capturing group (index 1).
+
+matches := re.FindAllStringSubmatch(sampleCode,-1)
+
+fmt.Println"Extracted Function Names:")
+for _, match := range matches {
+	if len(match) > 1 {
+		fmt.Print"-", match[1]) // match[1] contains the content of the first capturing group (the function name)
+	}
+	}
+}
+
+*/
