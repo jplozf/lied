@@ -31,6 +31,7 @@ Pay honour to whom honour is due, packages used in this project are as follows :
 [red]F6  :[white] Switch to the previous open file
 [red]F7  :[white] Switch to the next open file
 [red]F8  :[white] Access to the settings of Lied
+[red]F9  :[white] Access to the workspace menu
 [red]F10 :[white] Access to the main menu of Lied
 [red]F12 :[white] Exit
 
@@ -72,6 +73,7 @@ These panels are in order :
 ● The [red]Open Files[white] panel
 ● The [red]Find & Replace[white] panel
 ● The [red]Explorer[white] panel
+● The [red]Outline[white] panel
 These panels will be detailed later in this document.
 
 ⯈ [red]G I T   M E N U[white]
@@ -146,6 +148,9 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 [red]!bott :[white] ------------ idem ------------------
 [red]!t    :[white] Go to the top of the current file
 [red]!top  :[white] ------------ idem ---------------
+[red]!h    :[white] Insert a timestamp string at the current cursor location
+[red]!uuid :[white] Insert a random UUID at the current cursor location
+[red]!123  :[white] Go to the line number 123
 
 ⯈ [red]I N T E R N A L   F I L E S[white]
 Some files are generated and managed internally to keep the current settings and history.

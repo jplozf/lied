@@ -351,7 +351,7 @@ func UpdateStatus() {
 					return strings.ToUpper(a.name) < strings.ToUpper(b.name)
 				})
 				for i, f := range funcs {
-					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)))
+					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
 					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name))
 				}
 			}
@@ -754,12 +754,22 @@ func GoTop() {
 // GoLine()
 // ****************************************************************************
 func GoLine(l int) {
-	var loc femto.Loc
-	loc.X = 0
-	loc.Y = l - 1
-	CurrentFile.Buffer.Cursor.GotoLoc(loc)
-	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-	ui.SetStatus(fmt.Sprintf("Go to line #%d", l))
+	if l < 1 {
+		ui.SetStatus(fmt.Sprintf("Jump outside bounds"))
+		GoTop()
+	} else {
+		if l <= CurrentFile.Buffer.LinesNum() {
+			var loc femto.Loc
+			loc.X = 0
+			loc.Y = l - 1
+			CurrentFile.Buffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			ui.SetStatus(fmt.Sprintf("Go to line #%d", l))
+		} else {
+			ui.SetStatus(fmt.Sprintf("Jump too far"))
+			GoBottom()
+		}
+	}
 }
 
 // ****************************************************************************
@@ -1191,6 +1201,13 @@ func RecallFind(way int) {
 	} else {
 		ui.SetStatus("Find history is empty")
 	}
+}
+
+// ****************************************************************************
+// InsertString()
+// ****************************************************************************
+func InsertString(txt string) {
+	CurrentFile.Buffer.Insert(CurrentFile.Buffer.Cursor.Loc, txt)
 }
 
 /*

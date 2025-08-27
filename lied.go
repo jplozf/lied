@@ -41,6 +41,7 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
+	"github.com/google/uuid"
 	"github.com/rivo/tview"
 	"gopkg.in/ini.v1"
 )
@@ -1158,6 +1159,11 @@ func Xeq(c string) {
 		ui.SetStatus(fmt.Sprintf("Running [%s]", c))
 		if sCmd[0][0] == '!' {
 			xCmd := sCmd[0] + "     "
+			//
+			if l, err := strconv.Atoi(strings.TrimSpace(xCmd[1:])); err == nil {
+				edit.GoLine(l)
+				return
+			}
 			xCmd = xCmd[:5]
 			xCmd = strings.TrimSpace(xCmd)
 			switch xCmd {
@@ -1190,6 +1196,12 @@ func Xeq(c string) {
 				edit.GoBottom()
 			case "!t", "!top":
 				edit.GoTop()
+			case "!h":
+				t := time.Now()
+				edit.InsertString(t.Format("20060102-150405"))
+			case "!uuid":
+				id := uuid.New()
+				edit.InsertString(id.String())
 			default:
 				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 			}

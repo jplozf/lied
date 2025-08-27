@@ -20,6 +20,7 @@ require (
 	github.com/elastic/go-windows v1.0.2 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/go-cmd/cmd v1.4.3 // indirect
+	github.com/google/uuid v1.6.0
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/lxn/walk v0.0.0-20191128110447-55ccb3a9f5c1 // indirect
 	github.com/lxn/win v0.0.0-20191128105842-2da648fda5b4 // indirect

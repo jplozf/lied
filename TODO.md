@@ -40,6 +40,8 @@
 * Add new sub folder option
 * Lorem Ipsum generator (!lorm n)
 * Queneau Poem generator (!quen)
-* UUID generator (!uuid n)
+* ~~Insert UUID (!uuid)~~
+* ~~Insert Timestamp (!h)~~
 * Add Prefix/suffix to selected lines
 * ~~Add !b and !t commands for go bottom and go top of the current file~~
+* ~~Add !123 command to go to line 123~~

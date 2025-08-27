@@ -45,9 +45,9 @@ func GetFuncs(source string, language string) []Func {
 	case "java":
 		zeRegex = regexPatternJava
 	case "shell":
-		zeRegex = regexPatternBash
+		zeRegex = regexPatternBash // OK
 	case "rust":
-		zeRegex = regexPatternRust
+		zeRegex = regexPatternRust // OK
 	case "go":
 		zeRegex = regexPatternGolang // OK
 	case "python":
