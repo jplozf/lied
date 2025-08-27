@@ -95,6 +95,7 @@ var (
 	AFind             []string
 	IFind             int
 	quitFlowIndex     int
+	onlyOnce          bool
 )
 
 // ****************************************************************************
@@ -140,6 +141,7 @@ func SetTheme(theme string) {
 // OpenFile()
 // ****************************************************************************
 func OpenFile(fName string, rw bool) {
+	onlyOnce = false
 	if isFileAlreadyOpen(fName) {
 		SwitchOpenFile(fName)
 	} else {
@@ -353,6 +355,10 @@ func UpdateStatus() {
 				for i, f := range funcs {
 					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
 					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name))
+				}
+				if !onlyOnce {
+					ui.TblOutline.ScrollToBeginning()
+					onlyOnce = true
 				}
 			}
 		})
