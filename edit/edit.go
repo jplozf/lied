@@ -354,7 +354,8 @@ func UpdateStatus() {
 				})
 				for i, f := range funcs {
 					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
-					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name))
+					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(":"))
+					ui.TblOutline.SetCell(i, 2, tview.NewTableCell(f.name))
 				}
 				if !onlyOnce {
 					ui.TblOutline.ScrollToBeginning()
@@ -676,6 +677,7 @@ func CloseCurrentFile() {
 		}
 	}
 	if n >= 0 {
+		onlyOnce = false
 		ui.SetStatus("Closing file " + CurrentFile.FName)
 		if CurrentFile.Buffer.IsModified {
 			proposeToSaveFile(n, FLOW_CLOSE)

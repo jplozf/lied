@@ -26,7 +26,7 @@ func GetFuncs(source string, language string) []Func {
 	regexPatternGolang := `func(?:\s+\([^)]+\))?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
 	regexPatternPython := `def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
 	regexPatternC_CPP := `\b(?:(?:[a-zA-Z_][a-zA-Z0-9_]*\s*(?:\*|&)?\s+)|(?:virtual|inline|explicit|static|friend|extern)\s+)?(?:[a-zA-Z_][a-zA-Z0-9_]*::)*([a-zA-Z_~][a-zA-Z0-9_]*)\s*\([^)]*\)\s*(?:const|override|final|noexcept)?\s*\{`
-	regexPatternJava := `\b(?:public|private|protected|static|final|abstract|synchronized|native|strictfp|default)?\s*(?:<[a-zA-Z0-9_,?\s]+>\s*)?(?:[a-zA-Z_][a-zA-Z0-9_<>,[\]\.]+\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)`
+	regexPatternJava := `\b(?:public|private|protected|static|final|abstract|synchronized|native|strictfp|default)?\s*(?:<[a-zA-Z0-9_,\s]+>\s*)?(?:[a-zA-Z_][a-zA-Z0-9_<>,[\]\.]+\s+)+([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)`
 	regexPatternRust := `\bfn\s+(?:[a-zA-Z_][a-zA-Z0-9_]*::)*([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)`
 	regexPatternBash := `(?:function\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(\))?\s*\{`
 	regexPatternJavaScript := `(?:function\s+([a-zA-Z_][a-zA-Z0-9_]*)|(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:function|\(?[^)]*\)?\s*=>)|([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\))`
@@ -43,7 +43,7 @@ func GetFuncs(source string, language string) []Func {
 	case "c++", "c":
 		zeRegex = regexPatternC_CPP // OK
 	case "java":
-		zeRegex = regexPatternJava
+		zeRegex = regexPatternJava // OK
 	case "shell":
 		zeRegex = regexPatternBash // OK
 	case "rust":

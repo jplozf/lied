@@ -149,8 +149,9 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 [red]!t    :[white] Go to the top of the current file
 [red]!top  :[white] ------------ idem ---------------
 [red]!h    :[white] Insert a timestamp string at the current cursor location
+[red]!time :[white] ------------------------ idem --------------------------
 [red]!uuid :[white] Insert a random UUID at the current cursor location
-[red]!123  :[white] Go to the line number 123
+[red]!42   :[white] Go to that line number
 
 ⯈ [red]I N T E R N A L   F I L E S[white]
 Some files are generated and managed internally to keep the current settings and history.
