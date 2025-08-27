@@ -532,7 +532,7 @@ func AddLicense(l any) {
 	licenseFileName := l.(string)
 	ui.SetStatus(fmt.Sprintf("Adding license %s to the current workspace", licenseFileName))
 	sourceFileName := filepath.Join("licenses", licenseFileName)
-	destFileName := filepath.Join(edit.CurrentWorkspace, licenseFileName)
+	destFileName := filepath.Join(conf.ConfigGeneral.Workspace, licenseFileName)
 	fileContent, err := conf.LicensesFS.ReadFile(sourceFileName)
 	if err != nil {
 		ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
@@ -930,7 +930,7 @@ func setFormatDate(rc dialog.DlgButton, idx int) {
 // InputFileOpen()
 // ****************************************************************************
 func InputFileOpen(f any) {
-	startPath := edit.CurrentWorkspace
+	startPath := conf.ConfigGeneral.Workspace
 	if startPath == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
@@ -967,7 +967,7 @@ func InputRename(f any) {
 // InputWorkspaceOpen()
 // ****************************************************************************
 func InputWorkspaceOpen(f any) {
-	startPath := edit.CurrentWorkspace
+	startPath := conf.ConfigGeneral.Workspace
 	if startPath == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
@@ -1048,7 +1048,7 @@ func doOpenWorkspace(rc dialog.DlgButton, idx int) {
 		fn := DlgInputFileOpen.Value
 		ui.SetStatus("Opening Workspace " + fn)
 		edit.CloseAll()
-		edit.CurrentWorkspace = fn
+		conf.ConfigGeneral.Workspace = fn
 	}
 }
 
@@ -1122,7 +1122,7 @@ func SwitchCleanUpOnExit(dummy any) {
 func InputShell(f any) {
 	sh := ""
 	DlgInputShell = DlgInputShell.Command("Shell", // Title
-		"CWD:"+edit.CurrentWorkspace,
+		"CWD:"+conf.ConfigGeneral.Workspace,
 		sh,
 		runShell,
 		0,
@@ -1214,7 +1214,7 @@ func Xeq(c string) {
 			}
 
 			xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
-			xCmd.Dir = edit.CurrentWorkspace
+			xCmd.Dir = conf.ConfigGeneral.Workspace
 			fOut, _ := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			defer fOut.Close()
 			wOut := bufio.NewWriter(fOut)
@@ -1285,7 +1285,7 @@ func XeqOut(c string) string {
 	out := ""
 	if len(sCmd) > 0 {
 		cmd := exec.Command(sCmd[0], sCmd[1:]...)
-		cmd.Dir = edit.CurrentWorkspace
+		cmd.Dir = conf.ConfigGeneral.Workspace
 		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
 		var outb, errb bytes.Buffer
 		cmd.Stdout = &outb
@@ -1327,7 +1327,7 @@ func XeqRaw(c string) string {
 	out := ""
 	if len(sCmd) > 0 {
 		cmd := exec.Command(sCmd[0], sCmd[1:]...)
-		cmd.Dir = edit.CurrentWorkspace
+		cmd.Dir = conf.ConfigGeneral.Workspace
 		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
 		var outb, errb bytes.Buffer
 		cmd.Stdout = &outb

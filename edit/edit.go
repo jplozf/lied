@@ -81,7 +81,6 @@ var (
 	DlgSaveFileAs     *dialog.Dialog
 	currentFlow       int
 	showHidden        bool
-	CurrentWorkspace  string
 	Founds            []found
 	iFounds           int
 	currentFoundIndex int
