@@ -54,6 +54,8 @@ type editfile struct {
 	Follow              bool
 	RWBackup            bool
 	IsMemberOfWorkspace bool
+	IsBinary            bool
+	ContentBytes        []byte
 }
 
 type found struct {
@@ -145,17 +147,38 @@ func OpenFile(fName string, rw bool) {
 		SwitchOpenFile(fName)
 	} else {
 		ui.EdtMain.SetRuntimeFiles(runtime.Files)
+		// Check if the file is binary
+		if utils.IsBinaryFile(fName) {
+			content, err := ioutil.ReadFile(fName)
+			if err != nil {
+				ui.SetStatus(fmt.Sprintf("Could not read binary file %v: %v", fName, err))
+				return
+			}
+			CurrentFile.FName = fName
+			CurrentFile.IsBinary = true
+			CurrentFile.ReadWrite = false // Binary files are read-only for now
+			CurrentFile.Follow = false
+			CurrentFile.Encoding = "Binary"
+			CurrentFile.ContentBytes = content
+			OpenFiles = append(OpenFiles, CurrentFile)
+			go UpdateStatus()
+			go focusOpenFile(fName)
+			ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentFile.FName))
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+			ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
+			ui.PgsEditorContent.SwitchToPage("hexViewer")
+			displayBinaryContent()
+			return
+		}
+
 		content, err := ioutil.ReadFile(fName)
 		if err != nil {
 			ui.SetStatus(fmt.Sprintf("Could not read %v", fName))
 			ui.SetStatus(fmt.Sprintf("%v", err))
 		} else {
-			// dat, _ := os.ReadFile(fName)
 			detector := chardet.NewTextDetector()
 			result, err := detector.DetectBest(content)
 			if err == nil {
-				// fmt.Printf("Detected charset is %s", result.Charset)
-				// ui.LblScreen.SetText(result.Charset)
 				CurrentFile.Encoding = result.Charset
 			} else {
 				CurrentFile.Encoding = "Unknown"
@@ -167,6 +190,8 @@ func OpenFile(fName string, rw bool) {
 			CurrentFile.View = femto.NewView(CurrentFile.Buffer)
 			CurrentFile.ReadWrite = rw
 			CurrentFile.Follow = false
+			CurrentFile.IsBinary = false
+			CurrentFile.ContentBytes = nil // Ensure this is nil for text files
 			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			SetTheme("monokai")
 			ui.EdtMain.SetTitleAlign(tview.AlignRight)
@@ -178,6 +203,7 @@ func OpenFile(fName string, rw bool) {
 			ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
 			ui.App.SetFocus(ui.EdtMain)
+			ui.PgsEditorContent.SwitchToPage("textEditor")
 		}
 	}
 	ShowTreeDir(conf.ConfigGeneral.Workspace, showHidden)
@@ -342,25 +368,61 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
-			// Get funcs for current file and populate the TblOutline
-			if count%20 == 0 {
+
+			if CurrentFile.IsBinary {
+				ui.PgsEditorContent.SwitchToPage("hexViewer")
+				ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
+				ui.LblPercent.SetText("100%") // For binary files, assume 100% viewed
+				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
+				ui.LblScreen.SetText(CurrentFile.Encoding)
+				ui.LblCursor.SetText("N/A")
+				ui.LblReadWrite.SetText("RO")
+				ui.LblDirty.SetText("")
 				ui.TblOutline.Clear()
-				var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
-				sort.Slice(funcs, func(i, j int) bool {
-					a := funcs[i]
-					b := funcs[j]
-					return strings.ToUpper(a.name) < strings.ToUpper(b.name)
-				})
-				for i, f := range funcs {
-					ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
-					ui.TblOutline.SetCell(i, 1, tview.NewTableCell(":"))
-					ui.TblOutline.SetCell(i, 2, tview.NewTableCell(f.name))
+			} else {
+				ui.PgsEditorContent.SwitchToPage("textEditor")
+				// Get funcs for current file and populate the TblOutline
+				if count%20 == 0 {
+					ui.TblOutline.Clear()
+					var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
+					sort.Slice(funcs, func(i, j int) bool {
+						a := funcs[i]
+						b := funcs[j]
+						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+					})
+					for i, f := range funcs {
+						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
+						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(":"))
+						ui.TblOutline.SetCell(i, 2, tview.NewTableCell(f.name))
+					}
+					if !onlyOnce {
+						ui.TblOutline.ScrollToBeginning()
+						onlyOnce = true
+					}
 				}
-				if !onlyOnce {
-					ui.TblOutline.ScrollToBeginning()
-					onlyOnce = true
+				// Original text file status updates
+				if CurrentFile.Buffer.Modified() {
+					ui.LblDirty.SetText("*modified*")
+				} else {
+					ui.LblDirty.SetText("")
 				}
+				x := CurrentFile.Buffer.Cursor.X + 1
+				y := CurrentFile.Buffer.Cursor.Y + 1
+				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
+				ui.LblScreen.SetText(CurrentFile.Encoding)
+				ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+				if CurrentFile.ReadWrite {
+					ui.LblReadWrite.SetText("RW")
+				} else {
+					ui.LblReadWrite.SetText("RO")
+				}
+				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
+				ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			}
+			CurrentFile = UpdateGITInfos(CurrentFile)
+			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
+			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
+			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
 		})
 	}
 }
@@ -1217,82 +1279,13 @@ func InsertString(txt string) {
 	CurrentFile.Buffer.Insert(CurrentFile.Buffer.Cursor.Loc, txt)
 }
 
-/*
-package main
-
-import (
-"fmt"
-"regexp"
-)
-
-func main() {
-// The regex pattern to extract function names
-// The function name is in the first capturing group
-
-regexPatternGolang := `func(?:\s+\([a-zA-Z_][a-zA-Z0-9_]*\s+\*?[a-zA-Z_][a-zA-Z0-9_]*\))?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
-regexPatternPython := `def\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
-regexPatternC_CPP  := `\b[a-zA-Z_][a-zA-Z0-9_]*(?:\s*\*|\s*&)?\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\((?:[^)]|\([^)]*\))*\)`
-regexPatternJava   := `(?:public|private|protected|static|final|abstract|synchronized|native|strictfp|\s)*\s*<[a-zA-Z0-9_,?\s]+>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\([a-zA-Z0-9_,\s<>\[\]\.]*\)\s*(?:throws\s+[a-zA-Z_][a-zA-Z0-9_,\s]*\s*)?\{?`
-regexPatternRust   := `\bfn\s+(?:[a-zA-Z_][a-zA-Z0-9_]*::)*([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:<[a-zA-Z0-9_,\s]+>)?\s*\((?:[^)]|\([^)]*\))*\)\s*(?:->\s*[a-zA-Z_][a-zA-Z0-9_<>,\s:]+)?\s*(?:where\s+.*?)?\s*\{?`
-regexPatternBash   := `(?:function\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*\)\s*\{`
-regexPatternJavaScriptNamed    := `function\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`
-regexPatternJavaScriptAssigned := `(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:function|\(?[\w,\s]*\)?\s*=>)`
-
-
-
-// Sample Go source code
-sampleCode :=`
-package main
-
-import "fmt"
-
-// This is a regular function
-func myFunction(arg1 string, arg2 int) (string, error) {
-fmt.Println"Hello from myFunction")
-return "result", nil
+// ****************************************************************************
+// displayBinaryContent()
+// ****************************************************************************
+func displayBinaryContent() {
+	hexStr, asciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
+	ui.HexView.SetText(hexStr)
+	ui.AsciiView.SetText(asciiStr)
+	ui.HexView.ScrollToBeginning()
+	ui.AsciiView.ScrollToBeginning()
 }
-
-// This is a method with a receiver
-type MyStruct struct {
-	Namestring
-}
-
-func (s *MyStruct) MyMethod() {
-fmt.Printf"Hello from MyMethod, struct name: %s\n", s.Name)
-}
-
-// Another regular function
-func init() {
-fmt.Println"init function called")
-}
-
-func (m MyStruct) AnotherMethod(value int) int {
-return value * 2
-}
-
-func main() {
-myFunction"test", 123)
-s := MyStruct{Name:"TestStruct"}
-s.MyMethod()
-fmt.Println"Program finished")
-}
-`
-
-// Compile the regex
-re := regexp.MustCompile(regexPattern)
-
-// Find all matches. Each match is a slice of strings,
-// where the first element is the full match, and subsequent elements
-// are the capturing groups. Our function name is in the first capturing group (index 1).
-
-matches := re.FindAllStringSubmatch(sampleCode,-1)
-
-fmt.Println"Extracted Function Names:")
-for _, match := range matches {
-	if len(match) > 1 {
-		fmt.Print"-", match[1]) // match[1] contains the content of the first capturing group (the function name)
-	}
-	}
-}
-
-*/

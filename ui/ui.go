@@ -109,6 +109,10 @@ var (
 	ChkToggleReplace *tview.Checkbox
 	TxtReplace       *tview.InputField
 	TblOutline       *tview.Table
+	HexView          *tview.TextView
+	AsciiView        *tview.TextView
+	FlxHexViewer     *tview.Flex
+	PgsEditorContent *tview.Pages
 )
 
 // ****************************************************************************
@@ -247,6 +251,70 @@ func SetUI(fQuit Fn, hostname string) {
 	EdtMain = femto.NewView(buffer)
 	EdtMain.SetBorder(true)
 
+	HexView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
+	HexView.SetBorder(true).SetTitle("Hexadecimal")
+	HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		offset, _ := HexView.GetScrollOffset()
+		_, _, _, height := HexView.GetInnerRect()
+
+		switch event.Key() {
+		case tcell.KeyUp:
+			HexView.ScrollTo(offset-1, 0)
+		case tcell.KeyDown:
+			HexView.ScrollTo(offset+1, 0)
+		case tcell.KeyPgUp:
+			HexView.ScrollTo(offset-height, 0)
+		case tcell.KeyPgDn:
+			HexView.ScrollTo(offset+height, 0)
+		case tcell.KeyHome:
+			HexView.ScrollToBeginning()
+		case tcell.KeyEnd:
+			HexView.ScrollToEnd()
+		default:
+			return event // Not a scroll event, pass it on
+		}
+		// Synchronize AsciiView to HexView's scroll position
+		offset, _ = HexView.GetScrollOffset()
+		AsciiView.ScrollTo(offset, 0)
+		return nil // Consume the event as we've handled the scrolling
+	})
+
+	AsciiView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
+	AsciiView.SetBorder(true).SetTitle("ASCII")
+	AsciiView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		offset, _ := AsciiView.GetScrollOffset()
+		_, _, _, height := AsciiView.GetInnerRect()
+
+		switch event.Key() {
+		case tcell.KeyUp:
+			AsciiView.ScrollTo(offset-1, 0)
+		case tcell.KeyDown:
+			AsciiView.ScrollTo(offset+1, 0)
+		case tcell.KeyPgUp:
+			AsciiView.ScrollTo(offset-height, 0)
+		case tcell.KeyPgDn:
+			AsciiView.ScrollTo(offset+height, 0)
+		case tcell.KeyHome:
+			AsciiView.ScrollToBeginning()
+		case tcell.KeyEnd:
+			AsciiView.ScrollToEnd()
+		default:
+			return event // Not a scroll event, pass it on
+		}
+		// Synchronize HexView to AsciiView's scroll position
+		offset, _ = AsciiView.GetScrollOffset()
+		HexView.ScrollTo(offset, 0)
+		return nil // Consume the event as we've handled the scrolling
+	})
+
+	FlxHexViewer = tview.NewFlex().
+		AddItem(HexView, 0, 2, false).
+		AddItem(AsciiView, 0, 1, false)
+
+	PgsEditorContent = tview.NewPages().
+		AddPage("textEditor", EdtMain, true, true).
+		AddPage("hexViewer", FlxHexViewer, true, false) // Initially hidden
+
 	TxtCurrentWorkspace = tview.NewTextView()
 	TxtCurrentWorkspace.SetBorder(true)
 	TxtCurrentWorkspace.SetDynamicColors(true)
@@ -334,7 +402,7 @@ func SetUI(fQuit Fn, hostname string) {
 				AddItem(tview.NewFlex().
 					AddItem(TxtCurrentWorkspace, 0, 2, false).
 					AddItem(TxtCurrentEditName, 0, 1, false), 3, 0, false).
-				AddItem(EdtMain, 0, 1, true), 0, 2, true).
+				AddItem(PgsEditorContent, 0, 1, true), 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
 				AddItem(FrmFind, 10, 0, false).

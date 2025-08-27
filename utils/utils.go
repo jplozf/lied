@@ -95,10 +95,83 @@ func IsTextFile(fName string) bool {
 // ****************************************************************************
 // IsTextFile2()
 // ****************************************************************************
-func IsTextFile2(fName string) bool {
-	// This method reads whole file, so it can be slower on big files, but more accurate
-	b, _ := os.ReadFile(fName)
-	return (utf8.ValidString(string(b)))
+// ****************************************************************************
+// IsBinaryFile()
+// ****************************************************************************
+func IsBinaryFile(filePath string) bool {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return true // Assume binary if we can't open it
+	}
+	defer file.Close()
+
+	// Read the first 1024 bytes
+	buffer := make([]byte, 1024)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return true // Assume binary if there's an error reading
+	}
+
+	// Check for null bytes or a high percentage of non-printable characters
+	nonPrintableCount := 0
+	for i := 0; i < n; i++ {
+		if buffer[i] == 0 {
+			return true // Contains null byte, definitely binary
+		}
+		if !unicode.IsPrint(rune(buffer[i])) && !unicode.IsSpace(rune(buffer[i])) {
+			nonPrintableCount++
+		}
+	}
+
+	// If more than 10% of characters are non-printable (excluding whitespace), consider it binary
+	if n > 0 && float64(nonPrintableCount)/float64(n) > 0.10 {
+		return true
+	}
+
+	return false
+}
+
+// ****************************************************************************
+// BytesToHexAndASCII()
+// ****************************************************************************
+func BytesToHexAndASCII(data []byte) (string, string) {
+	hexOutput := new(strings.Builder)
+	asciiOutput := new(strings.Builder)
+
+	bytesPerLine := 16
+
+	for i := 0; i < len(data); i += bytesPerLine {
+		// Offset
+		fmt.Fprintf(hexOutput, "%08X   ", i)
+		fmt.Fprintf(asciiOutput, "%08X   ", i)
+
+		lineBytes := data[i:If(i+bytesPerLine > len(data), len(data), i+bytesPerLine)]
+
+		// Hexadecimal representation
+		for j, b := range lineBytes {
+			fmt.Fprintf(hexOutput, "%02X", b)
+			if (j+1)%2 == 0 {
+				hexOutput.WriteString(" ")
+			}
+		}
+		// Pad with spaces if the line is shorter than bytesPerLine
+		if len(lineBytes) < bytesPerLine {
+			hexOutput.WriteString(strings.Repeat("   ", bytesPerLine-len(lineBytes)))
+		}
+		hexOutput.WriteString(" ")
+
+		// ASCII representation
+		for _, b := range lineBytes {
+			if unicode.IsPrint(rune(b)) {
+				asciiOutput.WriteRune(rune(b))
+			} else {
+				asciiOutput.WriteRune('.') // Replace non-printable with a dot
+			}
+		}
+		hexOutput.WriteString("\n")
+		asciiOutput.WriteString("\n")
+	}
+	return hexOutput.String(), asciiOutput.String()
 }
 
 // ****************************************************************************
