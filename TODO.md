@@ -40,6 +40,7 @@
 * Add new sub folder option
 * Lorem Ipsum generator (!lorm n)
 * Queneau Poem generator (!quen)
+* base64
 * ~~Insert UUID (!uuid)~~
 * ~~Insert Timestamp (!h)~~
 * Add Prefix/suffix to selected lines

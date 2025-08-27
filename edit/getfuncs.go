@@ -30,6 +30,7 @@ func GetFuncs(source string, language string) []Func {
 	regexPatternRust := `\bfn\s+(?:[a-zA-Z_][a-zA-Z0-9_]*::)*([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\)`
 	regexPatternBash := `(?:function\s+)?([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\(\))?\s*\{`
 	regexPatternJavaScript := `(?:function\s+([a-zA-Z_][a-zA-Z0-9_]*)|(?:const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*(?:function|\(?[^)]*\)?\s*=>)|([a-zA-Z_][a-zA-Z0-9_]*)\s*\([^)]*\))`
+	regexPatternFORTH := `:\s+([a-zA-Z_][a-zA-Z0-9_\-]*)\b`
 	var zeRegex string
 
 	cppKeywords := map[string]bool{
@@ -54,6 +55,8 @@ func GetFuncs(source string, language string) []Func {
 		zeRegex = regexPatternPython // OK
 	case "javascript", "js", "typescript", "ts":
 		zeRegex = regexPatternJavaScript
+	case "forth":
+		zeRegex = regexPatternFORTH
 	}
 	// Compile the regex
 	re := regexp.MustCompile(zeRegex)
