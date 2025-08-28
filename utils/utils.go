@@ -142,8 +142,8 @@ func BytesToHexAndASCII(data []byte) (string, string) {
 
 	for i := 0; i < len(data); i += bytesPerLine {
 		// Offset
-		fmt.Fprintf(hexOutput, "%08X   ", i)
-		fmt.Fprintf(asciiOutput, "%08X   ", i)
+		fmt.Fprintf(hexOutput, "[yellow]%08X[white]   ", i)
+		fmt.Fprintf(asciiOutput, "[yellow]%08X[white]   ", i)
 
 		lineBytes := data[i:If(i+bytesPerLine > len(data), len(data), i+bytesPerLine)]
 
