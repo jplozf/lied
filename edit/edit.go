@@ -1286,4 +1286,17 @@ func displayBinaryContent() {
 	hexAndAsciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
 	ui.HexView.SetText(hexAndAsciiStr)
 	ui.HexView.ScrollToBeginning()
+
+	// Update LblCursor with initial byte offset (0)
+	ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", 0))
+
+	// Update LblPercent with initial scroll percentage
+	_, _, _, height := ui.HexView.GetInnerRect()
+	hexContent := ui.HexView.GetText(false)
+	totalLines := strings.Count(hexContent, "\n")
+	if totalLines > height {
+		ui.LblPercent.SetText("0%") // At the beginning, 0% scrolled
+	} else {
+		ui.LblPercent.SetText("100%") // All content visible
+	}
 }
