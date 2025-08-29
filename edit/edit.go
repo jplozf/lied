@@ -372,10 +372,10 @@ func UpdateStatus() {
 			if CurrentFile.IsBinary {
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
-				ui.LblPercent.SetText("100%") // For binary files, assume 100% viewed
+				
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
 				ui.LblScreen.SetText(CurrentFile.Encoding)
-				ui.LblCursor.SetText("N/A")
+				
 				ui.LblReadWrite.SetText("RO")
 				ui.LblDirty.SetText("")
 				ui.TblOutline.Clear()
