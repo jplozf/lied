@@ -1283,9 +1283,7 @@ func InsertString(txt string) {
 // displayBinaryContent()
 // ****************************************************************************
 func displayBinaryContent() {
-	hexStr, asciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
-	ui.HexView.SetText(hexStr)
-	ui.AsciiView.SetText(asciiStr)
+	hexAndAsciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
+	ui.HexView.SetText(hexAndAsciiStr)
 	ui.HexView.ScrollToBeginning()
-	ui.AsciiView.ScrollToBeginning()
 }

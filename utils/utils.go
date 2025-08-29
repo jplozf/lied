@@ -1,6 +1,6 @@
 // ****************************************************************************
 //
-//	 _____ _____ _____ _____
+//	 _____ _____ _____ _____ 
 //	|   __|     |   __|  |  |
 //	|  |  |  |  |__   |     |
 //	|_____|_____|_____|__|__|
@@ -134,44 +134,41 @@ func IsBinaryFile(filePath string) bool {
 // ****************************************************************************
 // BytesToHexAndASCII()
 // ****************************************************************************
-func BytesToHexAndASCII(data []byte) (string, string) {
-	hexOutput := new(strings.Builder)
-	asciiOutput := new(strings.Builder)
+func BytesToHexAndASCII(data []byte) string {
+	var output strings.Builder
 
 	bytesPerLine := 16
 
 	for i := 0; i < len(data); i += bytesPerLine {
 		// Offset
-		fmt.Fprintf(hexOutput, "[yellow]%08X[white]   ", i)
-		fmt.Fprintf(asciiOutput, "[yellow]%08X[white]   ", i)
+		fmt.Fprintf(&output, "[yellow]%08X[white]   ", i)
 
 		lineBytes := data[i:If(i+bytesPerLine > len(data), len(data), i+bytesPerLine)]
 
 		// Hexadecimal representation
 		for j, b := range lineBytes {
-			fmt.Fprintf(hexOutput, "%02X", b)
+			fmt.Fprintf(&output, "%02X", b)
 			if (j+1)%2 == 0 {
-				hexOutput.WriteString(" ")
+				output.WriteString(" ")
 			}
 		}
 		// Pad with spaces if the line is shorter than bytesPerLine
 		if len(lineBytes) < bytesPerLine {
-			hexOutput.WriteString(strings.Repeat("   ", bytesPerLine-len(lineBytes)))
+			output.WriteString(strings.Repeat("   ", bytesPerLine-len(lineBytes)))
 		}
-		hexOutput.WriteString(" ")
+		output.WriteString(" ")
 
 		// ASCII representation
 		for _, b := range lineBytes {
 			if unicode.IsPrint(rune(b)) {
-				asciiOutput.WriteRune(rune(b))
+				output.WriteRune(rune(b))
 			} else {
-				asciiOutput.WriteRune('.') // Replace non-printable with a dot
+				output.WriteRune('.') // Replace non-printable with a dot
 			}
 		}
-		hexOutput.WriteString("\n")
-		asciiOutput.WriteString("\n")
+		output.WriteString("\n")
 	}
-	return hexOutput.String(), asciiOutput.String()
+	return output.String()
 }
 
 // ****************************************************************************
@@ -248,10 +245,10 @@ func getCPUSample() (idle, total uint64) {
 				if err != nil {
 					fmt.Println("Error: ", i, fields[i], err)
 				}
-				total += val // tally up all the numbers to get total ticks
-				if i == 4 {  // idle is the 5th field in the cpu line
-					idle = val
-				}
+			total += val // tally up all the numbers to get total ticks
+			if i == 4 {  // idle is the 5th field in the cpu line
+				idle = val
+			}
 			}
 			return
 		}

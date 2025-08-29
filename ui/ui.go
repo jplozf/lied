@@ -110,7 +110,6 @@ var (
 	TxtReplace       *tview.InputField
 	TblOutline       *tview.Table
 	HexView          *tview.TextView
-	AsciiView        *tview.TextView
 	FlxHexViewer     *tview.Flex
 	PgsEditorContent *tview.Pages
 )
@@ -273,43 +272,29 @@ func SetUI(fQuit Fn, hostname string) {
 		default:
 			return event // Not a scroll event, pass it on
 		}
-		// Synchronize AsciiView to HexView's scroll position
-		offset, _ = HexView.GetScrollOffset()
-		AsciiView.ScrollTo(offset, 0)
-		return nil // Consume the event as we've handled the scrolling
-	})
 
-	AsciiView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
-	AsciiView.SetBorder(true).SetTitle("ASCII")
-	AsciiView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		offset, _ := AsciiView.GetScrollOffset()
-		_, _, _, height := AsciiView.GetInnerRect()
+		// Update LblCursor with byte offset
+		byteOffset := offset * 16 // 16 bytes per line
+		LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
 
-		switch event.Key() {
-		case tcell.KeyUp:
-			AsciiView.ScrollTo(offset-1, 0)
-		case tcell.KeyDown:
-			AsciiView.ScrollTo(offset+1, 0)
-		case tcell.KeyPgUp:
-			AsciiView.ScrollTo(offset-height, 0)
-		case tcell.KeyPgDn:
-			AsciiView.ScrollTo(offset+height, 0)
-		case tcell.KeyHome:
-			AsciiView.ScrollToBeginning()
-		case tcell.KeyEnd:
-			AsciiView.ScrollToEnd()
-		default:
-			return event // Not a scroll event, pass it on
+		// Update LblPercent with scroll percentage
+		hexContent := HexView.GetText(false)
+		totalLines := strings.Count(hexContent, "\n")
+		if totalLines > height {
+			percent := int((float64(offset) / float64(totalLines-height)) * 100.0)
+			if percent > 100 {
+				percent = 100
+			}
+			LblPercent.SetText(fmt.Sprintf("%d%%", percent))
+		} else {
+			LblPercent.SetText("100%")
 		}
-		// Synchronize HexView to AsciiView's scroll position
-		offset, _ = AsciiView.GetScrollOffset()
-		HexView.ScrollTo(offset, 0)
+
 		return nil // Consume the event as we've handled the scrolling
 	})
 
 	FlxHexViewer = tview.NewFlex().
-		AddItem(HexView, 0, 2, false).
-		AddItem(AsciiView, 0, 1, false)
+		AddItem(HexView, 0, 1, false)
 
 	PgsEditorContent = tview.NewPages().
 		AddPage("textEditor", EdtMain, true, true).
