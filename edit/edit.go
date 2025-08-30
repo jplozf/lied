@@ -80,6 +80,7 @@ const (
 var (
 	OpenFiles         []editfile
 	CurrentFile       editfile
+	CurrentView       tview.Primitive
 	DlgSaveFile       *dialog.Dialog
 	DlgSaveFileAs     *dialog.Dialog
 	currentFlow       int
@@ -480,14 +481,16 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.Follow = e.Follow
 			CurrentFile.IsBinary = e.IsBinary
 			if !CurrentFile.IsBinary {
+				CurrentView = ui.EdtMain
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 				ui.PgsEditorContent.SwitchToPage("textEditor")
-				ui.App.SetFocus(ui.EdtMain)
+				ui.App.SetFocus(CurrentView)
 			} else {
+				CurrentView = ui.HexView
 				CurrentFile.HexContentDirty = true // Mark for refresh
 				displayBinaryContent()
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
-				ui.App.SetFocus(ui.HexView)
+				ui.App.SetFocus(CurrentView)
 				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
 			}
 
