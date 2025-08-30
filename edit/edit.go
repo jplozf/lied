@@ -361,7 +361,6 @@ func UpdateStatus() {
 			}
 
 			if CurrentFile.IsBinary {
-				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
 				ui.LblScreen.SetText(CurrentFile.Encoding)
@@ -369,7 +368,6 @@ func UpdateStatus() {
 				ui.LblDirty.SetText("")
 				ui.TblOutline.Clear()
 			} else {
-				ui.PgsEditorContent.SwitchToPage("edit")
 				x := CurrentFile.Buffer.Cursor.X + 1
 				y := CurrentFile.Buffer.Cursor.Y + 1
 				ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
@@ -380,7 +378,6 @@ func UpdateStatus() {
 					ui.LblReadWrite.SetText("RO")
 				}
 
-				ui.PgsEditorContent.SwitchToPage("textEditor")
 				// Get funcs for current file and populate the TblOutline
 				if count%20 == 0 {
 					ui.TblOutline.Clear()
@@ -475,10 +472,15 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.GitBranch = e.GitBranch
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
+			CurrentFile.IsBinary = e.IsBinary
 			if !CurrentFile.IsBinary {
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+				ui.PgsEditorContent.SwitchToPage("textEditor")
+				ui.App.SetFocus(ui.EdtMain)
 			} else {
 				displayBinaryContent()
+				ui.PgsEditorContent.SwitchToPage("hexViewer")
+				ui.App.SetFocus(ui.HexView)
 			}
 
 			// FocusOnPath(fName)
