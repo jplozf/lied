@@ -1204,6 +1204,8 @@ func Xeq(c string) {
 			case "!uuid":
 				id := uuid.New()
 				edit.InsertString(id.String())
+			case "!lore":
+				edit.InsertString(utils.GenerateLoremIpsum(1, 3, 5, 8, 15))
 			default:
 				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 			}
@@ -2052,6 +2054,5 @@ func ArchiveLogs() {
 				os.Rename(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".log"), filepath.Join(appDir, conf.FILE_LOG))
 			}
 		}
-
 	}
 }
