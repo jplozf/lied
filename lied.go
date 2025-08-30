@@ -419,15 +419,14 @@ func main() {
 	// Check for new version online
 	go checkNewVersion()
 
+	var backView tview.Primitive
 	if edit.CurrentFile.IsBinary {
-		if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.HexView).EnableMouse(true).Run(); err != nil {
-			panic(err)
-		}
-
+		backView = ui.HexView
 	} else {
-		if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.EdtMain).EnableMouse(true).Run(); err != nil {
-			panic(err)
-		}
+		backView = ui.EdtMain
+	}
+	if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(backView).EnableMouse(true).Run(); err != nil {
+		panic(err)
 	}
 }
 
@@ -1853,7 +1852,13 @@ func checkNewVersion() {
 func ShowNewVersionPopup(localHash, remoteHash string) {
 	msg := fmt.Sprintf("A new version of Lied is available online!\n\nYour version  : %s\nLatest online : %s\n\nPlease update your application.", localHash, remoteHash)
 
-	MsgBox = MsgBox.OK("New Version Available", msg, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	var backView tview.Primitive
+	if edit.CurrentFile.IsBinary {
+		backView = ui.HexView
+	} else {
+		backView = ui.EdtMain
+	}
+	MsgBox = MsgBox.OK("New Version Available", msg, nil, 0, ui.GetCurrentScreen(), backView)
 	ui.PgsApp.AddPage("msgNewVersion", MsgBox.Popup(), true, false)
 	ui.PgsApp.ShowPage("msgNewVersion")
 }
