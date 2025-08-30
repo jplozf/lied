@@ -125,6 +125,12 @@ Theses placeholders, prefixed by a [red]%[white] char and case sensitive, are as
 ● [red]%s :[white] OS path separator
 
 ⯈ [red]P A N E L S[white]
+The main panels displayed are :
+● The [red]Editor[white] panel
+● The [red]Open Files[white] panel
+● The [red]Find & Replace[white] panel
+● The [red]Explorer[white] panel
+● The [red]Outline[white] panel
 
 ⯈ [red]S P E C I A L   C O M M A N D S[white]
 These special commands are available when entering command in the Shell input box (F4).
@@ -151,6 +157,7 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 [red]!h    :[white] Insert a timestamp string at the current cursor location
 [red]!time :[white] ------------------------ idem --------------------------
 [red]!uuid :[white] Insert a random UUID at the current cursor location
+[red]!lore :[white] Insert a random Lorem Ipsum text at the current cursor location
 [red]!42   :[white] Go to that line number
 
 ⯈ [red]I N T E R N A L   F I L E S[white]

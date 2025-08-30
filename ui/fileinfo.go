@@ -32,15 +32,14 @@ func DisplayExifInfo(filePath string) {
 		return
 	}
 
-	// Set table headers
-	TblOutline.SetCell(0, 0, tview.NewTableCell("Property").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
-	TblOutline.SetCell(0, 1, tview.NewTableCell("Value").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
-
 	// Populate the table with EXIF data
-	for i, entry := range exifData {
-		row := i + 1 // Start from row 1 for data after headers
-		TblOutline.SetCell(row, 0, tview.NewTableCell(entry.Key).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-		TblOutline.SetCell(row, 1, tview.NewTableCell(entry.Value).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+	var row = 0
+	for _, entry := range exifData {
+		if !strings.HasPrefix(entry.Key, "Exif") {
+			TblOutline.SetCell(row, 0, tview.NewTableCell(entry.Key).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+			TblOutline.SetCell(row, 1, tview.NewTableCell(entry.Value).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+			row++
+		}
 	}
 
 	SetStatus(fmt.Sprintf("Displayed EXIF information for %s", strings.Split(filePath, "/")[len(strings.Split(filePath, "/"))-1]))

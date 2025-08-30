@@ -38,7 +38,7 @@
 * ~~Rotate / clean log file~~
 * ~~Generate System Info report~~
 * Add new sub folder option
-* Lorem Ipsum generator (!lorm n)
+* ~~Lorem Ipsum generator (!lorm n)~~
 * Queneau Poem generator (!quen)
 * base64
 * hexadecimal view

@@ -284,7 +284,11 @@ func main() {
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenFile(fName)
 			edit.SetFocusOnPath(fName)
-			ui.App.SetFocus(ui.EdtMain)
+			if edit.CurrentFile.IsBinary {
+				ui.App.SetFocus(ui.HexView)
+			} else {
+				ui.App.SetFocus(ui.EdtMain)
+			}
 			return nil
 		case tcell.KeyCtrlF:
 			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
@@ -344,14 +348,39 @@ func main() {
 	ui.TblOutline.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			ui.App.SetFocus(ui.EdtMain)
+			if edit.CurrentFile.IsBinary {
+				ui.App.SetFocus(ui.HexView)
+			} else {
+				ui.App.SetFocus(ui.EdtMain)
+			}
 			return nil
 		case tcell.KeyEnter:
-			idx, _ := ui.TblOutline.GetSelection()
-			funcLine := ui.TblOutline.GetCell(idx, 0).Text
-			l, _ := strconv.Atoi(funcLine)
-			edit.GoLine(l)
-			ui.App.SetFocus(ui.EdtMain)
+			if !edit.CurrentFile.IsBinary {
+				idx, _ := ui.TblOutline.GetSelection()
+				funcLine := ui.TblOutline.GetCell(idx, 0).Text
+				l, _ := strconv.Atoi(funcLine)
+				edit.GoLine(l)
+				ui.App.SetFocus(ui.EdtMain)
+			}
+			return nil
+		}
+		return event
+	})
+
+	// HexView keyboard's events manager
+	ui.HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyCtrlN:
+			edit.NewFile(conf.ConfigGeneral.Workspace)
+			return nil
+		case tcell.KeyCtrlO:
+			InputFileOpen(conf.ConfigGeneral.Workspace)
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
 		}
 		return event
@@ -390,10 +419,16 @@ func main() {
 	// Check for new version online
 	go checkNewVersion()
 
-	if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.EdtMain).EnableMouse(true).Run(); err != nil {
-		panic(err)
+	if edit.CurrentFile.IsBinary {
+		if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.HexView).EnableMouse(true).Run(); err != nil {
+			panic(err)
+		}
+
+	} else {
+		if err := ui.App.SetRoot(ui.PgsApp, true).SetFocus(ui.EdtMain).EnableMouse(true).Run(); err != nil {
+			panic(err)
+		}
 	}
-	// ui.App.SetFocus(ui.EdtMain)
 }
 
 // ****************************************************************************

@@ -123,7 +123,11 @@ func SwitchToEditor(fName string) {
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
 	OpenFile(fName, true)
-	ui.App.SetFocus(ui.EdtMain)
+	if CurrentFile.IsBinary {
+		ui.App.SetFocus(ui.HexView)
+	} else {
+		ui.App.SetFocus(ui.EdtMain)
+	}
 }
 
 // ****************************************************************************
@@ -369,10 +373,6 @@ func UpdateStatus() {
 				ui.LblScreen.SetText(CurrentFile.Encoding)
 				ui.LblReadWrite.SetText("RO")
 				ui.LblDirty.SetText("")
-				if CurrentFile.HexContentDirty {
-					displayBinaryContent()
-					CurrentFile.HexContentDirty = false
-				}
 			} else {
 				x := CurrentFile.Buffer.Cursor.X + 1
 				y := CurrentFile.Buffer.Cursor.Y + 1
@@ -393,9 +393,6 @@ func UpdateStatus() {
 						b := funcs[j]
 						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
 					})
-					// Set table headers
-					ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
-					ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
 
 					for i, f := range funcs {
 						ui.TblOutline.SetCell(i+1, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
