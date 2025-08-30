@@ -327,19 +327,11 @@ func UpdateStatus() {
 				// status = " "
 				ui.LblDirty.SetText("")
 			}
-			x := CurrentFile.Buffer.Cursor.X + 1
-			y := CurrentFile.Buffer.Cursor.Y + 1
 			CurrentFile = UpdateGITInfos(CurrentFile)
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
 			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
 			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
 			ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
-			ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
-			if CurrentFile.ReadWrite {
-				ui.LblReadWrite.SetText("RW")
-			} else {
-				ui.LblReadWrite.SetText("RO")
-			}
 			if CurrentFile.Follow {
 				_, _, _, lines := ui.EdtMain.GetInnerRect()
 				ui.LblReadWrite.SetText("FL")
@@ -350,7 +342,6 @@ func UpdateStatus() {
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 			}
 			ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
-			ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			ui.TblOpenFiles.Clear()
 			count++
 			for i, f := range OpenFiles {
@@ -372,14 +363,23 @@ func UpdateStatus() {
 			if CurrentFile.IsBinary {
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
-				
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
 				ui.LblScreen.SetText(CurrentFile.Encoding)
-				
 				ui.LblReadWrite.SetText("RO")
 				ui.LblDirty.SetText("")
 				ui.TblOutline.Clear()
 			} else {
+				ui.PgsEditorContent.SwitchToPage("edit")
+				x := CurrentFile.Buffer.Cursor.X + 1
+				y := CurrentFile.Buffer.Cursor.Y + 1
+				ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+				ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
+				if CurrentFile.ReadWrite {
+					ui.LblReadWrite.SetText("RW")
+				} else {
+					ui.LblReadWrite.SetText("RO")
+				}
+
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 				// Get funcs for current file and populate the TblOutline
 				if count%20 == 0 {
@@ -406,11 +406,8 @@ func UpdateStatus() {
 				} else {
 					ui.LblDirty.SetText("")
 				}
-				x := CurrentFile.Buffer.Cursor.X + 1
-				y := CurrentFile.Buffer.Cursor.Y + 1
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
 				ui.LblScreen.SetText(CurrentFile.Encoding)
-				ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
 				if CurrentFile.ReadWrite {
 					ui.LblReadWrite.SetText("RW")
 				} else {
@@ -478,7 +475,12 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.GitBranch = e.GitBranch
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			if !CurrentFile.IsBinary {
+				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			} else {
+				displayBinaryContent()
+			}
+
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
 			for idx, file := range OpenFiles {
@@ -870,12 +872,12 @@ func ShowTreeDir(rootDir string, sh bool) {
 						if file.IsDir() {
 							node.SetColor(tcell.ColorGreen)
 						}
-						target.AddChild(node)
+					target.AddChild(node)
 					}
 				} else {
 					mtype := utils.GetMimeType(path)
 					if mtype[:4] == "text" {
-						OpenFile(path)
+						OpenFile(path, true)
 						ui.SetStatus(fmt.Sprintf("Opening %s", path))
 					} else {
 						ui.SetStatus(fmt.Sprintf("%s is not a text file", path))
