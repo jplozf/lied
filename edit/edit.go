@@ -56,6 +56,7 @@ type editfile struct {
 	IsMemberOfWorkspace bool
 	IsBinary            bool
 	ContentBytes        []byte
+	HexContentDirty     bool
 }
 
 type found struct {
@@ -160,6 +161,7 @@ func OpenFile(fName string, rw bool) {
 			CurrentFile.Follow = false
 			CurrentFile.Encoding = "Binary"
 			CurrentFile.ContentBytes = content
+			CurrentFile.HexContentDirty = true // Mark for refresh
 			OpenFiles = append(OpenFiles, CurrentFile)
 			go UpdateStatus()
 			go focusOpenFile(fName)
@@ -168,6 +170,7 @@ func OpenFile(fName string, rw bool) {
 			ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 			ui.PgsEditorContent.SwitchToPage("hexViewer")
 			displayBinaryContent()
+			ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
 			return
 		}
 
@@ -366,7 +369,10 @@ func UpdateStatus() {
 				ui.LblScreen.SetText(CurrentFile.Encoding)
 				ui.LblReadWrite.SetText("RO")
 				ui.LblDirty.SetText("")
-				ui.TblOutline.Clear()
+				if CurrentFile.HexContentDirty {
+					displayBinaryContent()
+					CurrentFile.HexContentDirty = false
+				}
 			} else {
 				x := CurrentFile.Buffer.Cursor.X + 1
 				y := CurrentFile.Buffer.Cursor.Y + 1
@@ -387,10 +393,13 @@ func UpdateStatus() {
 						b := funcs[j]
 						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
 					})
+					// Set table headers
+					ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
+					ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorYellow).SetAlign(tview.AlignLeft).SetSelectable(false))
+
 					for i, f := range funcs {
-						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetAlign(tview.AlignRight))
-						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(":"))
-						ui.TblOutline.SetCell(i, 2, tview.NewTableCell(f.name))
+						ui.TblOutline.SetCell(i+1, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+						ui.TblOutline.SetCell(i+1, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
 					}
 					if !onlyOnce {
 						ui.TblOutline.ScrollToBeginning()
@@ -478,9 +487,11 @@ func SwitchOpenFile(fName string) {
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 				ui.App.SetFocus(ui.EdtMain)
 			} else {
+				CurrentFile.HexContentDirty = true // Mark for refresh
 				displayBinaryContent()
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				ui.App.SetFocus(ui.HexView)
+				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
 			}
 
 			// FocusOnPath(fName)
