@@ -382,6 +382,13 @@ func main() {
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
+		case tcell.KeyCtrlF:
+			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
+			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
+			ui.FrmFind.GetButton(2).SetDisabled(true) // Disable Replace for binary
+			ui.FrmFind.GetButton(3).SetDisabled(true) // Disable Replace All for binary
+			ui.App.SetFocus(ui.FrmFind)
+			return nil
 		}
 		return event
 	})

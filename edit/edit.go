@@ -2,9 +2,9 @@
 //
 //	 _ _          _
 //	| (_) ___  __| |
-//	| | |/ _ \/ _` |
+//	| | |/ _ \\/ _` |
 //	| | |  __/ (_| |
-//	|_|_|\___|\__,_|
+//	|_|_|\\___|\\__,_|\
 //
 // ****************************************************************************
 // L I E D   -   Copyright © JPL 2024
@@ -22,6 +22,7 @@ import (
 	"lied/dialog"
 	"lied/ui"
 	"lied/utils"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -30,6 +31,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"encoding/hex"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/pgavlin/femto"
@@ -78,27 +81,32 @@ const (
 // GLOBALS
 // ****************************************************************************
 var (
-	OpenFiles         []editfile
-	CurrentFile       editfile
-	CurrentView       tview.Primitive
-	DlgSaveFile       *dialog.Dialog
-	DlgSaveFileAs     *dialog.Dialog
-	currentFlow       int
-	showHidden        bool
-	Founds            []found
-	iFounds           int
-	currentFoundIndex int
-	findSession       bool
-	previousWhat      string
-	whatToFind        string
-	whereToFind       *femto.Buffer
-	previousWhere     *femto.Buffer
-	caseToFind        bool
-	previousCase      bool
-	AFind             []string
-	IFind             int
-	quitFlowIndex     int
-	onlyOnce          bool
+	OpenFiles             []editfile
+	CurrentFile           editfile
+	CurrentView           tview.Primitive
+	DlgSaveFile           *dialog.Dialog
+	DlgSaveFileAs         *dialog.Dialog
+	currentFlow           int
+	showHidden            bool
+	Founds                []found
+	iFounds               int
+	currentFoundIndex     int
+	findSession           bool
+	previousWhat          string
+	whatToFind            string
+	whereToFind           *femto.Buffer
+	previousWhere         *femto.Buffer
+	caseToFind            bool
+	previousCase          bool
+	AFind                 []string
+	IFind                 int
+	quitFlowIndex         int
+	onlyOnce              bool
+	HexFounds             []found
+	hexCurrentFoundIndex  int
+	hexFindSession        bool
+	previousHexWhat       string
+	previousHexSearchType string
 )
 
 // ****************************************************************************
@@ -176,6 +184,9 @@ func OpenFile(fName string, rw bool) {
 			ui.PgsEditorContent.SwitchToPage("hexViewer")
 			displayBinaryContent()
 			ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+
+			// Configure FrmFind for binary files
+			ui.ConfigureFindFormForBinary(true)
 			return
 		}
 
@@ -485,6 +496,15 @@ func SwitchOpenFile(fName string) {
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 				ui.App.SetFocus(CurrentView)
+
+				// Configure FrmFind for text files
+				ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
+				ui.ChkToggleReplace.SetDisabled(false)
+				ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
+				ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
+				ui.DpdSearchType.SetDisabled(true)
+				ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
+				ui.ChkCase.SetDisabled(false)
 			} else {
 				CurrentView = ui.HexView
 				CurrentFile.HexContentDirty = true // Mark for refresh
@@ -492,6 +512,9 @@ func SwitchOpenFile(fName string) {
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				ui.App.SetFocus(CurrentView)
 				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+
+				// Configure FrmFind for binary files
+				ui.ConfigureFindFormForBinary(true)
 			}
 
 			// FocusOnPath(fName)
@@ -797,7 +820,6 @@ func SwitchFollow(f any) {
 		CurrentFile.ReadWrite = false
 	} else {
 		ui.SetStatus("Restoring buffer")
-		CurrentFile.ReadWrite = CurrentFile.RWBackup
 		content, err := ioutil.ReadFile(CurrentFile.FName)
 		if err != nil {
 			ui.SetStatus(fmt.Sprintf("Could not read %v", CurrentFile.FName))
@@ -1092,9 +1114,107 @@ func startFindSession(s string, caseInsensitive bool) {
 }
 
 // ****************************************************************************
+// startHexFindSession()
+// ****************************************************************************
+func startHexFindSession(s string, searchType string) {
+	ui.SetStatus(fmt.Sprintf("startHexFindSession called. Search string: '%s', Search type: '%s'", s, searchType))
+	HexFounds = nil
+	hexCurrentFoundIndex = 0
+	previousHexWhat = s
+	previousHexSearchType = searchType
+	hexFindSession = true
+
+	var currentOffset int
+	for {
+		foundOffset := findStringInHexContent(s, searchType, currentOffset)
+		if foundOffset != -1 {
+			HexFounds = append(HexFounds, found{s: s, l: foundOffset})
+			currentOffset = foundOffset + 1 // Start searching from the next byte
+		} else {
+			break
+		}
+	}
+	ui.SetStatus(fmt.Sprintf("startHexFindSession finished. Found %d occurrences.", len(HexFounds)))
+	CurrentFile.HexContentDirty = false
+}
+
+// ****************************************************************************
+// findStringInHexContent()
+// ****************************************************************************
+func findStringInHexContent(s string, searchType string, fromOffset int) int {
+	ui.SetStatus(fmt.Sprintf("findStringInHexContent called. Search string: '%s', Search type: '%s', From offset: %d", s, searchType, fromOffset))
+	if fromOffset >= len(CurrentFile.ContentBytes) {
+		ui.SetStatus("findStringInHexContent: From offset is beyond content length.")
+		return -1
+	}
+
+	contentToSearch := CurrentFile.ContentBytes[fromOffset:]
+
+	if searchType == "ASCII" {
+		// ASCII search
+		if ui.ChkCase.IsChecked() { // Case-sensitive
+			idx := bytes.Index(contentToSearch, []byte(s))
+			if idx != -1 {
+				ui.SetStatus(fmt.Sprintf("findStringInHexContent: ASCII (case-sensitive) found at relative index %d", idx))
+				return fromOffset + idx
+			}
+		} else { // Case-insensitive
+			searchBytesLower := bytes.ToLower([]byte(s))
+			contentBytesLower := bytes.ToLower(contentToSearch)
+			idx := bytes.Index(contentBytesLower, searchBytesLower)
+			if idx != -1 {
+				ui.SetStatus(fmt.Sprintf("findStringInHexContent: ASCII (case-insensitive) found at relative index %d", idx))
+				return fromOffset + idx
+			}
+		}
+	} else if searchType == "Hexadecimal" {
+		// Validate hex string
+		if len(s)%2 != 0 {
+			ui.SetStatus("Invalid hexadecimal string: must have an even number of characters")
+			return -1
+		}
+		hexBytes, err := hex.DecodeString(s)
+		if err != nil {
+			ui.SetStatus("Invalid hexadecimal string: " + err.Error())
+			return -1
+		}
+		idx := bytes.Index(contentToSearch, hexBytes)
+		if idx != -1 {
+			ui.SetStatus(fmt.Sprintf("findStringInHexContent: Hexadecimal found at relative index %d", idx))
+			return fromOffset + idx
+		}
+	}
+
+	ui.SetStatus("findStringInHexContent: No match found.")
+	return -1
+}
+
+// ****************************************************************************
 // FindNext()
 // ****************************************************************************
 func FindNext() {
+	if CurrentFile.IsBinary {
+		findHexNext()
+	} else {
+		findTextNext()
+	}
+}
+
+// ****************************************************************************
+// FindPrevious()
+// ****************************************************************************
+func FindPrevious() {
+	if CurrentFile.IsBinary {
+		findHexPrevious()
+	} else {
+		findTextPrevious()
+	}
+}
+
+// ****************************************************************************
+// findTextNext()
+// ****************************************************************************
+func findTextNext() {
 	whatToFind = ui.TxtFind.GetText()
 	whereToFind = CurrentFile.Buffer
 	caseToFind = !ui.ChkCase.IsChecked()
@@ -1118,16 +1238,13 @@ func FindNext() {
 			ui.SetStatus("No more found")
 			currentFoundIndex = 0
 		}
-	} else {
-		ui.FrmFind.SetTitle("Find & Replace")
-		ui.SetStatus("Nothing found")
 	}
 }
 
 // ****************************************************************************
-// FindPrevious()
+// findTextPrevious()
 // ****************************************************************************
-func FindPrevious() {
+func findTextPrevious() {
 	whatToFind = ui.TxtFind.GetText()
 	whereToFind = CurrentFile.Buffer
 	caseToFind = !ui.ChkCase.IsChecked()
@@ -1151,9 +1268,81 @@ func FindPrevious() {
 			ui.SetStatus("No more found")
 			currentFoundIndex = iFounds - 1
 		}
+	}
+}
+
+// ****************************************************************************
+// findHexNext()
+// ****************************************************************************
+func findHexNext() {
+	whatToFind := ui.TxtFind.GetText()
+	_, searchType := ui.DpdSearchType.GetCurrentOption()
+	ui.SetStatus(fmt.Sprintf("findHexNext called. Search string: '%s', Search type: '%s'", whatToFind, searchType))
+
+	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentFile.HexContentDirty {
+		ui.SetStatus("Starting new hex find session...")
+		go startHexFindSession(whatToFind, searchType)
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	if len(HexFounds) > 0 {
+		if hexCurrentFoundIndex < len(HexFounds) {
+			foundItem := HexFounds[hexCurrentFoundIndex]
+			ui.SetStatus(fmt.Sprintf("Found at Offset %08X (index %d/%d)", foundItem.l, hexCurrentFoundIndex+1, len(HexFounds)))
+			hexCurrentFoundIndex++
+			ui.FrmFind.SetTitle(fmt.Sprintf("Find (%d/%d)", hexCurrentFoundIndex, len(HexFounds)))
+			displayBinaryContent() // Refresh to highlight and scroll
+		} else {
+			ui.SetStatus("No more found. Wrapping around.")
+			hexCurrentFoundIndex = 0
+			if len(HexFounds) > 0 { // If there are any finds, wrap to the first one
+				foundItem := HexFounds[hexCurrentFoundIndex]
+				ui.SetStatus(fmt.Sprintf("Found at Offset %08X (index %d/%d)", foundItem.l, hexCurrentFoundIndex+1, len(HexFounds)))
+				hexCurrentFoundIndex++
+				ui.FrmFind.SetTitle(fmt.Sprintf("Find (%d/%d)", hexCurrentFoundIndex, len(HexFounds)))
+				displayBinaryContent()
+			}
+		}
 	} else {
-		ui.FrmFind.SetTitle("Find & Replace")
-		ui.SetStatus("Nothing found")
+		ui.FrmFind.SetTitle("Find")
+		ui.SetStatus("Nothing found for current search.")
+	}
+}
+
+// ****************************************************************************
+// findHexPrevious()
+// ****************************************************************************
+func findHexPrevious() {
+	whatToFind := ui.TxtFind.GetText()
+	_, searchType := ui.DpdSearchType.GetCurrentOption()
+	ui.SetStatus(fmt.Sprintf("findHexPrevious called. Search string: '%s', Search type: '%s'", whatToFind, searchType))
+
+	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentFile.HexContentDirty {
+		ui.SetStatus("Starting new hex find session (previous)....")
+		go startHexFindSession(whatToFind, searchType)
+		time.Sleep(300 * time.Millisecond)
+	}
+
+	if len(HexFounds) > 0 {
+		if hexCurrentFoundIndex > 0 {
+			hexCurrentFoundIndex--
+			foundItem := HexFounds[hexCurrentFoundIndex]
+			ui.SetStatus(fmt.Sprintf("Found at Offset %08X (index %d/%d)", foundItem.l, hexCurrentFoundIndex+1, len(HexFounds)))
+			ui.FrmFind.SetTitle(fmt.Sprintf("Find (%d/%d)", hexCurrentFoundIndex+1, len(HexFounds)))
+			displayBinaryContent() // Refresh to highlight and scroll
+		} else {
+			ui.SetStatus("No more found. Wrapping around to end.")
+			hexCurrentFoundIndex = len(HexFounds) - 1
+			if len(HexFounds) > 0 { // If there are any finds, wrap to the last one
+				foundItem := HexFounds[hexCurrentFoundIndex]
+				ui.SetStatus(fmt.Sprintf("Found at Offset %08X (index %d/%d)", foundItem.l, hexCurrentFoundIndex+1, len(HexFounds)))
+				ui.FrmFind.SetTitle(fmt.Sprintf("Find (%d/%d)", hexCurrentFoundIndex+1, len(HexFounds)))
+				displayBinaryContent()
+			}
+		}
+	} else {
+		ui.FrmFind.SetTitle("Find")
+		ui.SetStatus("Nothing found for current search.")
 	}
 }
 
@@ -1161,6 +1350,10 @@ func FindPrevious() {
 // ReplaceOne()
 // ****************************************************************************
 func ReplaceOne() {
+	if CurrentFile.IsBinary {
+		ui.SetStatus("Cannot replace in binary files (read-only)")
+		return
+	}
 	// If no search has been performed or nothing was found, try to find the next occurrence first.
 	if iFounds == 0 || currentFoundIndex == 0 {
 		FindNext()
@@ -1194,6 +1387,10 @@ func ReplaceOne() {
 // ReplaceAll()
 // ****************************************************************************
 func ReplaceAll() {
+	if CurrentFile.IsBinary {
+		ui.SetStatus("Cannot replace in binary files (read-only)")
+		return
+	}
 	whatToFind := ui.TxtFind.GetText()
 	if whatToFind == "" {
 		ui.SetStatus("Nothing to find")
@@ -1295,23 +1492,152 @@ func InsertString(txt string) {
 }
 
 // ****************************************************************************
+// stripTviewColorTags removes tview color tags from a string.
+// ****************************************************************************
+func stripTviewColorTags(s string) string {
+	re := regexp.MustCompile(`\[[a-zA-Z0-9,:#]+\]`)
+	return re.ReplaceAllString(s, "")
+}
+
+// ****************************************************************************
 // displayBinaryContent()
 // ****************************************************************************
 func displayBinaryContent() {
 	hexAndAsciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
+
+	// Split the content into lines for individual processing
+	lines := strings.Split(hexAndAsciiStr, "\n")
+	var highlightedLines []string
+
+	// Constants for line parsing (adjust if BytesToHexAndASCII changes)
+	const (
+		// Lengths of tview color tags
+		yellowTagLen = 8 // "[yellow]"
+		whiteTagLen  = 7 // "[white]"
+
+		// Character counts in the *formatted* string, including spaces and color tags
+		offsetLenWithTags = 8 + yellowTagLen + whiteTagLen // 8 (offset) + 8 (yellow) + 7 (white) = 23
+		offsetSpaces      = 3
+		hexByteLen        = 2
+		hexByteSpace      = 1
+		hexPartRawLen     = (hexByteLen+hexByteSpace)*16 - hexByteSpace // 47 (16 bytes, 15 spaces)
+		hexAsciiSeparator = 2
+		asciiPartLen      = 16
+
+		// Start indices within a formatted line (including color tags)
+		hexPartStartCol   = offsetLenWithTags + offsetSpaces
+		asciiPartStartCol = hexPartStartCol + hexPartRawLen + hexAsciiSeparator
+	)
+
+	if hexFindSession && len(HexFounds) > 0 && hexCurrentFoundIndex > 0 && hexCurrentFoundIndex <= len(HexFounds) {
+		foundItem := HexFounds[hexCurrentFoundIndex-1]
+		searchLenBytes := len(foundItem.s)
+		// _, searchTypeOption := ui.DpdSearchType.GetCurrentOption()
+
+		// Iterate through each line to apply highlighting
+		for lineIdx, line := range lines {
+			if line == "" { // Skip empty lines (e.g., last line after split)
+				highlightedLines = append(highlightedLines, line)
+				continue
+			}
+
+			lineStartByteOffset := lineIdx * 16
+			lineEndByteOffset := lineStartByteOffset + 16
+
+			// Check if the found item starts within this line's byte range
+			if foundItem.l >= lineStartByteOffset && foundItem.l < lineEndByteOffset {
+				// Calculate the portion of the match that falls on this line
+				matchStartByteOnLine := foundItem.l
+				matchEndByteOnLine := int(math.Min(float64(foundItem.l+searchLenBytes), float64(lineEndByteOffset)))
+				currentLineMatchLen := matchEndByteOnLine - matchStartByteOnLine
+
+				if currentLineMatchLen > 0 {
+					var sbLine strings.Builder
+
+					// Calculate relative column in the 16-byte block
+					colInLine := matchStartByteOnLine % 16
+
+					// Calculate start and end indices for highlighting in the current line (with tags)
+					hexHighlightStart := hexPartStartCol + colInLine*(hexByteLen+hexByteSpace)
+					hexHighlightEnd := hexHighlightStart + (currentLineMatchLen * hexByteLen) + (currentLineMatchLen-1)*hexByteSpace - 1
+					asciiHighlightStart := asciiPartStartCol + colInLine
+					asciiHighlightEnd := asciiHighlightStart + currentLineMatchLen
+
+					// Apply bounds checking before slicing
+					hexHighlightStart = int(math.Min(float64(hexHighlightStart), float64(len(line))))
+					hexHighlightEnd = int(math.Min(float64(hexHighlightEnd), float64(len(line)-1))) // -1 because slice end is exclusive
+					asciiHighlightStart = int(math.Min(float64(asciiHighlightStart), float64(len(line))))
+					asciiHighlightEnd = int(math.Min(float64(asciiHighlightEnd), float64(len(line))))
+
+					// Ensure start indices are not greater than end indices after bounds checking
+					if hexHighlightStart > hexHighlightEnd {
+						hexHighlightEnd = hexHighlightStart
+					}
+					if asciiHighlightStart > asciiHighlightEnd {
+						asciiHighlightEnd = asciiHighlightStart
+					}
+
+					// Reconstruct the line with highlighting tags
+					sbLine.WriteString(line[:hexHighlightStart])
+					sbLine.WriteString("[::b]")
+					sbLine.WriteString(line[hexHighlightStart : hexHighlightEnd+1])
+					sbLine.WriteString("[::-]")
+					sbLine.WriteString(line[hexHighlightEnd+1 : asciiHighlightStart])
+					sbLine.WriteString("[::b]")
+					sbLine.WriteString(line[asciiHighlightStart:asciiHighlightEnd])
+					sbLine.WriteString("[::-]")
+					sbLine.WriteString(line[asciiHighlightEnd:])
+					highlightedLines = append(highlightedLines, sbLine.String())
+
+					// If the match spans multiple lines, we need to continue highlighting on subsequent lines
+					// For now, we'll just highlight the first part and indicate a partial highlight.
+					if matchEndByteOnLine < foundItem.l+searchLenBytes {
+						ui.SetStatus(fmt.Sprintf("Pattern '%s' found at Offset %08X (multi-line match, partial highlight)", foundItem.s, foundItem.l))
+					} else {
+						ui.SetStatus(fmt.Sprintf("Pattern '%s' found at Offset %08X", foundItem.s, foundItem.l))
+					}
+				} else {
+					highlightedLines = append(highlightedLines, line)
+				}
+			} else {
+				highlightedLines = append(highlightedLines, line)
+			}
+		}
+		hexAndAsciiStr = strings.Join(highlightedLines, "\n")
+	}
+
 	ui.HexView.SetText(hexAndAsciiStr)
-	ui.HexView.ScrollToBeginning()
 
-	// Update LblCursor with initial byte offset (0)
-	ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", 0))
+	// Scroll to the currently found item if a search is active
+	if hexFindSession && len(HexFounds) > 0 && hexCurrentFoundIndex > 0 && hexCurrentFoundIndex <= len(HexFounds) {
+		foundItem := HexFounds[hexCurrentFoundIndex-1]
+		lineNum := foundItem.l / 16
+		ui.HexView.ScrollTo(lineNum, 0)
+	}
 
-	// Update LblPercent with initial scroll percentage
-	_, _, _, height := ui.HexView.GetInnerRect()
-	hexContent := ui.HexView.GetText(false)
-	totalLines := strings.Count(hexContent, "\n")
-	if totalLines > height {
-		ui.LblPercent.SetText("0%") // At the beginning, 0% scrolled
+	// Update LblCursor and LblPercent based on the current found item, if any
+	if hexFindSession && len(HexFounds) > 0 && hexCurrentFoundIndex > 0 && hexCurrentFoundIndex <= len(HexFounds) {
+		foundItem := HexFounds[hexCurrentFoundIndex-1]
+		ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", foundItem.l))
+
+		// Calculate percentage based on the found offset
+		totalBytes := len(CurrentFile.ContentBytes)
+		if totalBytes > 0 {
+			percent := int((float64(foundItem.l) / float64(totalBytes)) * 100.0)
+			ui.LblPercent.SetText(fmt.Sprintf("%d%%", percent))
+		} else {
+			ui.LblPercent.SetText("0%")
+		}
 	} else {
-		ui.LblPercent.SetText("100%") // All content visible
+		// If no search is active or no item found, revert to initial status
+		ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", 0))
+		_, _, _, height := ui.HexView.GetInnerRect()
+		hexContent := ui.HexView.GetText(false)
+		totalLines := strings.Count(hexContent, "\n")
+		if totalLines > height {
+			ui.LblPercent.SetText("0%") // At the beginning, 0% scrolled
+		} else {
+			ui.LblPercent.SetText("100%") // All content visible
+		}
 	}
 }

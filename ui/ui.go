@@ -108,11 +108,26 @@ var (
 	ChkCase          *tview.Checkbox
 	ChkToggleReplace *tview.Checkbox
 	TxtReplace       *tview.InputField
+	DpdSearchType    *tview.DropDown
 	TblOutline       *tview.Table
 	HexView          *tview.TextView
 	FlxHexViewer     *tview.Flex
 	PgsEditorContent *tview.Pages
 )
+
+// ConfigureFindFormForBinary configures the FrmFind for binary or text files.
+func ConfigureFindFormForBinary(isBinary bool) {
+	TxtReplace.SetDisabled(isBinary)
+	ChkToggleReplace.SetDisabled(isBinary)
+	FrmFind.GetButton(2).SetDisabled(isBinary) // Replace button
+	FrmFind.GetButton(3).SetDisabled(isBinary) // All button
+
+	if isBinary {
+		DpdSearchType.SetCurrentOption(1) // Default to Hexadecimal
+	} else {
+		DpdSearchType.SetCurrentOption(0) // Default to ASCII
+	}
+}
 
 // ****************************************************************************
 // UnmarshalText() *Mode
@@ -346,8 +361,15 @@ func SetUI(fQuit Fn, hostname string) {
 	ChkCase = tview.NewCheckbox()
 	ChkCase.SetLabel("Case sensitive")
 	ChkCase.SetBorder(false)
+
+	DpdSearchType = tview.NewDropDown().
+		SetLabel("Search Type").
+		SetOptions([]string{"ASCII", "Hexadecimal"}, nil)
+	DpdSearchType.SetCurrentOption(0) // Default to ASCII
+
 	FrmFind.SetItemPadding(0)
 	FrmFind.AddFormItem(TxtFind)
+	FrmFind.AddFormItem(DpdSearchType)
 	FrmFind.AddFormItem(ChkToggleReplace)
 	FrmFind.AddFormItem(TxtReplace)
 	FrmFind.AddFormItem(ChkCase)
@@ -360,7 +382,8 @@ func SetUI(fQuit Fn, hostname string) {
 
 	//*************************************************************************
 	// Help Layout
-	//*************************************************************************
+
+//*************************************************************************
 	FlxHelp = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
@@ -425,6 +448,7 @@ func SetUI(fQuit Fn, hostname string) {
 		})
 
 	IdxScreens = -1
+	ConfigureFindFormForBinary(false) // Default to text file configuration
 }
 
 // ****************************************************************************
