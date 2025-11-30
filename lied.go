@@ -522,8 +522,8 @@ func ShowWorkspaceMenu() {
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), edit.CurrentView)
 	// Menu Options
 	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
-	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)   // OK
+	// MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)          // Not yet
 	MnuWorkspace.AddItem("mnuRename", "Rename", InputRename, conf.ConfigGeneral.Workspace, true, false)               // OK
 	MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)              // OK
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)        // OK
@@ -1100,6 +1100,13 @@ func doNewFile(f any) {
 		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
 	ui.PgsApp.AddPage("dlgNewFile", DlgNewFile.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgNewFile")
+}
+
+// ****************************************************************************
+// doSaveAll()
+// ****************************************************************************
+func doSaveAll(f any) {
+	edit.CloseAll()
 }
 
 // ****************************************************************************
