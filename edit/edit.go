@@ -256,6 +256,23 @@ func SaveAnyFile(f any) {
 }
 
 // ****************************************************************************
+// SaveAll()
+// ****************************************************************************
+func SaveAll() {
+	fIndex := 0
+	of := len(OpenFiles)
+	for ; fIndex < of; fIndex++ {
+		err := ioutil.WriteFile(OpenFiles[fIndex].FName, []byte(OpenFiles[fIndex].Buffer.String()), 0600)
+		if err == nil {
+			ui.SetStatus(fmt.Sprintf("File %s successfully saved", OpenFiles[fIndex].FName))
+			OpenFiles[fIndex].Buffer.IsModified = false
+		} else {
+			ui.SetStatus(err.Error())
+		}
+	}
+}
+
+// ****************************************************************************
 // SaveFileAs()
 // ****************************************************************************
 func SaveFileAs() {
