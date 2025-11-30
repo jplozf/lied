@@ -1144,6 +1144,9 @@ func doOpenWorkspace(rc dialog.DlgButton, idx int) {
 func doDeleteFile(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_DELETE {
 		fn := DlgInputFileDelete.Value
+		if fn == "" {
+			fn = DlgInputFileDelete.Path
+		}
 		ui.SetStatus("Deleting " + fn)
 		DlgYesNo = DlgYesNo.YesNo("Delete", // Title
 			"Deleting "+fn+"\n\nAre you sure you want to proceed ?", // Message
