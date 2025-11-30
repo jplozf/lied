@@ -16,6 +16,7 @@ package edit
 // ****************************************************************************
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"lied/conf"
@@ -161,68 +162,74 @@ func OpenFile(fName string, rw bool) {
 		SwitchOpenFile(fName)
 	} else {
 		ui.EdtMain.SetRuntimeFiles(runtime.Files)
-		// Check if the file is binary
-		if utils.IsBinaryFile(fName) {
-			content, err := ioutil.ReadFile(fName)
-			if err != nil {
-				ui.SetStatus(fmt.Sprintf("Could not read binary file %v: %v", fName, err))
+		// Check if the file exists
+		if _, err := os.Stat(fName); errors.Is(err, os.ErrNotExist) {
+			ui.SetStatus(fmt.Sprintf("File %v doesn't exist", fName))
+			CreateThisFile(fName)
+		} else {
+			// Check if the file is binary
+			if utils.IsBinaryFile(fName) {
+				content, err := ioutil.ReadFile(fName)
+				if err != nil {
+					ui.SetStatus(fmt.Sprintf("Could not read binary file %v: %v", fName, err))
+					return
+				}
+				CurrentFile.FName = fName
+				CurrentFile.IsBinary = true
+				CurrentFile.ReadWrite = false // Binary files are read-only for now
+				CurrentFile.Follow = false
+				CurrentFile.Encoding = "Binary"
+				CurrentFile.ContentBytes = content
+				CurrentFile.HexContentDirty = true // Mark for refresh
+				OpenFiles = append(OpenFiles, CurrentFile)
+				go UpdateStatus()
+				go focusOpenFile(fName)
+				ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentFile.FName))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
+				ui.PgsEditorContent.SwitchToPage("hexViewer")
+				displayBinaryContent()
+				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+
+				// Configure FrmFind for binary files
+				ui.ConfigureFindFormForBinary(true)
 				return
 			}
-			CurrentFile.FName = fName
-			CurrentFile.IsBinary = true
-			CurrentFile.ReadWrite = false // Binary files are read-only for now
-			CurrentFile.Follow = false
-			CurrentFile.Encoding = "Binary"
-			CurrentFile.ContentBytes = content
-			CurrentFile.HexContentDirty = true // Mark for refresh
-			OpenFiles = append(OpenFiles, CurrentFile)
-			go UpdateStatus()
-			go focusOpenFile(fName)
-			ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentFile.FName))
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
-			ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
-			ui.PgsEditorContent.SwitchToPage("hexViewer")
-			displayBinaryContent()
-			ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
 
-			// Configure FrmFind for binary files
-			ui.ConfigureFindFormForBinary(true)
-			return
-		}
-
-		content, err := ioutil.ReadFile(fName)
-		if err != nil {
-			ui.SetStatus(fmt.Sprintf("Could not read %v", fName))
-			ui.SetStatus(fmt.Sprintf("%v", err))
-		} else {
-			detector := chardet.NewTextDetector()
-			result, err := detector.DetectBest(content)
-			if err == nil {
-				CurrentFile.Encoding = result.Charset
+			content, err := ioutil.ReadFile(fName)
+			if err != nil {
+				ui.SetStatus(fmt.Sprintf("Could not read %v", fName))
+				ui.SetStatus(fmt.Sprintf("%v", err))
 			} else {
-				CurrentFile.Encoding = "Unknown"
-			}
+				detector := chardet.NewTextDetector()
+				result, err := detector.DetectBest(content)
+				if err == nil {
+					CurrentFile.Encoding = result.Charset
+				} else {
+					CurrentFile.Encoding = "Unknown"
+				}
 
-			CurrentFile.FName = fName
-			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
-			CurrentFile.Buffer.Settings["wordwrap"] = false
-			CurrentFile.View = femto.NewView(CurrentFile.Buffer)
-			CurrentFile.ReadWrite = rw
-			CurrentFile.Follow = false
-			CurrentFile.IsBinary = false
-			CurrentFile.ContentBytes = nil // Ensure this is nil for text files
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-			SetTheme("monokai")
-			ui.EdtMain.SetTitleAlign(tview.AlignRight)
-			ui.LblScreen.SetText(CurrentFile.Encoding)
-			CurrentFile = UpdateGITInfos(CurrentFile)
-			OpenFiles = append(OpenFiles, CurrentFile)
-			go UpdateStatus()
-			go focusOpenFile(fName)
-			ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
-			ui.App.SetFocus(ui.EdtMain)
-			ui.PgsEditorContent.SwitchToPage("textEditor")
+				CurrentFile.FName = fName
+				CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
+				CurrentFile.Buffer.Settings["wordwrap"] = false
+				CurrentFile.View = femto.NewView(CurrentFile.Buffer)
+				CurrentFile.ReadWrite = rw
+				CurrentFile.Follow = false
+				CurrentFile.IsBinary = false
+				CurrentFile.ContentBytes = nil // Ensure this is nil for text files
+				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+				SetTheme("monokai")
+				ui.EdtMain.SetTitleAlign(tview.AlignRight)
+				ui.LblScreen.SetText(CurrentFile.Encoding)
+				CurrentFile = UpdateGITInfos(CurrentFile)
+				OpenFiles = append(OpenFiles, CurrentFile)
+				go UpdateStatus()
+				go focusOpenFile(fName)
+				ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.App.SetFocus(ui.EdtMain)
+				ui.PgsEditorContent.SwitchToPage("textEditor")
+			}
 		}
 	}
 	ShowTreeDir(conf.ConfigGeneral.Workspace, showHidden)
@@ -288,6 +295,19 @@ func NewFile(dir string) {
 	f, err := os.CreateTemp(dir, conf.NEW_FILE_TEMPLATE)
 	if err == nil {
 		// SwitchToEditor(f.Name())
+		OpenFile(f.Name(), true)
+	} else {
+		ui.SetStatus(err.Error())
+	}
+}
+
+// ****************************************************************************
+// CreateThisFile()
+// ****************************************************************************
+func CreateThisFile(dir string) {
+	f, err := os.Create(dir)
+	ui.SetStatus(fmt.Sprintf("Creating the file %v", dir))
+	if err == nil {
 		OpenFile(f.Name(), true)
 	} else {
 		ui.SetStatus(err.Error())
@@ -746,6 +766,16 @@ func startQuitSaveFlow() {
 			ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 			proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
 			return // Wait for user input from dialog
+		}
+		// Delete empty files
+		if conf.ConfigGeneral.CleanUpOnExit {
+			if f.Buffer.Len() == 0 {
+				ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
+				err := os.Remove(f.FName)
+				if err != nil {
+					ui.SetStatus(fmt.Sprintf("Error when deleting empty file %s : %s", f.FName, err.Error()))
+				}
+			}
 		}
 	}
 	// All files checked, proceed to quit

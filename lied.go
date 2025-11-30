@@ -616,7 +616,7 @@ func ShowMacrosMenu() {
 // appQuit performs some cleanup and saves persistent data before quitting application
 // ****************************************************************************
 func appQuit() {
-	// TODO : Clean up lied_XXX null files
+	// TODO : Clean up NEW_FILE_TEMPLATE_XXX null files
 	edit.CheckOpenFilesForSaving()
 	saveSettings()
 	ui.SetStatus(fmt.Sprintf("Quitting session #%s", ui.SessionID))
@@ -699,8 +699,10 @@ func readSettings() {
 			conf.ConfigGeneral.Workspace, _ = os.Getwd()
 		}
 		edit.SwitchOpenFile(section.Key("CurrentFile").String())
-		edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
-		edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
+		if edit.CurrentFile.Buffer != nil {
+			edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
+			edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
+		}
 	}
 	if conf.ConfigGeneral.ColorAccent == "" {
 		conf.ConfigGeneral.ColorAccent = conf.DEFAULT_COLOR_ACCENT
@@ -1084,6 +1086,7 @@ func doOpenWorkspace(rc dialog.DlgButton, idx int) {
 		ui.SetStatus("Opening Workspace " + fn)
 		edit.CloseAll()
 		conf.ConfigGeneral.Workspace = fn
+		edit.ShowTreeDir(fn, conf.ConfigGeneral.ShowHidden)
 	}
 }
 

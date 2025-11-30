@@ -7,6 +7,9 @@ var (
 	Version              string
 )
 
+// *********************************************************
+// init()
+// *********************************************************
 func init() {
 	Version = InternalVersionMajor + "." + CommitCount + "-" + CommitHash
 }

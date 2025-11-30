@@ -12,7 +12,7 @@
 * ~~Delete line~~
 * ~~Manage Undo & Redo~~
 * ~~Add tools linked to open file (%F% = full file name, %f% = file name without extension, %D% = current directory, ...)~~
-* Remove empty temporary files on exit
+* ~~Remove empty temporary files on exit~~
 * ~~Show GIT status~~
 * ~~Add GIT commands~~
 * Add Help (embedded)

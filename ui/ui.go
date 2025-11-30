@@ -383,7 +383,7 @@ func SetUI(fQuit Fn, hostname string) {
 	//*************************************************************************
 	// Help Layout
 
-//*************************************************************************
+	//*************************************************************************
 	FlxHelp = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
