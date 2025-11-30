@@ -76,6 +76,8 @@ var (
 	DlgYesNo1           *dialog.Dialog
 	DlgYesNo2           *dialog.Dialog
 	DlgRename           *dialog.Dialog
+	DlgNewFile          *dialog.Dialog
+	DlgNewFolder        *dialog.Dialog
 	ACmd                []string
 	ICmd                int
 	MsgBox              *dialog.Dialog
@@ -519,12 +521,12 @@ func ShowGitMenu() {
 func ShowWorkspaceMenu() {
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), edit.CurrentView)
 	// Menu Options
-	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuRename", "Rename", InputRename, conf.ConfigGeneral.Workspace, true, false) // OK
-	MnuWorkspace.AddItem("mnuNewFile", "New file", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
-	MnuWorkspace.AddItem("mnuNewFolder", "New folder", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuRename", "Rename", InputRename, conf.ConfigGeneral.Workspace, true, false)               // OK
+	MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)              // OK
+	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)        // OK
 	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false)      // OK
 	// Popup menu
@@ -1075,6 +1077,52 @@ func doRename(rc dialog.DlgButton, idx int) {
 		ui.PgsApp.AddPage("dlgRename", DlgRename.Popup(), true, false)
 		ui.PgsApp.ShowPage("dlgRename")
 	}
+}
+
+// ****************************************************************************
+// doNewFile()
+// ****************************************************************************
+func doNewFile(f any) {
+	d := filepath.Dir(f.(string))
+	DlgNewFile = DlgNewFile.Input("New File", // Title
+		"Creating a new file into "+d, // Message
+		"",                            // Empty
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_OK {
+				edit.CreateThisFile(filepath.Join(d, DlgNewFile.Value))
+			} else {
+				ui.SetStatus("Canceling creating new file")
+			}
+			// Refresh the TrvExplorer
+			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+		},
+		0,
+		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+	ui.PgsApp.AddPage("dlgNewFile", DlgNewFile.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNewFile")
+}
+
+// ****************************************************************************
+// doNewFolder()
+// ****************************************************************************
+func doNewFolder(f any) {
+	d := filepath.Dir(f.(string))
+	DlgNewFolder = DlgNewFolder.Input("New Folder", // Title
+		"Creating a new folder into "+d, // Message
+		"",                              // Empty
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_OK {
+				os.Mkdir(filepath.Join(d, DlgNewFolder.Value), os.ModePerm)
+			} else {
+				ui.SetStatus("Canceling creating new folder")
+			}
+			// Refresh the TrvExplorer
+			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+		},
+		0,
+		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+	ui.PgsApp.AddPage("dlgNewFolder", DlgNewFolder.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNewFolder")
 }
 
 // ****************************************************************************
