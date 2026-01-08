@@ -263,7 +263,20 @@ func SetUI(fQuit Fn, hostname string) {
 
 	buffer := femto.NewBufferFromString(string("content"), "./dummy")
 	EdtMain = femto.NewView(buffer)
+	// EdtMain.SetWrap(false) // Disable line wrapping to allow horizontal scrolling
 	EdtMain.SetBorder(true)
+	EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyLeft:
+			EdtMain.CursorLeft()
+			return nil // Consume event
+		case tcell.KeyRight:
+			EdtMain.CursorRight()
+			return nil // Consume event
+		default:
+			return event // Pass other keys through
+		}
+	})
 
 	HexView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
 	HexView.SetBorder(true).SetTitle("Hexadecimal")

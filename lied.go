@@ -142,12 +142,13 @@ func init() {
 func main() {
 	// Main keyboard's events manager
 	ui.App.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// ALT+M
 		evkMacros := tcell.NewEventKey(tcell.KeyRune, 'm', tcell.ModAlt)
 		if event.Key() == evkMacros.Key() && event.Rune() == evkMacros.Rune() && event.Modifiers() == evkMacros.Modifiers() {
 			ShowMacrosMenu()
 			return nil
 		}
-
+		// ALT+S
 		evkSaveAs := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt)
 		if event.Key() == evkSaveAs.Key() && event.Rune() == evkSaveAs.Rune() && event.Modifiers() == evkSaveAs.Modifiers() {
 			edit.SaveFileAs()
@@ -224,6 +225,7 @@ func main() {
 
 	// Editor keyboard's events manager
 	ui.EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// ALT+S
 		evkSaveAs := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt)
 		if event.Key() == evkSaveAs.Key() && event.Rune() == evkSaveAs.Rune() && event.Modifiers() == evkSaveAs.Modifiers() {
 			edit.SaveFileAs()
@@ -521,14 +523,14 @@ func ShowGitMenu() {
 func ShowWorkspaceMenu() {
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), edit.CurrentView)
 	// Menu Options
-	MnuWorkspace.AddItem("mnuOpen", "Open", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
-	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)   // OK
+	MnuWorkspace.AddItem("mnuOpen", "Open Workspace", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
+	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)             // OK
 	// MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)          // Not yet
-	MnuWorkspace.AddItem("mnuRename", "Rename", InputRename, conf.ConfigGeneral.Workspace, true, false)               // OK
-	MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)              // OK
-	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)        // OK
-	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false) // OK
-	MnuWorkspace.AddItem("mnuDelete", "Delete", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false)      // OK
+	MnuWorkspace.AddItem("mnuRename", "Rename file or folder", InputRename, conf.ConfigGeneral.Workspace, true, false)          // OK
+	MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)                        // OK
+	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)                  // OK
+	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)           // OK
+	MnuWorkspace.AddItem("mnuDelete", "Delete file or folder", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false) // OK
 	// Popup menu
 	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
