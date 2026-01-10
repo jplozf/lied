@@ -59,6 +59,7 @@ var (
 	MnuGit       *menu.Menu
 	MnuWorkspace *menu.Menu
 	MnuLicenses  *menu.Menu
+	MnuTemplates *menu.Menu
 	args         []string
 	// conf.ConfigGeneral       conf.SConfigGeneral
 	// configPrivate       conf.SConfigPrivate
@@ -536,8 +537,9 @@ func ShowWorkspaceMenu() {
 	MnuWorkspace.AddItem("mnuOpen", "Open Workspace", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)             // OK
 	// MnuWorkspace.AddItem("mnuClose", "Close", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false)          // Not yet
-	MnuWorkspace.AddItem("mnuRename", "Rename file or folder", InputRename, conf.ConfigGeneral.Workspace, true, false)          // OK
-	MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)                        // OK
+	MnuWorkspace.AddItem("mnuRename", "Rename file or folder", InputRename, conf.ConfigGeneral.Workspace, true, false) // OK
+	// MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddItem("mnuAddFileTemplate", "New file", ShowTemplatesMenu, conf.ConfigGeneral.Workspace, true, false)        // OK
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)                  // OK
 	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)           // OK
 	MnuWorkspace.AddItem("mnuDelete", "Delete file or folder", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false) // OK
@@ -591,6 +593,69 @@ func AddLicense(l any) {
 	}
 	// Refresh the TrvExplorer
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+}
+
+// ****************************************************************************
+// ShowTemplatesMenu()
+// ****************************************************************************
+func ShowTemplatesMenu(f any) {
+	// Read the directory entry for the "templates" embedded folder
+	entries, err := conf.TemplatesFS.ReadDir("templates")
+	ui.SetStatus("Reading templates")
+	if err == nil {
+		MnuTemplates = MnuTemplates.New(" Templates ", ui.GetCurrentScreen(), edit.CurrentView)
+		for _, entry := range entries {
+			if !entry.IsDir() { // Only list files, not subdirectories
+				template := entry.Name()
+				MnuTemplates.AddItem(template,
+					strings.TrimSuffix(template, filepath.Ext(template)),
+					AddTemplate,
+					template,
+					true,
+					false)
+			}
+		}
+		// Popup menu
+		ui.PgsApp.AddPage("dlgTemplatesMenu", MnuTemplates.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgTemplatesMenu")
+	} else {
+		ui.SetStatus("No template found")
+	}
+}
+
+// ****************************************************************************
+// AddTemplate()
+// ****************************************************************************
+func AddTemplate(f any) {
+	d := f.(string)
+	DlgNewFile = DlgNewFile.Input("New File", // Title
+		fmt.Sprintf("Creating a new file into %s", conf.ConfigGeneral.Workspace), // Message
+		d, // Default file name
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_OK {
+				templateFileName := d
+				ui.SetStatus(fmt.Sprintf("Adding template %s to the current workspace", templateFileName))
+				sourceFileName := filepath.Join("templates", templateFileName)
+				destFileName := filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value)
+				fileContent, err := conf.TemplatesFS.ReadFile(sourceFileName)
+				if err != nil {
+					ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
+				}
+				if err := os.WriteFile(destFileName, fileContent, 0644); err != nil { // nolint: gosec
+					ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
+				}
+				edit.OpenFile(destFileName, true)
+				edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+			} else {
+				ui.SetStatus("Canceling creating new file")
+			}
+			// Refresh the TrvExplorer
+			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+		},
+		0,
+		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+	ui.PgsApp.AddPage("dlgNewFile", DlgNewFile.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNewFile")
 }
 
 // ****************************************************************************

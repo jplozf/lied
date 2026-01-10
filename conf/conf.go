@@ -19,10 +19,13 @@ import (
 //go:embed licenses/*.md
 var LicensesFS embed.FS
 
+//go:embed templates/*
+var TemplatesFS embed.FS
+
 const (
 	STATUS_MESSAGE_DURATION = 3
 	APP_NAME                = "Lied"
-	APP_STRING              = "Lied © jpl@ozf.fr 2024"
+	APP_STRING              = "Lied © jpl@ozf.fr 2024-2026"
 	APP_URL                 = "https://github.com/jplozf/lied"
 	APP_FOLDER              = ".lied"
 	ICON_MODIFIED           = "●"
@@ -41,10 +44,7 @@ const (
 
 var Version string
 
-// var Cwd string
 var LogFile *os.File
-
-// var Workspace string
 
 type SConfigGeneral struct {
 	Theme         string
