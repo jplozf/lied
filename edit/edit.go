@@ -211,12 +211,12 @@ func OpenFile(fName string, rw bool) {
 
 				CurrentFile.FName = fName
 				CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
-// 				CurrentFile.Buffer.Settings["wordwrap"] = false
+				// 				CurrentFile.Buffer.Settings["wordwrap"] = false
 				CurrentFile.Buffer.Settings["keepautoindent"] = true
 				CurrentFile.Buffer.Settings["softwrap"] = true
 				CurrentFile.Buffer.Settings["scrollbar"] = true
 				CurrentFile.Buffer.Settings["statusline"] = false
-				
+
 				CurrentFile.View = femto.NewView(CurrentFile.Buffer)
 				CurrentFile.ReadWrite = rw
 				CurrentFile.Follow = false
@@ -489,7 +489,7 @@ func UpdateGITInfos(f editfile) editfile {
 	// Get GIT Commit
 	commit, err2 := utils.Xeq(ws, "git", "rev-parse", "--short", "HEAD")
 	if err2 != "" {
-		commit = "No GIT"
+		commit = "No commit"
 	}
 	f.GitCommit = commit
 	// Get GIT Status

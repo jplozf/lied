@@ -262,8 +262,12 @@ func SetUI(fQuit Fn, hostname string) {
 	TxtHelp.SetDynamicColors(true)
 
 	buffer := femto.NewBufferFromString(string("content"), "./dummy")
+	buffer.Settings["keepautoindent"] = true
+	buffer.Settings["softwrap"] = true
+	buffer.Settings["scrollbar"] = true
+	buffer.Settings["statusline"] = false
+
 	EdtMain = femto.NewView(buffer)
-	// EdtMain.SetWrap(false) // Disable line wrapping to allow horizontal scrolling
 	EdtMain.SetBorder(true)
 	EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {

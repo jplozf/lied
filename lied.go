@@ -406,6 +406,10 @@ func main() {
 		edit.NewFileOrLastFile(conf.ConfigGeneral.Workspace)
 		fName, _ := filepath.Abs(args[1])
 		if utils.IsFileExist(fName) {
+			ui.SetStatus("Opening existing file " + fName)
+			// edit.CloseAll()
+			conf.ConfigGeneral.Workspace = filepath.Dir(fName)
+			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 			edit.OpenFile(fName, true)
 		} else {
 			f, e := os.Create(fName)
@@ -413,6 +417,10 @@ func main() {
 				ui.SetStatus(fmt.Sprintf("Can't create '%s' file", fName))
 			} else {
 				f.Close()
+				ui.SetStatus("Opening new file " + fName)
+				// edit.CloseAll()
+				conf.ConfigGeneral.Workspace = filepath.Dir(fName)
+				edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 				edit.OpenFile(fName, true)
 			}
 		}
@@ -509,7 +517,8 @@ func ShowGitMenu() {
 	MnuGit.AddItem("mnuGitCommitPush", "Commit & Push", DoGitCommitPush, nil, true, false)
 	MnuGit.AddItem("mnuGitFetch", "Fetch", DoGitFetch, nil, true, false)
 	MnuGit.AddItem("mnuGitPull", "Pull (Fetch & Merge)", DoGitPull, nil, true, false)
-	MnuGit.AddItem("mnuGitBang", "Initialize (Git Bang)", DoGitBang, nil, true, false)
+	MnuGit.AddItem("mnuGitInit", "Initialize", DoGitInit, nil, true, false)
+	MnuGit.AddItem("mnuGitBang", "Initialize & Push", DoGitBang, nil, true, false)
 	MnuGit.AddItem("mnuGitClone", "Clone", DoGitClone, nil, true, false)
 	MnuGit.AddItem("mnuGitConfigure", "Configure", DoGitConfigure, nil, true, false)
 	// Popup menu
@@ -521,6 +530,7 @@ func ShowGitMenu() {
 // ShowWorkspaceMenu()
 // ****************************************************************************
 func ShowWorkspaceMenu() {
+	ui.SetStatus(fmt.Sprintf("Current Workspace is %s", conf.ConfigGeneral.Workspace))
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), edit.CurrentView)
 	// Menu Options
 	MnuWorkspace.AddItem("mnuOpen", "Open Workspace", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
@@ -725,11 +735,14 @@ func saveSettings() {
 		defer fMRU.Close()
 		wMRU := bufio.NewWriter(fMRU)
 		for _, oFile := range edit.OpenFiles {
-			rw := "0,"
-			if oFile.ReadWrite {
-				rw = "1,"
+			// We record only existing files
+			if utils.IsFileExist(oFile.FName) {
+				rw := "0,"
+				if oFile.ReadWrite {
+					rw = "1,"
+				}
+				fmt.Fprintln(wMRU, rw+oFile.FName)
 			}
-			fmt.Fprintln(wMRU, rw+oFile.FName)
 		}
 		wMRU.Flush()
 	}
@@ -1085,7 +1098,8 @@ func doRename(rc dialog.DlgButton, idx int) {
 // doNewFile()
 // ****************************************************************************
 func doNewFile(f any) {
-	d := filepath.Dir(f.(string))
+	// d := filepath.Dir(f.(string))
+	d := f.(string)
 	DlgNewFile = DlgNewFile.Input("New File", // Title
 		"Creating a new file into "+d, // Message
 		"",                            // Empty
@@ -1115,13 +1129,19 @@ func doSaveAll(f any) {
 // doNewFolder()
 // ****************************************************************************
 func doNewFolder(f any) {
-	d := filepath.Dir(f.(string))
+	// d := filepath.Dir(f.(string))
+	d := f.(string)
 	DlgNewFolder = DlgNewFolder.Input("New Folder", // Title
 		"Creating a new folder into "+d, // Message
 		"",                              // Empty
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				os.Mkdir(filepath.Join(d, DlgNewFolder.Value), os.ModePerm)
+				err := os.Mkdir(filepath.Join(d, DlgNewFolder.Value), os.ModePerm)
+				if err != nil {
+					ui.SetStatus(err.Error())
+				} else {
+					ui.SetStatus(fmt.Sprintf("Folder %s created", filepath.Join(d, DlgNewFolder.Value)))
+				}
 			} else {
 				ui.SetStatus("Canceling creating new folder")
 			}
@@ -1411,6 +1431,50 @@ func XeqOut(c string) string {
 }
 
 // ****************************************************************************
+// XeqOutErr()
+// ****************************************************************************
+func XeqOutErr(c string) string {
+	// sCmd := strings.Fields(c)
+	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
+	quoted := false
+	sCmd := strings.FieldsFunc(c, func(r rune) bool {
+		if r == '"' {
+			quoted = !quoted
+		}
+		return !quoted && r == ' '
+	})
+
+	out := ""
+	if len(sCmd) > 0 {
+		cmd := exec.Command(sCmd[0], sCmd[1:]...)
+		cmd.Dir = conf.ConfigGeneral.Workspace
+		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
+		var outb, errb bytes.Buffer
+		cmd.Stdout = &outb
+		cmd.Stderr = &errb
+		if err := cmd.Run(); err != nil {
+			out = "Error : " + err.Error()
+			if exitError, ok := err.(*exec.ExitError); ok {
+				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
+				out = out + outb.String()
+				out = out + errb.String()
+			}
+		} else {
+			out = outb.String()
+			out = out + errb.String()
+			out = out + "\nExit code 0"
+		}
+	} else {
+		out = "Nothing to run\n\nExit code 0"
+	}
+
+	out = strings.TrimSpace(out)
+	ui.SetStatus(out)
+	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
+	return out
+}
+
+// ****************************************************************************
 // XeqRaw()
 // ****************************************************************************
 func XeqRaw(c string) string {
@@ -1488,7 +1552,7 @@ func DoGitBang(f any) {
 	if !IsInsideGitWorkTree() {
 		pjname := filepath.Base(filepath.Dir(edit.CurrentFile.FName))
 		DlgYesNo1 = DlgYesNo1.YesNo("Git Bang", // Title
-			"This will initialize a Git environment for your project ["+pjname+"].\n\nAre you sure you want to proceed ?", // Message
+			fmt.Sprintf("This will initialize and push a Git environment\nfor your project \"%s\".\n\nAre you sure you want to proceed ?", pjname), // Message
 			func(rc dialog.DlgButton, idx int) {
 				if rc == dialog.BUTTON_YES {
 					if conf.ConfigGeneral.GitUser == "" {
@@ -1499,6 +1563,7 @@ func DoGitBang(f any) {
 							func(rc dialog.DlgButton, idx int) {
 								if rc == dialog.BUTTON_YES {
 									url := "https://" + conf.ConfigGeneral.GitKey + "@github.com/" + conf.ConfigGeneral.GitUser + "/" + pjname
+									Xeq("git init")
 									Xeq("git add .")
 									Xeq("git commit -m \"First Commit\"")
 									Xeq("git remote add origin " + url)
@@ -1610,6 +1675,130 @@ CMakeLists.txt.user*
 					}
 				} else {
 					ui.SetStatus("Aborting Git Bang")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo1", DlgYesNo1.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo1")
+	} else {
+		ui.SetStatus("Git repository already created")
+	}
+}
+
+// ****************************************************************************
+// DoGitInit()
+// ****************************************************************************
+func DoGitInit(f any) {
+	if !IsInsideGitWorkTree() {
+		pjname := filepath.Base(filepath.Dir(edit.CurrentFile.FName))
+		DlgYesNo1 = DlgYesNo1.YesNo("Git Init", // Title
+			fmt.Sprintf("This will initialize a Git environment\nfor your project \"%s\".\n\nAre you sure you want to proceed ?", pjname), // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					if conf.ConfigGeneral.GitUser == "" {
+						ui.SetStatus("Git User is not yet configured")
+					} else {
+						currentDir := filepath.Dir(edit.CurrentFile.FName)
+						if !utils.IsFileExist(filepath.Join(currentDir, "README.md")) {
+							createFile(filepath.Join(currentDir, "README.md"), "#"+pjname)
+						}
+						if !utils.IsFileExist(filepath.Join(currentDir, ".gitignore")) {
+							createFile(filepath.Join(currentDir, ".gitignore"),
+								`# This file is used to ignore files which are generated
+# ----------------------------------------------------------------------------
+
+github.key
+*~
+*.autosave
+*.a
+*.core
+*.moc
+*.o
+*.obj
+*.orig
+*.rej
+*.so
+*.so.*
+*_pch.h.cpp
+*_resource.rc
+*.qm
+.#*
+*.*#
+core
+!core/
+tags
+.DS_Store
+.directory
+*.debug
+Makefile*
+*.prl
+*.app
+moc_*.cpp
+ui_*.h
+qrc_*.cpp
+Thumbs.db
+*.res
+*.rc
+/.qmake.cache
+/.qmake.stash
+
+# qtcreator generated files
+*.pro.user*
+*.qbs.user*
+CMakeLists.txt.user*
+
+# xemacs temporary files
+*.flc
+
+# Vim temporary files
+.*.swp
+
+# Visual Studio generated files
+*.ib_pdb_index
+*.idb
+*.ilk
+*.pdb
+*.sln
+*.suo
+*.vcproj
+*vcproj.*.*.user
+*.ncb
+*.sdf
+*.opensdf
+*.vcxproj
+*vcxproj.*
+
+# MinGW generated files
+*.Debug
+*.Release
+
+# Python byte code
+*.pyc
+
+# Binaries
+# --------
+*.dll
+*.exe
+
+# Directories with generated files
+.moc/
+.obj/
+.pch/
+.rcc/
+.uic/
+/build*/
+`)
+						}
+						Xeq("git init")
+						// Xeq("git add .")
+						DoGitStatus("dummy")
+						Xeq("git branch -M main")
+						go edit.UpdateStatus()
+						edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+					}
+				} else {
+					ui.SetStatus("Aborting Git Init")
 				}
 			},
 			0,
@@ -2020,7 +2209,8 @@ func ReadMacros() {
 // ****************************************************************************
 func XeqMacro(k any) {
 	ui.SetStatus("Executing macro : [" + k.(string) + "]")
-	out := fmt.Sprintf("%s\n", XeqOut(replaceVariablesInMacro(k.(string))))
+	out := fmt.Sprintf("%s\n", XeqOutErr(replaceVariablesInMacro(k.(string))))
+	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 	MsgBox = MsgBox.OK("Macro : "+k.(string), out, nil, 0, ui.GetCurrentScreen(), edit.CurrentView)
 	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 	ui.PgsApp.ShowPage("msgBox")
