@@ -765,6 +765,9 @@ func readSettings() {
 		conf.ConfigGeneral.FormatDate = section.Key("FormatDate").String()
 		conf.ConfigGeneral.ColorAccent = section.Key("ColorAccent").String()
 		// Set them
+		if conf.ConfigGeneral.Theme == "" {
+			conf.ConfigGeneral.Theme = "monokai"
+		}
 		setTheme(conf.ConfigGeneral.Theme)
 		if conf.ConfigGeneral.FormatTime == "" {
 			conf.ConfigGeneral.FormatTime = "15:04:05"

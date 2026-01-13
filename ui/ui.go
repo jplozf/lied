@@ -430,7 +430,7 @@ func SetUI(fQuit Fn, hostname string) {
 				AddItem(PgsEditorContent, 0, 1, true), 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
-				AddItem(FrmFind, 10, 0, false).
+				AddItem(FrmFind, 11, 0, false).
 				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 					AddItem(TrvExplorer, 0, 1, false).
 					AddItem(TblOutline, 12, 0, false).
