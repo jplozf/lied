@@ -778,10 +778,24 @@ func readSettings() {
 			conf.ConfigGeneral.Workspace, _ = os.Getwd()
 		}
 		edit.SwitchOpenFile(section.Key("CurrentFile").String())
+
 		if edit.CurrentFile.Buffer != nil {
-			edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
-			edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
+			tmpX, _ := section.Key("CurrentX").Int()
+			tmpY, _ := section.Key("CurrentY").Int()
+			if edit.CurrentFile.Buffer.NumLines > tmpY {
+				edit.CurrentFile.Buffer.Cursor.Y = tmpY
+			} else {
+				edit.CurrentFile.Buffer.Cursor.Y = edit.CurrentFile.Buffer.NumLines - 1
+			}
+			if len(edit.CurrentFile.Buffer.Line(edit.CurrentFile.Buffer.Cursor.Y)) > tmpX {
+				edit.CurrentFile.Buffer.Cursor.X = tmpX
+			} else {
+				edit.CurrentFile.Buffer.Cursor.X = len(edit.CurrentFile.Buffer.Line(edit.CurrentFile.Buffer.Cursor.Y)) - 1
+			}
+			// edit.CurrentFile.Buffer.Cursor.X, _ = section.Key("CurrentX").Int()
+			// edit.CurrentFile.Buffer.Cursor.Y, _ = section.Key("CurrentY").Int()
 		}
+
 	}
 	if conf.ConfigGeneral.ColorAccent == "" {
 		conf.ConfigGeneral.ColorAccent = conf.DEFAULT_COLOR_ACCENT
