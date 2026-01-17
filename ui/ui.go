@@ -269,61 +269,64 @@ func SetUI(fQuit Fn, hostname string) {
 
 	EdtMain = femto.NewView(buffer)
 	EdtMain.SetBorder(true)
-	EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyLeft:
-			EdtMain.CursorLeft()
-			return nil // Consume event
-		case tcell.KeyRight:
-			EdtMain.CursorRight()
-			return nil // Consume event
-		default:
-			return event // Pass other keys through
-		}
-	})
-
+	/*
+		EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			switch event.Key() {
+			case tcell.KeyLeft:
+				EdtMain.CursorLeft()
+				return nil // Consume event
+			case tcell.KeyRight:
+				EdtMain.CursorRight()
+				return nil // Consume event
+			default:
+				return event // Pass other keys through
+			}
+		})
+	*/
 	HexView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
 	HexView.SetBorder(true).SetTitle("Hexadecimal")
-	HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		offset, _ := HexView.GetScrollOffset()
-		_, _, _, height := HexView.GetInnerRect()
+	/*
+		HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+			offset, _ := HexView.GetScrollOffset()
+			_, _, _, height := HexView.GetInnerRect()
 
-		switch event.Key() {
-		case tcell.KeyUp:
-			HexView.ScrollTo(offset-1, 0)
-		case tcell.KeyDown:
-			HexView.ScrollTo(offset+1, 0)
-		case tcell.KeyPgUp:
-			HexView.ScrollTo(offset-height, 0)
-		case tcell.KeyPgDn:
-			HexView.ScrollTo(offset+height, 0)
-		case tcell.KeyHome:
-			HexView.ScrollToBeginning()
-		case tcell.KeyEnd:
-			HexView.ScrollToEnd()
-		default:
-			return event // Not a scroll event, pass it on
-		}
-
-		// Update LblCursor with byte offset
-		byteOffset := offset * 16 // 16 bytes per line
-		LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
-
-		// Update LblPercent with scroll percentage
-		hexContent := HexView.GetText(false)
-		totalLines := strings.Count(hexContent, "\n")
-		if totalLines > height {
-			percent := int((float64(offset) / float64(totalLines-height)) * 100.0)
-			if percent > 100 {
-				percent = 100
+			switch event.Key() {
+			case tcell.KeyUp:
+				HexView.ScrollTo(offset-1, 0)
+			case tcell.KeyDown:
+				HexView.ScrollTo(offset+1, 0)
+			case tcell.KeyPgUp:
+				HexView.ScrollTo(offset-height, 0)
+			case tcell.KeyPgDn:
+				HexView.ScrollTo(offset+height, 0)
+			case tcell.KeyHome:
+				HexView.ScrollToBeginning()
+			case tcell.KeyEnd:
+				HexView.ScrollToEnd()
+			default:
+				return event // Not a scroll event, pass it on
 			}
-			LblPercent.SetText(fmt.Sprintf("%d%%", percent))
-		} else {
-			LblPercent.SetText("100%")
-		}
 
-		return nil // Consume the event as we've handled the scrolling
-	})
+			// Update LblCursor with byte offset
+			byteOffset := offset * 16 // 16 bytes per line
+			LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
+
+			// Update LblPercent with scroll percentage
+			hexContent := HexView.GetText(false)
+			totalLines := strings.Count(hexContent, "\n")
+			if totalLines > height {
+				percent := int((float64(offset) / float64(totalLines-height)) * 100.0)
+				if percent > 100 {
+					percent = 100
+				}
+				LblPercent.SetText(fmt.Sprintf("%d%%", percent))
+			} else {
+				LblPercent.SetText("100%")
+			}
+
+			return nil // Consume the event as we've handled the scrolling
+		})
+	*/
 
 	FlxHexViewer = tview.NewFlex().
 		AddItem(HexView, 0, 1, false)

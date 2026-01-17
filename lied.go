@@ -233,6 +233,12 @@ func main() {
 			return nil
 		}
 		switch event.Key() {
+		case tcell.KeyLeft:
+			ui.EdtMain.CursorLeft()
+			return nil // Consume event
+		case tcell.KeyRight:
+			ui.EdtMain.CursorRight()
+			return nil // Consume event
 		case tcell.KeyCtrlS:
 			edit.SaveFile()
 			return nil
@@ -374,28 +380,67 @@ func main() {
 
 	// HexView keyboard's events manager
 	ui.HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		currentOffset, _ := ui.HexView.GetScrollOffset()
+		newOffset := currentOffset
+		_, _, _, height := ui.HexView.GetInnerRect()
 		switch event.Key() {
+		case tcell.KeyUp:
+			newOffset = currentOffset - 1
+			if newOffset < 0 {
+				newOffset = 0
+			}
+			ui.HexView.ScrollTo(newOffset, 0)
+		case tcell.KeyDown:
+			newOffset = currentOffset + 1
+			ui.HexView.ScrollTo(newOffset, 0)
+		case tcell.KeyPgUp:
+			newOffset = currentOffset - height
+			if newOffset < 0 {
+				newOffset = 0
+			}
+			ui.HexView.ScrollTo(newOffset, 0)
+		case tcell.KeyPgDn:
+			newOffset = currentOffset + height
+			ui.HexView.ScrollTo(newOffset, 0)
+		case tcell.KeyHome:
+			newOffset = 0
+			ui.HexView.ScrollToBeginning()
+		case tcell.KeyEnd:
+			ui.HexView.ScrollToEnd()
 		case tcell.KeyCtrlN:
 			edit.NewFile(conf.ConfigGeneral.Workspace)
-			return nil
 		case tcell.KeyCtrlO:
 			InputFileOpen(conf.ConfigGeneral.Workspace)
-			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
-			return nil
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
-			return nil
 		case tcell.KeyCtrlF:
 			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
 			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
 			ui.FrmFind.GetButton(2).SetDisabled(true) // Disable Replace for binary
 			ui.FrmFind.GetButton(3).SetDisabled(true) // Disable Replace All for binary
 			ui.App.SetFocus(ui.FrmFind)
-			return nil
+		default:
+			return event
 		}
-		return event
+		// Update LblCursor with byte offset
+		byteOffset := newOffset * 16 // 16 bytes per line
+		ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
+
+		// Update LblPercent with scroll percentage
+		hexContent := ui.HexView.GetText(false)
+		totalLines := strings.Count(hexContent, "\n")
+		if totalLines > height {
+			percent := int((float64(currentOffset) / float64(totalLines-height)) * 100.0)
+			if percent > 100 {
+				percent = 100
+			}
+			ui.LblPercent.SetText(fmt.Sprintf("%d%%", percent))
+		} else {
+			ui.LblPercent.SetText("100%")
+		}
+		return nil
 	})
 
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
@@ -709,6 +754,7 @@ func appQuit() {
 // ****************************************************************************
 func readSettings() {
 	// Read MRU list and open them
+	atLeastOneFile := false
 	ui.SetStatus("Reading MRU list")
 	fMRU, err := os.Open(filepath.Join(appDir, conf.FILE_MRU))
 	if err == nil {
@@ -721,7 +767,11 @@ func readSettings() {
 				rw = false
 			}
 			edit.OpenFile(rec[2:], rw)
+			atLeastOneFile = true
 		}
+	}
+	if !atLeastOneFile {
+		edit.NewFile(conf.ConfigGeneral.Workspace)
 	}
 
 	// Read shell history

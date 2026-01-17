@@ -24,6 +24,9 @@ func DisplayExifInfo(filePath string) {
 	exifData, err := exifinfo.GetSortedExifInfo(filePath)
 	if err != nil {
 		SetStatus(fmt.Sprintf("Error getting EXIF info: %v", err))
+		TblOutline.SetCell(0, 0, tview.NewTableCell("ERROR :").SetTextColor(tcell.ColorRed).SetAlign(tview.AlignLeft))
+		TblOutline.SetCell(1, 0, tview.NewTableCell("Error getting info from 'exiftool'.").SetTextColor(tcell.ColorRed).SetAlign(tview.AlignLeft))
+		TblOutline.SetCell(2, 0, tview.NewTableCell("Please, ensure it is correctly installed.").SetTextColor(tcell.ColorRed).SetAlign(tview.AlignLeft))
 		return
 	}
 

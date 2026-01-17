@@ -1,6 +1,6 @@
 // ****************************************************************************
 //
-//	 _____ _____ _____ _____ 
+//	 _____ _____ _____ _____
 //	|   __|     |   __|  |  |
 //	|  |  |  |  |__   |     |
 //	|_____|_____|_____|__|__|
@@ -23,6 +23,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math"
+	"math/big"
 	"net/http"
 	"os"
 	"os/exec"
@@ -245,10 +246,10 @@ func getCPUSample() (idle, total uint64) {
 				if err != nil {
 					fmt.Println("Error: ", i, fields[i], err)
 				}
-			total += val // tally up all the numbers to get total ticks
-			if i == 4 {  // idle is the 5th field in the cpu line
-				idle = val
-			}
+				total += val // tally up all the numbers to get total ticks
+				if i == 4 {  // idle is the 5th field in the cpu line
+					idle = val
+				}
 			}
 			return
 		}
@@ -628,4 +629,58 @@ func ZipIt(source string, target string) error {
 		_, err = io.Copy(headerWriter, f)
 		return err
 	})
+}
+
+var (
+	adjectives = []string{
+		"agile", "ancient", "arctic", "arid", "atomic", "azure", "bold", "bright",
+		"broken", "bronze", "calm", "celestial", "chill", "clear", "cold", "cosmic",
+		"crimson", "cryptic", "crystal", "dark", "dawn", "deep", "digital", "divine",
+		"dusty", "eager", "electric", "emerald", "epic", "eternal", "faint", "fancy",
+		"fast", "feral", "fierce", "flat", "floral", "flying", "formal", "frozen",
+		"gentle", "giant", "glass", "global", "glossy", "golden", "grand", "gray",
+		"green", "hidden", "hollow", "honest", "huge", "humble", "icy", "inner",
+		"iron", "ivory", "jade", "jolly", "jumpy", "keen", "kind", "large",
+		"light", "liquid", "little", "lucky", "lunar", "magic", "misty", "modern",
+		"mystic", "narrow", "neon", "noble", "oceanic", "old", "opal", "outer",
+		"pale", "patient", "plain", "prime", "proud", "pure", "quiet", "rapid",
+		"rare", "red", "royal", "rugged", "secret", "shining", "silent", "silver",
+		"smooth", "solar", "stark", "steady", "stellar", "swift", "vibrant",
+	}
+
+	nouns = []string{
+		"anchor", "apple", "arrow", "atlas", "atom", "axis", "beacon", "beam",
+		"bird", "bison", "boulder", "breeze", "bridge", "cactus", "canyon", "castle",
+		"cliff", "cloud", "comet", "crag", "crane", "crest", "crystal", "desert",
+		"door", "dune", "eagle", "earth", "echo", "edge", "ember", "field",
+		"flame", "flower", "forest", "forge", "fossil", "fountain", "fox", "galaxy",
+		"garden", "gate", "glacier", "glass", "grove", "harbor", "hawk", "heart",
+		"hill", "island", "jungle", "lake", "leaf", "light", "lion", "marsh",
+		"maze", "meadow", "mirror", "mist", "moon", "mountain", "nebula", "night",
+		"node", "ocean", "orbit", "owl", "path", "peak", "pebble", "pine",
+		"planet", "plateau", "pond", "prism", "pulse", "rain", "reef", "ridge",
+		"river", "rock", "root", "sand", "shadow", "shell", "shield", "sky",
+		"snow", "spark", "spire", "star", "stone", "storm", "stream", "sun",
+		"temple", "thistle", "thorn", "thunder", "tiger", "tower", "trail", "tree",
+		"tundra", "valley", "vessel", "voice", "vortex", "wave", "wind", "wolf",
+		"zenith", "zone",
+	}
+)
+
+// secureInt returns a random integer in the range [0, max)
+func secureInt(max int) int {
+	nBig, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
+		panic(err)
+	}
+	return int(nBig.Int64())
+}
+
+func GenerateSecureFilename() string {
+	adj := adjectives[secureInt(len(adjectives))]
+	noun := nouns[secureInt(len(nouns))]
+	num := secureInt(9000) + 1000
+
+	// Returns format like "cosmic-nebula-4029"
+	return fmt.Sprintf("%s-%s-%d", adj, noun, num)
 }
