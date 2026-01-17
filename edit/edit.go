@@ -446,9 +446,11 @@ func UpdateStatus() {
 						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
 					})
 
+					// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+					// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
 					for i, f := range funcs {
-						ui.TblOutline.SetCell(i+1, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
-						ui.TblOutline.SetCell(i+1, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
 					}
 					if !onlyOnce {
 						ui.TblOutline.ScrollToBeginning()
