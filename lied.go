@@ -427,7 +427,6 @@ func main() {
 		// Update LblCursor with byte offset
 		byteOffset := newOffset * 16 // 16 bytes per line
 		ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
-
 		// Update LblPercent with scroll percentage
 		hexContent := ui.HexView.GetText(false)
 		totalLines := strings.Count(hexContent, "\n")

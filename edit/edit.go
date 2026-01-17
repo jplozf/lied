@@ -185,14 +185,12 @@ func OpenFile(fName string, rw bool) {
 				go UpdateStatus()
 				go focusOpenFile(fName)
 				ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentFile.FName))
+				displayBinaryContent()
+				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+				ui.ConfigureFindFormForBinary(true)
 				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
 				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
-				displayBinaryContent()
-				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
-
-				// Configure FrmFind for binary files
-				ui.ConfigureFindFormForBinary(true)
 				return
 			}
 
@@ -223,7 +221,7 @@ func OpenFile(fName string, rw bool) {
 				CurrentFile.IsBinary = false
 				CurrentFile.ContentBytes = nil // Ensure this is nil for text files
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-				SetTheme("monokai")
+				SetTheme(conf.ConfigGeneral.Theme)
 				ui.EdtMain.SetTitleAlign(tview.AlignRight)
 				ui.LblScreen.SetText(CurrentFile.Encoding)
 				CurrentFile = UpdateGITInfos(CurrentFile)
@@ -631,7 +629,7 @@ func isFileAlreadyOpen(fName string) bool {
 // focusOpenFile()
 // ****************************************************************************
 func focusOpenFile(fName string) {
-	<-time.After(200 * time.Millisecond) // must be greater than the updateStatus sleep
+	<-time.After(500 * time.Millisecond) // must be greater than the updateStatus sleep
 	for idx := 0; idx < ui.TblOpenFiles.GetRowCount(); idx++ {
 		if fName == ui.TblOpenFiles.GetCell(idx, 3).Text {
 			ui.TblOpenFiles.Select(idx, 0)
@@ -1043,7 +1041,9 @@ func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 					OpenFile(path, true)
 					ui.SetStatus(fmt.Sprintf("Opening %s", path))
 				} else {
-					ui.SetStatus(fmt.Sprintf("%s is not a text file", path))
+					ui.SetStatus(fmt.Sprintf("Opening %s in hexadecimal view", path))
+					OpenFile(path, false)
+					ui.App.SetFocus(ui.HexView)
 				}
 			} else {
 				ui.SetStatus(fmt.Sprintf("Can't open file %s of type %s", path, mtype))
