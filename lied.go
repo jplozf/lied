@@ -83,6 +83,7 @@ var (
 	ICmd                int
 	MsgBox              *dialog.Dialog
 	Macros              map[string]string
+	activeCmd           *cmd.Cmd
 )
 
 // ****************************************************************************
@@ -215,12 +216,17 @@ func main() {
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
 			return nil
-			/*
-				case tcell.KeyEsc:
-					ui.App.SetFocus(ui.TblOpenFiles)
-					return nil
-			*/
+		case tcell.KeyEsc:
+			if activeCmd != nil {
+				// Stop the command immediately
+				activeCmd.Stop()
+
+				ui.SetStatus("Command cancelled by user.")
+				activeCmd = nil // Clear the reference
+				return nil      // Consume the event so it doesn't propagate
+			}
 		}
+
 		return event
 	})
 
@@ -1459,60 +1465,69 @@ func Xeq(c string) {
 				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
 			}
 		} else {
+			// 1. Setup the command
 			cmdOptions := cmd.Options{
-				Buffered:  false,
+				Buffered:  false, // We want streaming
 				Streaming: true,
 			}
-
 			xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
+			activeCmd = xCmd // Assign to the shared variable
 			xCmd.Dir = conf.ConfigGeneral.Workspace
-			fOut, _ := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			defer fOut.Close()
-			wOut := bufio.NewWriter(fOut)
-			fmt.Fprintln(wOut, time.Now().Format("20060102-150405")+" ⯈ "+c+"\n")
-			wOut.Flush()
-			doneChan := make(chan struct{})
+
+			// 2. Open the log file once (use O_APPEND)
+			fOut, err := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+			if err != nil {
+				// Handle error
+			}
+
+			// 3. Start the command in the background
+			statusChan := xCmd.Start()
+			// Check if the command failed to even start (e.g., command not found)
+			initialStatus := xCmd.Status()
+			if initialStatus.Error != nil {
+				ui.SetStatus("Error: " + initialStatus.Error.Error())
+				// Log it to the file as well
+				fmt.Fprintln(fOut, "START ERROR: "+initialStatus.Error.Error())
+				return
+			}
+
+			// 4. Handle Output & Lifecycle in a single Goroutine
 			go func() {
-				defer close(doneChan)
-				// Done when both channels have been closed
-				// https://dave.cheney.net/2013/04/30/curious-channels
-				for xCmd.Stdout != nil || xCmd.Stderr != nil {
+				defer fOut.Close()
+
+				// Write header to file
+				fmt.Fprintf(fOut, "%s ⯈ %s\n", time.Now().Format("20060102-150405"), c)
+
+				for {
 					select {
 					case line, open := <-xCmd.Stdout:
 						if !open {
 							xCmd.Stdout = nil
-							continue
+						} else {
+							fmt.Fprintln(fOut, "OUT : "+line)
 						}
-						wOut := bufio.NewWriter(fOut)
-						fmt.Fprintln(wOut, line)
-						wOut.Flush()
-						ui.SetStatus(line)
-						ui.App.ForceDraw()
 					case line, open := <-xCmd.Stderr:
 						if !open {
 							xCmd.Stderr = nil
-							continue
+						} else {
+							fmt.Fprintln(fOut, "ERR : "+line)
 						}
-						wOut := bufio.NewWriter(fOut)
-						fmt.Fprintln(wOut, line)
-						wOut.Flush()
-						ui.SetStatus(line)
-						ui.App.ForceDraw()
+					case status := <-statusChan:
+						// Command finished!
+						fmt.Fprintln(fOut, fmt.Sprintf("Done [%s] Exit Code: %d\n", c, status.Exit))
+						ui.App.QueueUpdateDraw(func() {
+							ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, status.Exit))
+						})
+						return // Exit the goroutine
+					}
+
+					// If both streams are closed but status hasn't arrived,
+					// we still need to wait for statusChan to avoid leaking
+					if xCmd.Stdout == nil && xCmd.Stderr == nil && statusChan == nil {
+						return
 					}
 				}
-				// conf.Cwd = getWorkingDirectoryOfPID(xCmd.Status().PID)
 			}()
-
-			// Run and wait for Cmd to return
-			<-xCmd.Start()
-
-			// Wait for goroutine to print everything
-			<-doneChan
-
-			// Job's done !
-			fmt.Fprintln(wOut, "\n")
-			wOut.Flush()
-			ui.SetStatus(fmt.Sprintf("Done [%s]", c))
 		}
 	} else {
 		ui.SetStatus("Nothing to run")

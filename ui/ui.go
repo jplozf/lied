@@ -113,6 +113,7 @@ var (
 	HexView          *tview.TextView
 	FlxHexViewer     *tview.Flex
 	PgsEditorContent *tview.Pages
+	TxtPrompt        *tview.InputField
 )
 
 // ConfigureFindFormForBinary configures the FrmFind for binary or text files.
@@ -360,6 +361,10 @@ func SetUI(fQuit Fn, hostname string) {
 	TblOutline.SetSelectable(true, false)
 	TblOutline.SetTitle("Outline")
 
+	TxtPrompt = tview.NewInputField()
+	TxtPrompt.SetLabel(":>")
+	TxtPrompt.SetBorder(false)
+
 	FrmFind = tview.NewForm()
 	FrmFind.SetBorder(true)
 	FrmFind.SetTitle("Find & Replace")
@@ -420,6 +425,7 @@ func SetUI(fQuit Fn, hostname string) {
 	//*************************************************************************
 	// Editor Layout
 	//*************************************************************************
+	TxtPrompt.SetDisabled(true)
 	FlxEditor = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
@@ -430,7 +436,8 @@ func SetUI(fQuit Fn, hostname string) {
 				AddItem(tview.NewFlex().
 					AddItem(TxtCurrentWorkspace, 0, 2, false).
 					AddItem(TxtCurrentEditName, 0, 1, false), 3, 0, false).
-				AddItem(PgsEditorContent, 0, 1, true), 0, 2, true).
+				AddItem(PgsEditorContent, 0, 1, true).
+				AddItem(TxtPrompt, 1, 1, false), 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
 				AddItem(FrmFind, 11, 0, false).
