@@ -143,6 +143,7 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 [red]!out  :[white] Opens the output file for the Shell input box
 [red]!foll :[white] Switch the current file in following mode
 [red]!tail :[white] --------------- idem --------------------
+[red]!shel :[white] Enable the interactive shell if not enabled by default in settings
 [red]!next :[white] Switch to the next open file (same as F7)
 [red]!prev :[white] Switch to the previous open file (same as F6)
 [red]!clos :[white] Closes the current document (same as CTRL + T)

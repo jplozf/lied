@@ -172,7 +172,11 @@ func main() {
 		case tcell.KeyF3:
 			ShowGitMenu()
 		case tcell.KeyF4:
-			InputShell(nil)
+			if conf.ConfigGeneral.InteractiveShell {
+				doInteractiveShell()
+			} else {
+				doDialogShell(nil)
+			}
 		case tcell.KeyF12:
 			ShowQuitDialog(nil)
 		case tcell.KeyCtrlC:
@@ -448,6 +452,36 @@ func main() {
 		return nil
 	})
 
+	// Shell Prompt Field keyboard's events manager
+	ui.TxtPrompt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEnter:
+			Xeq(ui.TxtPrompt.GetText())
+			ui.TxtPrompt.SetText("")
+			return nil
+		case tcell.KeyUp:
+			if len(ACmd) > 0 {
+				ICmd--
+				if ICmd < 0 {
+					ICmd = len(ACmd) - 1
+				}
+				ui.TxtPrompt.SetText(ACmd[ICmd])
+			}
+			return nil
+		case tcell.KeyDown:
+			if len(ACmd) > 0 {
+				ICmd++
+				if ICmd > len(ACmd)-1 {
+					ICmd = 0
+				}
+				ui.TxtPrompt.SetText(ACmd[ICmd])
+			}
+			return nil
+		default:
+			return event
+		}
+	})
+
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
@@ -549,6 +583,8 @@ func ShowConfigMenu() {
 	MnuConfig.AddItem("mnuCfgShowHidden", "Show Hidden", SwitchShowHidden, nil, true, conf.ConfigGeneral.ShowHidden)
 	MnuConfig.AddItem("mnuCfgFormatTime", "Time Format", InputConfigFormatTime, nil, true, false)
 	MnuConfig.AddItem("mnuCfgFormatDate", "Date Format", InputConfigFormatDate, nil, true, false)
+	MnuConfig.AddItem("mnuCfgInteractiveShell", "Interactive Shell by default", SwitchInteractiveShell, nil, true, conf.ConfigGeneral.InteractiveShell)
+	MnuConfig.AddItem("mnuCfgOutErrPrefix", "Prefix OUT & ERR in Shell", SwitchPrefixShell, nil, true, conf.ConfigGeneral.OutErrPrefix)
 	// Popup menu
 	ui.PgsApp.AddPage("dlgConfigMenu", MnuConfig.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgConfigMenu")
@@ -819,6 +855,8 @@ func readSettings() {
 		conf.ConfigGeneral.FormatTime = section.Key("FormatTime").String()
 		conf.ConfigGeneral.FormatDate = section.Key("FormatDate").String()
 		conf.ConfigGeneral.ColorAccent = section.Key("ColorAccent").String()
+		conf.ConfigGeneral.InteractiveShell, _ = section.Key("InteractiveShell").Bool()
+		conf.ConfigGeneral.OutErrPrefix, _ = section.Key("OutErrPrefix").Bool()
 		// Set them
 		if conf.ConfigGeneral.Theme == "" {
 			conf.ConfigGeneral.Theme = "monokai"
@@ -924,6 +962,8 @@ func saveSettings() {
 	sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
 	sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
 	sec.NewKey("ColorAccent", conf.ConfigGeneral.ColorAccent)
+	sec.NewKey("InteractiveShell", utils.If(conf.ConfigGeneral.InteractiveShell, "True", "False"))
+	sec.NewKey("OutErrPrefix", utils.If(conf.ConfigGeneral.OutErrPrefix, "True", "False"))
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
@@ -1372,9 +1412,25 @@ func SwitchCleanUpOnExit(dummy any) {
 }
 
 // ****************************************************************************
-// InputShell()
+// SwitchInteractiveShell()
 // ****************************************************************************
-func InputShell(f any) {
+func SwitchInteractiveShell(dummy any) {
+	conf.ConfigGeneral.InteractiveShell = !conf.ConfigGeneral.InteractiveShell
+	ui.SetStatus(fmt.Sprintf("Interactive Shell by default is set to %t", conf.ConfigGeneral.InteractiveShell))
+}
+
+// ****************************************************************************
+// SwitchPrefixShell()
+// ****************************************************************************
+func SwitchPrefixShell(dummy any) {
+	conf.ConfigGeneral.OutErrPrefix = !conf.ConfigGeneral.OutErrPrefix
+	ui.SetStatus(fmt.Sprintf("OUT & ERR prefix is set to %t", conf.ConfigGeneral.OutErrPrefix))
+}
+
+// ****************************************************************************
+// doDialogShell()
+// ****************************************************************************
+func doDialogShell(f any) {
 	sh := ""
 	DlgInputShell = DlgInputShell.Command("Shell", // Title
 		"CWD:"+conf.ConfigGeneral.Workspace,
@@ -1384,6 +1440,17 @@ func InputShell(f any) {
 		ui.GetCurrentScreen(), edit.CurrentView, ACmd) // Focus return
 	ui.PgsApp.AddPage("dlgInputShell", DlgInputShell.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputShell")
+}
+
+// ****************************************************************************
+// doInteractiveShell()
+// ****************************************************************************
+func doInteractiveShell() {
+	// ui.FlxEditor.SetItemIndex(TxtPrompt, 1, 1, false)
+	edit.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
+	edit.SwitchFollow("dummy")
+	ui.TxtPrompt.SetDisabled(false)
+	ui.App.SetFocus(ui.TxtPrompt)
 }
 
 // ****************************************************************************
@@ -1449,6 +1516,8 @@ func Xeq(c string) {
 				ShowHelp()
 			case "!info":
 				ShowSysInfo()
+			case "!shel":
+				doInteractiveShell()
 			case "!b", "!bott":
 				edit.GoBottom()
 			case "!t", "!top":
@@ -1492,29 +1561,35 @@ func Xeq(c string) {
 			}
 
 			// 4. Handle Output & Lifecycle in a single Goroutine
+
 			go func() {
 				defer fOut.Close()
 
 				// Write header to file
 				fmt.Fprintf(fOut, "%s ⯈ %s\n", time.Now().Format("20060102-150405"), c)
-
+				outPrefix := ""
+				errPrefix := ""
+				if conf.ConfigGeneral.OutErrPrefix {
+					outPrefix = "OUT : "
+					errPrefix = "ERR : "
+				}
 				for {
 					select {
 					case line, open := <-xCmd.Stdout:
 						if !open {
 							xCmd.Stdout = nil
 						} else {
-							fmt.Fprintln(fOut, "OUT : "+line)
+							fmt.Fprintln(fOut, outPrefix+line)
 						}
 					case line, open := <-xCmd.Stderr:
 						if !open {
 							xCmd.Stderr = nil
 						} else {
-							fmt.Fprintln(fOut, "ERR : "+line)
+							fmt.Fprintln(fOut, errPrefix+line)
 						}
 					case status := <-statusChan:
 						// Command finished!
-						fmt.Fprintln(fOut, fmt.Sprintf("Done [%s] Exit Code: %d\n", c, status.Exit))
+						fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, status.Exit))
 						ui.App.QueueUpdateDraw(func() {
 							ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, status.Exit))
 						})

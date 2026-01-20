@@ -37,7 +37,7 @@ const (
 	FILE_SHELL_OUTPUT       = "output"
 	FILE_MACROS             = "macros"
 	FILE_MRU                = "mru"
-	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Shell F6=Previous F7=Next F8=Settings F9=Workspace F10=Menu F12=Exit"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F6=Previous F7=Next F8=Settings F9=Workspace F10=Menu F12=Exit"
 	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 )
@@ -47,16 +47,18 @@ var Version string
 var LogFile *os.File
 
 type SConfigGeneral struct {
-	Theme         string
-	GitUser       string
-	GitKey        string
-	Workspace     string
-	ShowHidden    bool
-	ConfirmExit   bool
-	CleanUpOnExit bool
-	FormatTime    string
-	FormatDate    string
-	ColorAccent   string
+	Theme            string
+	GitUser          string
+	GitKey           string
+	Workspace        string
+	ShowHidden       bool
+	ConfirmExit      bool
+	CleanUpOnExit    bool
+	FormatTime       string
+	FormatDate       string
+	ColorAccent      string
+	InteractiveShell bool
+	OutErrPrefix     bool
 }
 
 type SConfigPrivate struct {
