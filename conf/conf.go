@@ -37,7 +37,7 @@ const (
 	FILE_SHELL_OUTPUT       = "output"
 	FILE_MACROS             = "macros"
 	FILE_MRU                = "mru"
-	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F6=Previous F7=Next F8=Settings F9=Workspace F10=Menu F12=Exit"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F5=SQLite F6=Previous F7=Next F8=Settings F9=Workspace F10=Menu F12=Exit"
 	CKEY_LABELS             = "Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 )

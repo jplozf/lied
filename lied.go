@@ -84,6 +84,7 @@ var (
 	MsgBox              *dialog.Dialog
 	Macros              map[string]string
 	activeCmd           *cmd.Cmd
+	promptVisible       bool
 )
 
 // ****************************************************************************
@@ -132,6 +133,7 @@ func init() {
 		panic(err)
 	}
 
+	promptVisible = false
 	ui.SetStatus(fmt.Sprintf("Starting session #%s", ui.SessionID))
 	Macros = make(map[string]string)
 	readSettings()
@@ -173,7 +175,19 @@ func main() {
 			ShowGitMenu()
 		case tcell.KeyF4:
 			if conf.ConfigGeneral.InteractiveShell {
-				doInteractiveShell()
+				if !promptVisible {
+					promptVisible = true
+					doInteractiveShell()
+				} else {
+					promptVisible = false
+					ui.MidColumn.RemoveItem(ui.TxtPrompt)
+					edit.CloseThisFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT))
+					if edit.CurrentFile.IsBinary {
+						ui.App.SetFocus(ui.HexView)
+					} else {
+						ui.App.SetFocus(ui.EdtMain)
+					}
+				}
 			} else {
 				doDialogShell(nil)
 			}
@@ -369,10 +383,14 @@ func main() {
 	ui.TblOutline.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			if edit.CurrentFile.IsBinary {
-				ui.App.SetFocus(ui.HexView)
+			if promptVisible {
+				ui.App.SetFocus(ui.TxtPrompt)
 			} else {
-				ui.App.SetFocus(ui.EdtMain)
+				if edit.CurrentFile.IsBinary {
+					ui.App.SetFocus(ui.HexView)
+				} else {
+					ui.App.SetFocus(ui.EdtMain)
+				}
 			}
 			return nil
 		case tcell.KeyEnter:
@@ -475,6 +493,13 @@ func main() {
 					ICmd = 0
 				}
 				ui.TxtPrompt.SetText(ACmd[ICmd])
+			}
+			return nil
+		case tcell.KeyF2:
+			if edit.CurrentFile.IsBinary {
+				ui.App.SetFocus(ui.HexView)
+			} else {
+				ui.App.SetFocus(ui.EdtMain)
 			}
 			return nil
 		default:
@@ -1447,6 +1472,7 @@ func doDialogShell(f any) {
 // ****************************************************************************
 func doInteractiveShell() {
 	// ui.FlxEditor.SetItemIndex(TxtPrompt, 1, 1, false)
+	ui.MidColumn.AddItem(ui.TxtPrompt, 1, 1, false)
 	edit.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
 	edit.SwitchFollow("dummy")
 	ui.TxtPrompt.SetDisabled(false)

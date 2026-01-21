@@ -847,6 +847,39 @@ func CloseCurrentFile() {
 }
 
 // ****************************************************************************
+// CloseThisFile()
+// ****************************************************************************
+func CloseThisFile(fName string) {
+	var n = -1
+	var d = ""
+	for i, f := range OpenFiles {
+		if f.FName == fName {
+			n = i
+			d = filepath.Dir(f.FName)
+			break
+		}
+	}
+	if n >= 0 {
+		onlyOnce = false
+		ui.SetStatus("Closing file " + fName)
+		CurrentFile = OpenFiles[n]
+		if CurrentFile.Buffer.IsModified {
+			proposeToSaveFile(n, FLOW_CLOSE)
+		} else {
+			copy(OpenFiles[n:], OpenFiles[n+1:])
+			OpenFiles = OpenFiles[:len(OpenFiles)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+			if n > 0 {
+				CurrentFile = OpenFiles[n-1]
+				SwitchOpenFile(CurrentFile.FName)
+			} else {
+				NewFile(d)
+			}
+		}
+	}
+}
+
+// ****************************************************************************
 // CloseAnyFile()
 // ****************************************************************************
 func CloseAnyFile(f any) {

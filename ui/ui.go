@@ -76,6 +76,8 @@ var (
 	App                 *tview.Application
 	FlxHelp             *tview.Flex
 	FlxEditor           *tview.Flex
+	MidColumn           *tview.Flex
+	FlxSQLite           *tview.Flex
 	TxtHelp             *tview.TextView
 	lblTitle            *tview.TextView
 	lblStatus           *tview.TextView
@@ -92,28 +94,28 @@ var (
 	TxtCurrentWorkspace *tview.TextView
 	TxtCurrentEditName  *tview.TextView
 	TblOpenFiles        *tview.Table
+	TblSQLOutput        *tview.Table
 	TrvExplorer         *tview.TreeView
 	MyConfig            Config
 	LblReadWrite        *tview.TextView
-	// LblEncoding  *tview.TextView
-	LblCursor        *tview.TextView
-	LblDirty         *tview.TextView
-	LblPercent       *tview.TextView
-	LblSize          *tview.TextView
-	LblCommit        *tview.TextView
-	LblGITStatus     *tview.TextView
-	LblGITBranch     *tview.TextView
-	FrmFind          *tview.Form
-	TxtFind          *tview.InputField
-	ChkCase          *tview.Checkbox
-	ChkToggleReplace *tview.Checkbox
-	TxtReplace       *tview.InputField
-	DpdSearchType    *tview.DropDown
-	TblOutline       *tview.Table
-	HexView          *tview.TextView
-	FlxHexViewer     *tview.Flex
-	PgsEditorContent *tview.Pages
-	TxtPrompt        *tview.InputField
+	LblCursor           *tview.TextView
+	LblDirty            *tview.TextView
+	LblPercent          *tview.TextView
+	LblSize             *tview.TextView
+	LblCommit           *tview.TextView
+	LblGITStatus        *tview.TextView
+	LblGITBranch        *tview.TextView
+	FrmFind             *tview.Form
+	TxtFind             *tview.InputField
+	ChkCase             *tview.Checkbox
+	ChkToggleReplace    *tview.Checkbox
+	TxtReplace          *tview.InputField
+	DpdSearchType       *tview.DropDown
+	TblOutline          *tview.Table
+	HexView             *tview.TextView
+	FlxHexViewer        *tview.Flex
+	PgsEditorContent    *tview.Pages
+	TxtPrompt           *tview.InputField
 )
 
 // ConfigureFindFormForBinary configures the FrmFind for binary or text files.
@@ -425,19 +427,20 @@ func SetUI(fQuit Fn, hostname string) {
 	//*************************************************************************
 	// Editor Layout
 	//*************************************************************************
-	TxtPrompt.SetDisabled(true)
+	MidColumn = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(tview.NewFlex().
+			AddItem(TxtCurrentWorkspace, 0, 2, false).
+			AddItem(TxtCurrentEditName, 0, 1, false), 3, 0, false).
+		AddItem(PgsEditorContent, 0, 1, true)
+		// AddItem(TxtPrompt, 1, 1, false) // TxtPrompt is currently index 2
+
 	FlxEditor = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
 			AddItem(lblTitle, 0, 1, false).
 			AddItem(lblTime, 10, 0, false), 1, 0, false).
 		AddItem(tview.NewFlex().
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(tview.NewFlex().
-					AddItem(TxtCurrentWorkspace, 0, 2, false).
-					AddItem(TxtCurrentEditName, 0, 1, false), 3, 0, false).
-				AddItem(PgsEditorContent, 0, 1, true).
-				AddItem(TxtPrompt, 1, 1, false), 0, 2, true).
+			AddItem(MidColumn, 0, 2, true).
 			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
 				AddItem(TblOpenFiles, 12, 0, false).
 				AddItem(FrmFind, 11, 0, false).
