@@ -6,6 +6,7 @@ toolchain go1.24.4
 
 require (
 	github.com/gdamore/tcell/v2 v2.6.0
+	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/rivo/tview v0.0.0-20231126152417-33a1d271f2b6
 	github.com/saintfish/chardet v0.0.0-20230101081208-5e3ef4b5456d

@@ -15,9 +15,10 @@ import (
 // DisplayExifInfo fetches EXIF information for the given file path
 // and displays it in the TblOutline table.
 func DisplayExifInfo(filePath string) {
-	PleaseWait()
-	defer JobsDone()
+	// PleaseWait()
+	// defer JobsDone()
 
+	// SetStatus(fmt.Sprintf("Fetching info for %s", filePath))
 	TblOutline.Clear()
 	TblOutline.SetTitle("Outline")
 
@@ -45,5 +46,5 @@ func DisplayExifInfo(filePath string) {
 		}
 	}
 
-	SetStatus(fmt.Sprintf("Displayed EXIF information for %s", strings.Split(filePath, "/")[len(strings.Split(filePath, "/"))-1]))
+	// SetStatus(fmt.Sprintf("Displayed EXIF information for %s", strings.Split(filePath, "/")[len(strings.Split(filePath, "/"))-1]))
 }

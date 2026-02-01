@@ -16,6 +16,7 @@ package edit
 // ****************************************************************************
 import (
 	"bytes"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -59,8 +60,10 @@ type editfile struct {
 	RWBackup            bool
 	IsMemberOfWorkspace bool
 	IsBinary            bool
+	IsDatabase          bool
 	ContentBytes        []byte
 	HexContentDirty     bool
+	Database            *sql.DB
 }
 
 type found struct {
@@ -114,7 +117,6 @@ var (
 // SwitchToEditor()
 // ****************************************************************************
 func SwitchToEditor(fName string) {
-	ui.CurrentMode = ui.ModeTextEdit
 	ui.SetTitle(conf.APP_NAME)
 	ui.LblKeys.SetText(conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS)
 	scr := ui.GetScreenFromTitle(conf.APP_NAME)
@@ -129,14 +131,18 @@ func SwitchToEditor(fName string) {
 		ui.ArrScreens = append(ui.ArrScreens, screen)
 		ui.IdxScreens++
 	}
-	ui.PgsApp.SwitchToPage(scr) // ???
+	ui.PgsApp.SwitchToPage(scr)
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
 	OpenFile(fName, true)
-	if CurrentFile.IsBinary {
-		ui.App.SetFocus(ui.HexView)
+	if CurrentFile.IsDatabase {
+		ui.App.SetFocus(ui.FlxSQLite)
 	} else {
-		ui.App.SetFocus(ui.EdtMain)
+		if CurrentFile.IsBinary {
+			ui.App.SetFocus(ui.HexView)
+		} else {
+			ui.App.SetFocus(ui.EdtMain)
+		}
 	}
 }
 
@@ -167,6 +173,36 @@ func OpenFile(fName string, rw bool) {
 			ui.SetStatus(fmt.Sprintf("File %v doesn't exist", fName))
 			CreateThisFile(fName)
 		} else {
+			// Check if the file is a SQLite3 database
+			if utils.IsSQLite3(fName) {
+				// content, err := ioutil.ReadFile(fName)
+				if err != nil {
+					ui.SetStatus(fmt.Sprintf("Could not read SQLite3 file %v: %v", fName, err))
+					return
+				}
+				CurrentFile.FName = fName
+				CurrentFile.IsBinary = false
+				CurrentFile.IsDatabase = true
+				CurrentFile.ReadWrite = false
+				CurrentFile.Follow = false
+				CurrentFile.Encoding = "SQLite3"
+				// var errDB error
+				CurrentFile.Database, _ = sql.Open("sqlite3", CurrentFile.FName)
+				OpenFiles = append(OpenFiles, CurrentFile)
+				// defer CloseDB(CurrentFile.Database)
+				go UpdateStatus()
+				go focusOpenFile(fName)
+				ui.SetStatus(fmt.Sprintf("Opening SQLite3 file %s", CurrentFile.FName))
+				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for this data
+				showTreeDB()
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.PgsEditorContent.SwitchToPage("sqlViewer")
+				ui.App.SetFocus(ui.TxtPromptSQL)
+				return
+			} else {
+				ui.SetStatus(fmt.Sprintf("%s is not a SQLite3 database", CurrentFile.FName))
+			}
+
 			// Check if the file is binary
 			if utils.IsBinaryFile(fName) {
 				content, err := ioutil.ReadFile(fName)
@@ -176,6 +212,7 @@ func OpenFile(fName string, rw bool) {
 				}
 				CurrentFile.FName = fName
 				CurrentFile.IsBinary = true
+				CurrentFile.IsDatabase = false
 				CurrentFile.ReadWrite = false // Binary files are read-only for now
 				CurrentFile.Follow = false
 				CurrentFile.Encoding = "Binary"
@@ -192,6 +229,8 @@ func OpenFile(fName string, rw bool) {
 				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				return
+			} else {
+				ui.SetStatus(fmt.Sprintf("%s is not a binary file", CurrentFile.FName))
 			}
 
 			content, err := ioutil.ReadFile(fName)
@@ -219,6 +258,7 @@ func OpenFile(fName string, rw bool) {
 				CurrentFile.ReadWrite = rw
 				CurrentFile.Follow = false
 				CurrentFile.IsBinary = false
+				CurrentFile.IsDatabase = false
 				CurrentFile.ContentBytes = nil // Ensure this is nil for text files
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 				SetTheme(conf.ConfigGeneral.Theme)
@@ -379,28 +419,35 @@ func UpdateStatus() {
 				dirPath += string(os.PathSeparator)
 			}
 			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
-			if CurrentFile.Buffer.Modified() {
-				// status = conf.ICON_MODIFIED
-				ui.LblDirty.SetText("*modified*")
-			} else {
-				// status = " "
-				ui.LblDirty.SetText("")
+
+			if !CurrentFile.IsDatabase {
+				if CurrentFile.Buffer.Modified() {
+					// status = conf.ICON_MODIFIED
+					ui.LblDirty.SetText("*modified*")
+				} else {
+					// status = " "
+					ui.LblDirty.SetText("")
+				}
 			}
 			CurrentFile = UpdateGITInfos(CurrentFile)
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
 			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
 			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
-			ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
-			if CurrentFile.Follow {
-				_, _, _, lines := ui.EdtMain.GetInnerRect()
-				ui.LblReadWrite.SetText("FL")
-				c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentFile.FName)
-				output, _ := c.Output()
-				CurrentFile.Buffer = femto.NewBufferFromString(string(output), CurrentFile.FName)
-				CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
-				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+
+			if !CurrentFile.IsDatabase {
+				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
+				if CurrentFile.Follow {
+					_, _, _, lines := ui.EdtMain.GetInnerRect()
+					ui.LblReadWrite.SetText("FL")
+					c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentFile.FName)
+					output, _ := c.Output()
+					CurrentFile.Buffer = femto.NewBufferFromString(string(output), CurrentFile.FName)
+					CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
+					ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+				}
+				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
 			}
-			ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
+
 			ui.TblOpenFiles.Clear()
 			count++
 			for i, f := range OpenFiles {
@@ -409,70 +456,88 @@ func UpdateStatus() {
 					f = UpdateGITInfos(f)
 					OpenFiles[i] = f
 				}
-				if f.Buffer.Modified() {
-					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
+				if f.IsDatabase {
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
 				} else {
-					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
+					if f.Buffer.Modified() {
+						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
+					} else {
+						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
+					}
 				}
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
 
-			if CurrentFile.IsBinary {
-				ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
-				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
-				ui.LblScreen.SetText(CurrentFile.Encoding)
-				ui.LblReadWrite.SetText("RO")
-				ui.LblDirty.SetText("")
-			} else {
-				x := CurrentFile.Buffer.Cursor.X + 1
-				y := CurrentFile.Buffer.Cursor.Y + 1
-				ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
-				ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
-				if CurrentFile.ReadWrite {
-					ui.LblReadWrite.SetText("RW")
-				} else {
-					ui.LblReadWrite.SetText("RO")
-				}
-
-				// Get funcs for current file and populate the TblOutline
+			if CurrentFile.IsDatabase {
+				// DISPLAY DATABASE STATUS
 				if count%20 == 0 {
-					ui.TblOutline.Clear()
-					var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
-					sort.Slice(funcs, func(i, j int) bool {
-						a := funcs[i]
-						b := funcs[j]
-						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
-					})
-
-					// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-					// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-					for i, f := range funcs {
-						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
-						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
-					}
-					if !onlyOnce {
-						ui.TblOutline.ScrollToBeginning()
-						onlyOnce = true
-					}
-				}
-				// Original text file status updates
-				if CurrentFile.Buffer.Modified() {
-					ui.LblDirty.SetText("*modified*")
-				} else {
+					ui.DisplayExifInfo(CurrentFile.FName)
+					fi, _ := os.Stat(CurrentFile.FName)
+					ui.LblSize.SetText(utils.HumanFileSize(float64(fi.Size())))
+					ui.LblCursor.SetText("SQLite3")
+					ui.LblReadWrite.SetText("RW")
+					ui.LblPercent.SetText("")
 					ui.LblDirty.SetText("")
 				}
-				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
-				ui.LblScreen.SetText(CurrentFile.Encoding)
-				if CurrentFile.ReadWrite {
-					ui.LblReadWrite.SetText("RW")
-				} else {
+			} else {
+				if CurrentFile.IsBinary {
+					ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
+					ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
+					ui.LblScreen.SetText(CurrentFile.Encoding)
 					ui.LblReadWrite.SetText("RO")
+					ui.LblDirty.SetText("")
+				} else {
+					x := CurrentFile.Buffer.Cursor.X + 1
+					y := CurrentFile.Buffer.Cursor.Y + 1
+					ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+					ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
+					if CurrentFile.ReadWrite {
+						ui.LblReadWrite.SetText("RW")
+					} else {
+						ui.LblReadWrite.SetText("RO")
+					}
+
+					// Get funcs for current file and populate the TblOutline
+					if count%20 == 0 {
+						ui.TblOutline.Clear()
+						var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
+						sort.Slice(funcs, func(i, j int) bool {
+							a := funcs[i]
+							b := funcs[j]
+							return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+						})
+
+						// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+						// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+						for i, f := range funcs {
+							ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+							ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+						}
+						if !onlyOnce {
+							ui.TblOutline.ScrollToBeginning()
+							onlyOnce = true
+						}
+					}
+					// Original text file status updates
+					if CurrentFile.Buffer.Modified() {
+						ui.LblDirty.SetText("*modified*")
+					} else {
+						ui.LblDirty.SetText("")
+					}
+					ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
+					ui.LblScreen.SetText(CurrentFile.Encoding)
+					if CurrentFile.ReadWrite {
+						ui.LblReadWrite.SetText("RW")
+					} else {
+						ui.LblReadWrite.SetText("RO")
+					}
+					ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
+					ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 				}
-				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
-				ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 			}
+
 			CurrentFile = UpdateGITInfos(CurrentFile)
 			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
 			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
@@ -533,30 +598,39 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
 			CurrentFile.IsBinary = e.IsBinary
-			if !CurrentFile.IsBinary {
-				CurrentView = ui.EdtMain
-				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-				ui.PgsEditorContent.SwitchToPage("textEditor")
-				ui.App.SetFocus(CurrentView)
-
-				// Configure FrmFind for text files
-				ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
-				ui.ChkToggleReplace.SetDisabled(false)
-				ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
-				ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
-				ui.DpdSearchType.SetDisabled(true)
-				ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
-				ui.ChkCase.SetDisabled(false)
+			CurrentFile.IsDatabase = e.IsDatabase
+			CurrentFile.Database = e.Database
+			if CurrentFile.IsDatabase {
+				CurrentView = ui.TxtPromptSQL
+				ui.PgsEditorContent.SwitchToPage("sqlViewer")
+				showTreeDB()
+				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
-				CurrentView = ui.HexView
-				CurrentFile.HexContentDirty = true // Mark for refresh
-				displayBinaryContent()
-				ui.PgsEditorContent.SwitchToPage("hexViewer")
-				ui.App.SetFocus(CurrentView)
-				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+				if !CurrentFile.IsBinary {
+					CurrentView = ui.EdtMain
+					ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+					ui.PgsEditorContent.SwitchToPage("textEditor")
+					ui.App.SetFocus(CurrentView)
 
-				// Configure FrmFind for binary files
-				ui.ConfigureFindFormForBinary(true)
+					// Configure FrmFind for text files
+					ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
+					ui.ChkToggleReplace.SetDisabled(false)
+					ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
+					ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
+					ui.DpdSearchType.SetDisabled(true)
+					ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
+					ui.ChkCase.SetDisabled(false)
+				} else {
+					CurrentView = ui.HexView
+					CurrentFile.HexContentDirty = true // Mark for refresh
+					displayBinaryContent()
+					ui.PgsEditorContent.SwitchToPage("hexViewer")
+					ui.App.SetFocus(CurrentView)
+					ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+
+					// Configure FrmFind for binary files
+					ui.ConfigureFindFormForBinary(true)
+				}
 			}
 
 			// FocusOnPath(fName)
@@ -784,18 +858,22 @@ func CheckOpenFilesForSaving() {
 func startQuitSaveFlow() {
 	for ; quitFlowIndex < len(OpenFiles); quitFlowIndex++ {
 		f := OpenFiles[quitFlowIndex]
-		if f.Buffer.Modified() {
-			ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
-			proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
-			return // Wait for user input from dialog
+		if !f.IsDatabase {
+			if f.Buffer.Modified() {
+				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
+				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
+				return // Wait for user input from dialog
+			}
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Buffer.Len() == 0 {
-				ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
-				err := os.Remove(f.FName)
-				if err != nil {
-					ui.SetStatus(fmt.Sprintf("Error when deleting empty file %s : %s", f.FName, err.Error()))
+			if !f.IsDatabase {
+				if f.Buffer.Len() == 0 {
+					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
+					err := os.Remove(f.FName)
+					if err != nil {
+						ui.SetStatus(fmt.Sprintf("Error when deleting empty file %s : %s", f.FName, err.Error()))
+					}
 				}
 			}
 		}
@@ -967,52 +1045,56 @@ func GoLine(l int) {
 // ShowTreeDir()
 // ****************************************************************************
 func ShowTreeDir(rootDir string, sh bool) {
-	root := tview.NewTreeNode(rootDir).
-		SetColor(tcell.ColorYellow)
-	ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
-	showHidden = sh
+	if !CurrentFile.IsDatabase {
+		root := tview.NewTreeNode(rootDir).
+			SetColor(tcell.ColorYellow)
+		ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
+		showHidden = sh
 
-	// A helper function which adds the files and directories of the given path
-	// to the given target node.
-	/*
-		add := func(target *tview.TreeNode, path string) {
-			fileInfo, err := os.Stat(path)
-			if err != nil {
-				ui.SetStatus(err.Error())
-			} else {
-				if fileInfo.IsDir() {
-					files, err := os.ReadDir(path)
-					if err != nil {
-						ui.SetStatus(err.Error())
-					}
-					for _, file := range files {
-						node := tview.NewTreeNode(file.Name()).
-							SetReference(filepath.Join(path, file.Name())).
-							SetSelectable(file.IsDir() || file.Type().IsRegular())
-						if file.IsDir() {
-							node.SetColor(tcell.ColorGreen)
-						}
-					target.AddChild(node)
-					}
+		// A helper function which adds the files and directories of the given path
+		// to the given target node.
+		/*
+			add := func(target *tview.TreeNode, path string) {
+				fileInfo, err := os.Stat(path)
+				if err != nil {
+					ui.SetStatus(err.Error())
 				} else {
-					mtype := utils.GetMimeType(path)
-					if mtype[:4] == "text" {
-						OpenFile(path, true)
-						ui.SetStatus(fmt.Sprintf("Opening %s", path))
+					if fileInfo.IsDir() {
+						files, err := os.ReadDir(path)
+						if err != nil {
+							ui.SetStatus(err.Error())
+						}
+						for _, file := range files {
+							node := tview.NewTreeNode(file.Name()).
+								SetReference(filepath.Join(path, file.Name())).
+								SetSelectable(file.IsDir() || file.Type().IsRegular())
+							if file.IsDir() {
+								node.SetColor(tcell.ColorGreen)
+							}
+						target.AddChild(node)
+						}
 					} else {
-						ui.SetStatus(fmt.Sprintf("%s is not a text file", path))
+						mtype := utils.GetMimeType(path)
+						if mtype[:4] == "text" {
+							OpenFile(path, true)
+							ui.SetStatus(fmt.Sprintf("Opening %s", path))
+						} else {
+							ui.SetStatus(fmt.Sprintf("%s is not a text file", path))
+						}
 					}
 				}
+
 			}
+		*/
 
-		}
-	*/
+		// Add the current directory to the root node.
+		addDirToNode(root, rootDir, showHidden)
 
-	// Add the current directory to the root node.
-	addDirToNode(root, rootDir, showHidden)
-
-	// If a directory was selected, open it.
-	ui.TrvExplorer.SetSelectedFunc(selectNode)
+		// If a directory was selected, open it.
+		ui.TrvExplorer.SetSelectedFunc(selectNode)
+	} else {
+		showTreeDB()
+	}
 }
 
 // ****************************************************************************

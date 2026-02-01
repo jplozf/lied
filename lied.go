@@ -108,8 +108,6 @@ func init() {
 	ui.SetUI(appQuit, greeting)
 
 	ui.PgsApp.AddPage("edit", ui.FlxEditor, true, true)
-	ui.CurrentMode = ui.ModeTextEdit
-	// ui.AddNewScreen(ui.ModeTextEdit, edit.SelfInit, nil)
 	ui.PgsApp.AddPage("dlgQuit", ui.DlgQuit, false, false)
 
 	userDir, err := os.UserHomeDir()
@@ -238,7 +236,6 @@ func main() {
 			if activeCmd != nil {
 				// Stop the command immediately
 				activeCmd.Stop()
-
 				ui.SetStatus("Command cancelled by user.")
 				activeCmd = nil // Clear the reference
 				return nil      // Consume the event so it doesn't propagate
@@ -386,10 +383,14 @@ func main() {
 			if promptVisible {
 				ui.App.SetFocus(ui.TxtPrompt)
 			} else {
-				if edit.CurrentFile.IsBinary {
-					ui.App.SetFocus(ui.HexView)
+				if edit.CurrentFile.IsDatabase {
+					ui.App.SetFocus(ui.TxtPromptSQL)
 				} else {
-					ui.App.SetFocus(ui.EdtMain)
+					if edit.CurrentFile.IsBinary {
+						ui.App.SetFocus(ui.HexView)
+					} else {
+						ui.App.SetFocus(ui.EdtMain)
+					}
 				}
 			}
 			return nil
@@ -501,6 +502,53 @@ func main() {
 			} else {
 				ui.App.SetFocus(ui.EdtMain)
 			}
+			return nil
+		default:
+			return event
+		}
+	})
+
+	// SQL Prompt Field keyboard's events manager
+	ui.TxtPromptSQL.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		// ALT+ENTER
+		evkAltEnter := tcell.NewEventKey(tcell.KeyEnter, 'z', tcell.ModAlt)
+		if event.Key() == evkAltEnter.Key() && event.Modifiers() == evkAltEnter.Modifiers() {
+			edit.XeqSQL(ui.TxtPromptSQL.GetText())
+			ui.TxtPromptSQL.SetText("", true)
+			return nil
+		}
+		switch event.Key() {
+		case tcell.KeyUp:
+			if len(edit.ASql) > 0 {
+				edit.ISql--
+				if edit.ISql < 0 {
+					edit.ISql = len(edit.ASql) - 1
+				}
+				ui.TxtPromptSQL.SetText(edit.ASql[edit.ISql], true)
+			}
+			return nil
+		case tcell.KeyDown:
+			if len(edit.ASql) > 0 {
+				edit.ISql++
+				if edit.ISql > len(edit.ASql)-1 {
+					edit.ISql = 0
+				}
+				ui.TxtPromptSQL.SetText(edit.ASql[edit.ISql], true)
+			}
+			return nil
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblSQLOutput)
+			return nil
+		default:
+			return event
+		}
+	})
+
+	// SQL Output Field keyboard's events manager
+	ui.TblSQLOutput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
 		default:
 			return event
@@ -851,6 +899,17 @@ func readSettings() {
 		}
 	}
 
+	// Read SQL history
+	ui.SetStatus("Reading SQL history")
+	fSql, err := os.Open(filepath.Join(appDir, conf.FILE_SQL_HISTORY))
+	if err == nil {
+		defer fSql.Close()
+		sSql := bufio.NewScanner(fSql)
+		for sSql.Scan() {
+			edit.ASql = append(edit.ASql, sSql.Text())
+		}
+	}
+
 	// Read find history
 	ui.SetStatus("Reading find history")
 	fFind, err := os.Open(filepath.Join(appDir, conf.FILE_FIND_HISTORY))
@@ -959,6 +1018,18 @@ func saveSettings() {
 		wCmd.Flush()
 	}
 
+	// Save SQL history
+	ui.SetStatus("Saving SQL history")
+	fSql, err := os.Create(filepath.Join(appDir, conf.FILE_SQL_HISTORY))
+	if err == nil {
+		defer fSql.Close()
+		wSql := bufio.NewWriter(fSql)
+		for _, line := range edit.ASql {
+			fmt.Fprintln(wSql, line)
+		}
+		wSql.Flush()
+	}
+
 	// Save find history
 	ui.SetStatus("Saving find history")
 	fFind, err := os.Create(filepath.Join(appDir, conf.FILE_FIND_HISTORY))
@@ -984,8 +1055,13 @@ func saveSettings() {
 	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
 	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
 	sec.NewKey("CurrentFile", edit.CurrentFile.FName)
-	sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
-	sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
+	if !edit.CurrentFile.IsDatabase {
+		sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
+		sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
+	} else {
+		sec.NewKey("CurrentX", "0")
+		sec.NewKey("CurrentY", "0")
+	}
 	sec.NewKey("ColorAccent", conf.ConfigGeneral.ColorAccent)
 	sec.NewKey("InteractiveShell", utils.If(conf.ConfigGeneral.InteractiveShell, "True", "False"))
 	sec.NewKey("OutErrPrefix", utils.If(conf.ConfigGeneral.OutErrPrefix, "True", "False"))

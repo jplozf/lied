@@ -684,3 +684,24 @@ func GenerateSecureFilename() string {
 	// Returns format like "cosmic-nebula-4029"
 	return fmt.Sprintf("%s-%s-%d", adj, noun, num)
 }
+
+// ****************************************************************************
+// IsSQLite3()
+// ****************************************************************************
+func IsSQLite3(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	// The magic string is exactly 16 bytes long
+	header := make([]byte, 16)
+	_, err = f.Read(header)
+	if err != nil {
+		return false
+	}
+
+	sqliteHeader := []byte("SQLite format 3\x00")
+	return bytes.Equal(header, sqliteHeader)
+}

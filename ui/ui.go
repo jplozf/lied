@@ -18,7 +18,6 @@ import (
 	"bytes"
 	"fmt"
 	"lied/conf"
-	"lied/utils"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,14 +68,13 @@ var (
 	SessionID           string
 	IdxScreens          int
 	ArrScreens          []MyScreen
-	CurrentMode         Mode
 	lblTime             *tview.TextView
 	lblDate             *tview.TextView
 	LblKeys             *tview.TextView
 	App                 *tview.Application
-	FlxHelp             *tview.Flex
 	FlxEditor           *tview.Flex
 	MidColumn           *tview.Flex
+	MidColumnSQL        *tview.Flex
 	FlxSQLite           *tview.Flex
 	TxtHelp             *tview.TextView
 	lblTitle            *tview.TextView
@@ -116,8 +114,12 @@ var (
 	FlxHexViewer        *tview.Flex
 	PgsEditorContent    *tview.Pages
 	TxtPrompt           *tview.InputField
+	TxtPromptSQL        *tview.TextArea
 )
 
+// ****************************************************************************
+// ConfigureFindFormForBinary()
+// ****************************************************************************
 // ConfigureFindFormForBinary configures the FrmFind for binary or text files.
 func ConfigureFindFormForBinary(isBinary bool) {
 	TxtReplace.SetDisabled(isBinary)
@@ -272,71 +274,28 @@ func SetUI(fQuit Fn, hostname string) {
 
 	EdtMain = femto.NewView(buffer)
 	EdtMain.SetBorder(true)
-	/*
-		EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			switch event.Key() {
-			case tcell.KeyLeft:
-				EdtMain.CursorLeft()
-				return nil // Consume event
-			case tcell.KeyRight:
-				EdtMain.CursorRight()
-				return nil // Consume event
-			default:
-				return event // Pass other keys through
-			}
-		})
-	*/
+
 	HexView = tview.NewTextView().SetWrap(false).SetWordWrap(false).SetDynamicColors(true)
 	HexView.SetBorder(true).SetTitle("Hexadecimal")
-	/*
-		HexView.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-			offset, _ := HexView.GetScrollOffset()
-			_, _, _, height := HexView.GetInnerRect()
-
-			switch event.Key() {
-			case tcell.KeyUp:
-				HexView.ScrollTo(offset-1, 0)
-			case tcell.KeyDown:
-				HexView.ScrollTo(offset+1, 0)
-			case tcell.KeyPgUp:
-				HexView.ScrollTo(offset-height, 0)
-			case tcell.KeyPgDn:
-				HexView.ScrollTo(offset+height, 0)
-			case tcell.KeyHome:
-				HexView.ScrollToBeginning()
-			case tcell.KeyEnd:
-				HexView.ScrollToEnd()
-			default:
-				return event // Not a scroll event, pass it on
-			}
-
-			// Update LblCursor with byte offset
-			byteOffset := offset * 16 // 16 bytes per line
-			LblCursor.SetText(fmt.Sprintf("Offset: %08X", byteOffset))
-
-			// Update LblPercent with scroll percentage
-			hexContent := HexView.GetText(false)
-			totalLines := strings.Count(hexContent, "\n")
-			if totalLines > height {
-				percent := int((float64(offset) / float64(totalLines-height)) * 100.0)
-				if percent > 100 {
-					percent = 100
-				}
-				LblPercent.SetText(fmt.Sprintf("%d%%", percent))
-			} else {
-				LblPercent.SetText("100%")
-			}
-
-			return nil // Consume the event as we've handled the scrolling
-		})
-	*/
 
 	FlxHexViewer = tview.NewFlex().
 		AddItem(HexView, 0, 1, false)
 
+	TxtPromptSQL = tview.NewTextArea()
+	TxtPromptSQL.SetTitle("SQL (Alt+Enter to Run)")
+	TxtPromptSQL.SetBorder(true)
+
+	TblSQLOutput = tview.NewTable()
+	TblSQLOutput.SetBorder(true)
+	TblSQLOutput.SetSelectable(true, false)
+	TblSQLOutput.SetTitle("SQL Output")
+
+	FlxSQLite = tview.NewFlex().SetDirection(tview.FlexRow).AddItem(TblSQLOutput, 0, 1, false).AddItem(TxtPromptSQL, 7, 0, true)
+
 	PgsEditorContent = tview.NewPages().
 		AddPage("textEditor", EdtMain, true, true).
-		AddPage("hexViewer", FlxHexViewer, true, false) // Initially hidden
+		AddPage("hexViewer", FlxHexViewer, true, false). // Initially hidden
+		AddPage("sqlViewer", FlxSQLite, true, false)     // Initially hidden
 
 	TxtCurrentWorkspace = tview.NewTextView()
 	TxtCurrentWorkspace.SetBorder(true)
@@ -354,6 +313,7 @@ func SetUI(fQuit Fn, hostname string) {
 	TblOpenFiles.SetBorder(true)
 	TblOpenFiles.SetSelectable(true, false)
 	TblOpenFiles.SetTitle("Open Files")
+
 	TrvExplorer = tview.NewTreeView()
 	TrvExplorer.SetBorder(true)
 	TrvExplorer.SetTitle("Explorer")
@@ -406,23 +366,6 @@ func SetUI(fQuit Fn, hostname string) {
 	FrmFind.AddButton("All", nil)
 	FrmFind.GetButton(2).SetDisabled(!ChkToggleReplace.IsChecked())
 	FrmFind.GetButton(3).SetDisabled(!ChkToggleReplace.IsChecked())
-
-	//*************************************************************************
-	// Help Layout
-
-	//*************************************************************************
-	FlxHelp = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tview.NewFlex().
-			AddItem(lblDate, 10, 0, false).
-			AddItem(lblTitle, 0, 1, false).
-			AddItem(lblTime, 8, 0, false), 1, 0, false).
-		AddItem(TxtHelp, 0, 1, false).
-		AddItem(LblKeys, 2, 1, false).
-		AddItem(tview.NewFlex().
-			AddItem(LblHostname, len(hostname)+3, 0, false).
-			AddItem(lblStatus, 0, 1, false).
-			AddItem(LblScreen, 5, 0, false).
-			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
 
 	//*************************************************************************
 	// Editor Layout
@@ -617,14 +560,6 @@ func DisplayMap(tv *tview.TextView, m map[string]string) {
 }
 
 // ****************************************************************************
-// RemoveScreen()
-// ****************************************************************************
-func RemoveScreen(s []MyScreen, i int) []MyScreen {
-	s[i] = s[len(s)-1]
-	return s[:len(s)-1]
-}
-
-// ****************************************************************************
 // GetCurrentScreen()
 // ****************************************************************************
 func GetCurrentScreen() string {
@@ -642,89 +577,6 @@ func GetScreenFromTitle(t string) string {
 		}
 	}
 	return "NIL"
-}
-
-// ****************************************************************************
-// CloseCurrentScreen()
-// ****************************************************************************
-func CloseCurrentScreen() {
-	ArrScreens = RemoveScreen(ArrScreens, IdxScreens)
-	if len(ArrScreens) == 0 {
-		IdxScreens = -1
-		AddNewScreen(ModeTextEdit, nil, nil)
-	} else {
-		ShowPreviousScreen()
-	}
-	SetStatus("Closing current screen")
-}
-
-// ****************************************************************************
-// ShowPreviousScreen()
-// ****************************************************************************
-func ShowPreviousScreen() {
-	if IdxScreens > 0 {
-		IdxScreens--
-	} else {
-		IdxScreens = len(ArrScreens) - 1
-	}
-	ShowScreen(IdxScreens)
-	SetStatus("Switching to previous screen")
-}
-
-// ****************************************************************************
-// ShowNextScreen()
-// ****************************************************************************
-func ShowNextScreen() {
-	if IdxScreens < len(ArrScreens)-1 {
-		IdxScreens++
-	} else {
-		IdxScreens = 0
-	}
-	ShowScreen(IdxScreens)
-	SetStatus("Switching to next screen")
-}
-
-// ****************************************************************************
-// ShowScreen()
-// ****************************************************************************
-func ShowScreen(idx any) {
-	var screen MyScreen = ArrScreens[idx.(int)]
-	SetTitle(screen.Title)
-	CurrentMode = screen.Mode
-	LblKeys.SetText(conf.FKEY_LABELS + "\n" + screen.Keys)
-	PgsApp.SwitchToPage(screen.Title + "_" + screen.ID)
-	IdxScreens = idx.(int)
-	LblScreen.SetText(fmt.Sprintf("%d/%d", IdxScreens+1, len(ArrScreens)))
-}
-
-// ****************************************************************************
-// AddNewScreen()
-// ****************************************************************************
-func AddNewScreen(mode Mode, selfInit FnAny, param any) {
-	var screen MyScreen
-	screen.ID, _ = utils.RandomHex(3)
-	screen.Mode = mode
-	screen.Init = selfInit
-	screen.Param = param
-
-	switch mode {
-	case ModeTextEdit:
-		screen.Title = "Editor"
-		screen.Keys = conf.CKEY_LABELS
-		PgsApp.AddPage(screen.Title+"_"+screen.ID, FlxEditor, true, true)
-	case ModeHelp:
-		screen.Title = "Help"
-		screen.Keys = ""
-		PgsApp.AddPage(screen.Title+"_"+screen.ID, FlxHelp, true, true)
-	}
-	IdxScreens++
-	screen.Idx = IdxScreens
-	ArrScreens = append(ArrScreens, screen)
-	ShowScreen(IdxScreens)
-	if selfInit != nil {
-		selfInit(param)
-	}
-	SetStatus(fmt.Sprintf("New screen [%s-%s]", screen.Title, strings.ToUpper(screen.ID)))
 }
 
 // ****************************************************************************

@@ -6,13 +6,15 @@ import (
 	"fmt"
 	"os/exec"
 	"sort"
-	
 )
 
 // ExifData represents the structure of the JSON output from exiftool.
 // We use map[string]interface{} to handle the dynamic nature of exiftool's output.
 type ExifData map[string]interface{}
 
+// ****************************************************************************
+// GetExifInfo()
+// ****************************************************************************
 // GetExifInfo executes exiftool on the given file path and returns a map of key-value pairs.
 func GetExifInfo(filePath string) (map[string]string, error) {
 	cmd := exec.Command("exiftool", "-json", filePath)
@@ -20,10 +22,12 @@ func GetExifInfo(filePath string) (map[string]string, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
-	if err != nil {
-		return nil, fmt.Errorf("failed to run exiftool: %w, stderr: %s", err, stderr.String())
-	}
+	cmd.Run()
+	/*
+		if err != nil {
+			return nil, fmt.Errorf("failed to run exiftool: %w, stderr: %s", err, stderr.String())
+		}
+	*/
 
 	var exifOutput []ExifData
 	if err := json.Unmarshal(stdout.Bytes(), &exifOutput); err != nil {
@@ -43,6 +47,9 @@ func GetExifInfo(filePath string) (map[string]string, error) {
 	return result, nil
 }
 
+// ****************************************************************************
+// GetSortedExifInfo()
+// ****************************************************************************
 // GetSortedExifInfo returns exiftool information as a sorted slice of key-value pairs.
 func GetSortedExifInfo(filePath string) ([]struct{ Key, Value string }, error) {
 	exifMap, err := GetExifInfo(filePath)
