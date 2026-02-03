@@ -282,7 +282,7 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(HexView, 0, 1, false)
 
 	TxtPromptSQL = tview.NewTextArea()
-	TxtPromptSQL.SetTitle("SQL (Alt+Enter to Run)")
+	TxtPromptSQL.SetTitle("SQL (Alt+Enter or F5 to Run)")
 	TxtPromptSQL.SetBorder(true)
 
 	TblSQLOutput = tview.NewTable()

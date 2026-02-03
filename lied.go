@@ -79,6 +79,7 @@ var (
 	DlgRename           *dialog.Dialog
 	DlgNewFile          *dialog.Dialog
 	DlgNewFolder        *dialog.Dialog
+	DlgNewDatabase      *dialog.Dialog
 	ACmd                []string
 	ICmd                int
 	MsgBox              *dialog.Dialog
@@ -510,14 +511,19 @@ func main() {
 
 	// SQL Prompt Field keyboard's events manager
 	ui.TxtPromptSQL.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		// ALT+ENTER
+		// ALT+ENTER and F5 Key
 		evkAltEnter := tcell.NewEventKey(tcell.KeyEnter, 'z', tcell.ModAlt)
-		if event.Key() == evkAltEnter.Key() && event.Modifiers() == evkAltEnter.Modifiers() {
-			edit.XeqSQL(ui.TxtPromptSQL.GetText())
-			ui.TxtPromptSQL.SetText("", true)
+		if (event.Key() == evkAltEnter.Key() && event.Modifiers() == evkAltEnter.Modifiers()) || event.Key() == tcell.KeyF5 {
+			err := edit.XeqSQL(ui.TxtPromptSQL.GetText())
+			if err == nil {
+				ui.TxtPromptSQL.SetText("", true)
+			} else {
+				ui.TxtPromptSQL.SetText(ui.TxtPromptSQL.GetText()+" => "+err.Error(), true)
+			}
 			return nil
 		}
 		switch event.Key() {
+		// Key UP
 		case tcell.KeyUp:
 			if len(edit.ASql) > 0 {
 				edit.ISql--
@@ -527,6 +533,7 @@ func main() {
 				ui.TxtPromptSQL.SetText(edit.ASql[edit.ISql], true)
 			}
 			return nil
+		// Key DOWN
 		case tcell.KeyDown:
 			if len(edit.ASql) > 0 {
 				edit.ISql++
@@ -536,6 +543,7 @@ func main() {
 				ui.TxtPromptSQL.SetText(edit.ASql[edit.ISql], true)
 			}
 			return nil
+		// F2 Key
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblSQLOutput)
 			return nil
@@ -700,6 +708,7 @@ func ShowWorkspaceMenu() {
 	// MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuAddFileTemplate", "New file", ShowTemplatesMenu, conf.ConfigGeneral.Workspace, true, false)        // OK
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)                  // OK
+	MnuWorkspace.AddItem("mnuNewDatabase", "New SQLite3 database", doNewDatabase, conf.ConfigGeneral.Workspace, true, false)    // OK
 	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)           // OK
 	MnuWorkspace.AddItem("mnuDelete", "Delete file or folder", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false) // OK
 	// Popup menu
@@ -1430,6 +1439,36 @@ func doNewFolder(f any) {
 		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
 	ui.PgsApp.AddPage("dlgNewFolder", DlgNewFolder.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgNewFolder")
+}
+
+// ****************************************************************************
+// doNewDatabase()
+// ****************************************************************************
+func doNewDatabase(f any) {
+	// d := filepath.Dir(f.(string))
+	d := f.(string)
+	DlgNewDatabase = DlgNewDatabase.Input("New SQLite3 Database", // Title
+		"Creating a new SQLite3 Database into "+d, // Message
+		"", // Empty
+		func(rc dialog.DlgButton, idx int) {
+			if rc == dialog.BUTTON_OK {
+				err := edit.OpenDB(filepath.Join(d, DlgNewDatabase.Value))
+				if err != nil {
+					ui.SetStatus(err.Error())
+				} else {
+					ui.SetStatus(fmt.Sprintf("Database %s created", filepath.Join(d, DlgNewDatabase.Value)))
+					edit.OpenFile(filepath.Join(d, DlgNewDatabase.Value), true)
+				}
+			} else {
+				ui.SetStatus("Canceling creating new database")
+			}
+			// Refresh the TrvExplorer
+			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+		},
+		0,
+		ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+	ui.PgsApp.AddPage("dlgNewDatabase", DlgNewDatabase.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNewDatabase")
 }
 
 // ****************************************************************************

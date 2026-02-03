@@ -16,6 +16,7 @@ import (
 	"database/sql"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"lied/conf"
 	"lied/dialog"
@@ -51,7 +52,7 @@ var headerTextColor = tcell.ColorYellow
 // ****************************************************************************
 // Xeq()
 // ****************************************************************************
-func XeqSQL(c string) {
+func XeqSQL(c string) error {
 	c = strings.TrimSpace(c)
 	if len(ASql) > 0 {
 		if ASql[len(ASql)-1] != c {
@@ -66,46 +67,51 @@ func XeqSQL(c string) {
 	if len(c) > 0 {
 		if c[0] == '.' {
 			if strings.HasPrefix(strings.ToUpper(c), ".TABLE") {
-				doSelect("SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';")
+				return DoSelect("SELECT name FROM sqlite_master WHERE type ='table' AND name NOT LIKE 'sqlite_%';")
 			} else {
 				if strings.HasPrefix(strings.ToUpper(c), ".DATABASE") {
-					doSelect("PRAGMA database_list;")
+					return DoSelect("PRAGMA database_list;")
 				} else {
 					if strings.HasPrefix(strings.ToUpper(c), ".SCHEMA") {
 						tokens := strings.Fields(c)
 						if len(tokens) > 1 {
 							table := tokens[1]
-							doSelect(fmt.Sprintf("SELECT sql FROM sqlite_master WHERE name = '%s';", table))
+							return DoSelect(fmt.Sprintf("SELECT sql FROM sqlite_master WHERE name = '%s';", table))
 						} else {
 							ui.SetStatus(tview.Escape("Too few arguments for .SCHEMA [table]"))
+							return errors.New("Too few arguments for .SCHEMA [table]")
 						}
 					} else {
 						if strings.HasPrefix(strings.ToUpper(c), ".COLUMNS") {
 							tokens := strings.Fields(c)
 							if len(tokens) > 1 {
 								table := tokens[1]
-								doSelect(fmt.Sprintf("PRAGMA table_info(%s);", table))
+								return DoSelect(fmt.Sprintf("PRAGMA table_info(%s);", table))
 							} else {
 								ui.SetStatus(tview.Escape("Too few arguments for .COLUMNS [table]"))
+								return errors.New("Too few arguments for .COLUMNS [table]")
 							}
 						} else {
 							if strings.HasPrefix(strings.ToUpper(c), ".OPEN") {
 								tokens := strings.Fields(c)
 								if len(tokens) > 1 {
 									db := tokens[1]
-									OpenDB(db)
+									return OpenDB(db)
 								} else {
 									ui.SetStatus(tview.Escape("Too few arguments for .OPEN [database]"))
+									return errors.New("Too few arguments for .OPEN [database]")
 								}
 							} else {
 								if strings.HasPrefix(strings.ToUpper(c), ".CLOSE") {
 									if CurrentFile.Database != nil {
-										CloseDB(CurrentFile.Database)
+										return CloseDB(CurrentFile.Database)
 									} else {
 										ui.SetStatus("No database open")
+										return errors.New("No open database")
 									}
 								} else {
 									ui.SetStatus(fmt.Sprintf("Unknow command %s", c))
+									return errors.New(fmt.Sprintf("Unknow command %s", c))
 								}
 							}
 						}
@@ -115,29 +121,31 @@ func XeqSQL(c string) {
 		} else {
 			ui.SetStatus(fmt.Sprintf("Executing %s", c))
 			if strings.HasPrefix(strings.ToUpper(c), "SELECT") {
-				doSelect(c)
+				return DoSelect(c)
 			} else {
 				if CurrentFile.Database != nil {
-					DoExec(c)
+					return DoExec(c)
 				} else {
 					ui.SetStatus("No open database")
+					return errors.New("No open database")
 				}
 			}
 		}
 	}
-	// ui.TxtPrompt.SetText("", false)
+	return nil
 }
 
 // ****************************************************************************
 // DoExec()
 // ****************************************************************************
-func DoExec(cmd string) {
+func DoExec(cmd string) error {
 	_, err := CurrentFile.Database.Exec(cmd)
 	if err != nil {
 		ui.SetStatus(err.Error())
-	} else {
-		ui.SetStatus(fmt.Sprintf("Executing %s", cmd))
+		return err
 	}
+	ui.SetStatus(fmt.Sprintf("Executing %s", cmd))
+	return nil
 }
 
 // ****************************************************************************
@@ -147,9 +155,9 @@ func OpenDB(fName string) error {
 	db, err := sql.Open("sqlite3", fName)
 	if err == nil {
 		CurrentFile.Database = db
-		// ui.TxtSQLName.SetText(fmt.Sprintf("Database [yellow]%s", fName))
 		CurrentFile.FName = fName
-		showTreeDB()
+		// dummy instruction to create the header
+		_, err = db.Exec("PRAGMA user_version = 0;")
 		ui.SetStatus(fmt.Sprintf("Database %s open successfully", fName))
 	}
 	return err
@@ -158,8 +166,8 @@ func OpenDB(fName string) error {
 // ****************************************************************************
 // CloseDB()
 // ****************************************************************************
-func CloseDB(db *sql.DB) {
-	db.Close()
+func CloseDB(db *sql.DB) error {
+	err := db.Close()
 	ui.SetStatus("Database closed")
 	// ui.TxtSQLName.SetText("")
 	ui.TblSQLOutput.Clear()
@@ -169,6 +177,7 @@ func CloseDB(db *sql.DB) {
 	// ui.TrvSQLDatabase.SetRoot(root).SetCurrentNode(root)
 	CurrentFile.Database = nil
 	CurrentFile.FName = ""
+	return err
 }
 
 // ****************************************************************************
@@ -327,20 +336,22 @@ func getTriggers() []string {
 }
 
 // ****************************************************************************
-// doSelect()
+// DoSelect()
 // ****************************************************************************
-func doSelect(q string) {
+func DoSelect(q string) error {
 	if CurrentFile.Database != nil {
 		ui.TblSQLOutput.Clear()
 		var myMap = make(map[string]interface{})
 		rows, err := CurrentFile.Database.Query(q)
 		if err != nil {
 			ui.SetStatus(err.Error())
+			return err
 		} else {
 			defer rows.Close()
 			colNames, err := rows.Columns()
 			if err != nil {
 				ui.SetStatus(err.Error())
+				return err
 			} else {
 				cols := make([]interface{}, len(colNames))
 				colPtrs := make([]interface{}, len(colNames))
@@ -356,6 +367,7 @@ func doSelect(q string) {
 					err = rows.Scan(colPtrs...)
 					if err != nil {
 						ui.SetStatus(err.Error())
+						return err
 					} else {
 						for k, col := range cols {
 							myMap[colNames[k]] = col
@@ -389,10 +401,13 @@ func doSelect(q string) {
 				ui.TblSQLOutput.SetFixed(1, 0)
 				ui.TblSQLOutput.Select(1, 0)
 				ui.App.SetFocus(ui.TxtPromptSQL)
+				return nil
 			}
 		}
 	} else {
 		ui.SetStatus("No open database")
+		return errors.New("No open database")
+
 	}
 }
 
