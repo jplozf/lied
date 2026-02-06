@@ -47,6 +47,11 @@ import (
 )
 
 // ****************************************************************************
+// TYPES
+// ****************************************************************************
+type createFunc func(string, string) bool
+
+// ****************************************************************************
 // GLOBALS
 // ****************************************************************************
 var (
@@ -317,10 +322,14 @@ func main() {
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenFile(fName)
 			edit.SetFocusOnPath(fName)
-			if edit.CurrentFile.IsBinary {
-				ui.App.SetFocus(ui.HexView)
+			if edit.CurrentFile.IsDatabase {
+				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
-				ui.App.SetFocus(ui.EdtMain)
+				if edit.CurrentFile.IsBinary {
+					ui.App.SetFocus(ui.HexView)
+				} else {
+					ui.App.SetFocus(ui.EdtMain)
+				}
 			}
 			return nil
 		case tcell.KeyCtrlF:
@@ -801,19 +810,24 @@ func AddTemplate(f any) {
 		d, // Default file name
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				templateFileName := d
-				ui.SetStatus(fmt.Sprintf("Adding template %s to the current workspace", templateFileName))
-				sourceFileName := filepath.Join("templates", templateFileName)
-				destFileName := filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value)
-				fileContent, err := conf.TemplatesFS.ReadFile(sourceFileName)
-				if err != nil {
-					ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
-				}
-				if err := os.WriteFile(destFileName, fileContent, 0644); err != nil { // nolint: gosec
-					ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
-				}
-				edit.OpenFile(destFileName, true)
-				edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+				CreateOrOverwriteIfItAlreadyExists(filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value), filepath.Join("templates", d), func(s1, s2 string) bool {
+					// Close the file if it is open
+					edit.CloseThisFile(s1)
+					ui.SetStatus(fmt.Sprintf("Adding template %s to the current workspace", s2))
+					fileContent, err := conf.TemplatesFS.ReadFile(s2)
+					if err != nil {
+						ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
+						return false
+					}
+					if err := os.WriteFile(s1, fileContent, 0644); err != nil { // nolint: gosec
+						ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
+						return false
+					}
+					// and open it
+					edit.OpenFile(s1, true)
+					edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
+					return true
+				})
 			} else {
 				ui.SetStatus("Canceling creating new file")
 			}
@@ -1392,7 +1406,11 @@ func doNewFile(f any) {
 		"",                            // Empty
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				edit.CreateThisFile(filepath.Join(d, DlgNewFile.Value))
+				CreateOrOverwriteIfItAlreadyExists(filepath.Join(d, DlgNewFile.Value), "", func(s1 string, s2 string) bool {
+					edit.CloseThisFile(s1)
+					edit.CreateThisFile(s1)
+					return true
+				})
 			} else {
 				ui.SetStatus("Canceling creating new file")
 			}
@@ -1423,12 +1441,16 @@ func doNewFolder(f any) {
 		"",                              // Empty
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				err := os.Mkdir(filepath.Join(d, DlgNewFolder.Value), os.ModePerm)
-				if err != nil {
-					ui.SetStatus(err.Error())
-				} else {
-					ui.SetStatus(fmt.Sprintf("Folder %s created", filepath.Join(d, DlgNewFolder.Value)))
-				}
+				CreateOrOverwriteIfItAlreadyExists(filepath.Join(d, DlgNewFolder.Value), "", func(s1 string, s2 string) bool {
+					err := os.Mkdir(s1, os.ModePerm)
+					if err != nil {
+						ui.SetStatus(err.Error())
+						return false
+					} else {
+						ui.SetStatus(fmt.Sprintf("Folder %s created", s1))
+						return true
+					}
+				})
 			} else {
 				ui.SetStatus("Canceling creating new folder")
 			}
@@ -1452,13 +1474,17 @@ func doNewDatabase(f any) {
 		"", // Empty
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				err := edit.OpenDB(filepath.Join(d, DlgNewDatabase.Value))
-				if err != nil {
-					ui.SetStatus(err.Error())
-				} else {
-					ui.SetStatus(fmt.Sprintf("Database %s created", filepath.Join(d, DlgNewDatabase.Value)))
-					edit.OpenFile(filepath.Join(d, DlgNewDatabase.Value), true)
-				}
+				CreateOrOverwriteIfItAlreadyExists(filepath.Join(d, DlgNewDatabase.Value), "", func(s1 string, s2 string) bool {
+					err := edit.OpenDB(s1)
+					if err != nil {
+						ui.SetStatus(err.Error())
+						return false
+					} else {
+						ui.SetStatus(fmt.Sprintf("Database %s created", s1))
+						edit.OpenFile(s1, true)
+						return true
+					}
+				})
 			} else {
 				ui.SetStatus("Canceling creating new database")
 			}
@@ -2702,6 +2728,37 @@ func ArchiveLogs() {
 				os.Rename(filepath.Join(appDir, conf.FILE_LOG), filepath.Join(appDir, conf.FILE_LOG+".bak"))
 				os.Rename(filepath.Join(appDir, strings.ToLower(conf.APP_NAME)+"_"+tag+".log"), filepath.Join(appDir, conf.FILE_LOG))
 			}
+		}
+	}
+}
+
+// ****************************************************************************
+// CreateOrOverwriteIfItAlreadyExists()
+// ****************************************************************************
+func CreateOrOverwriteIfItAlreadyExists(target string, source string, fn createFunc) {
+	if utils.IsFileExist(target) {
+		DlgYesNo = DlgYesNo.YesNo("Already exists", // Title
+			fmt.Sprintf("The file %s already exists.\nIt will be overwritten.\n\nAre you sure you want to proceed ?", target), // Message
+			func(rc dialog.DlgButton, idx int) {
+				if rc == dialog.BUTTON_YES {
+					if fn(target, source) {
+						ui.SetStatus(fmt.Sprintf("%s created successfully", target))
+					} else {
+						ui.SetStatus(fmt.Sprintf("Error when created %s", target))
+					}
+				} else {
+					ui.SetStatus("Aborting creation")
+				}
+			},
+			0,
+			ui.GetCurrentScreen(), edit.CurrentView) // Focus return
+		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+		ui.PgsApp.ShowPage("dlgYesNo")
+	} else {
+		if fn(target, source) {
+			ui.SetStatus(fmt.Sprintf("%s created successfully", target))
+		} else {
+			ui.SetStatus(fmt.Sprintf("Error when created %s", target))
 		}
 	}
 }

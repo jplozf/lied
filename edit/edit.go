@@ -364,13 +364,15 @@ func NewFile(dir string) {
 // ****************************************************************************
 // CreateThisFile()
 // ****************************************************************************
-func CreateThisFile(dir string) {
+func CreateThisFile(dir string) bool {
 	f, err := os.Create(dir)
 	ui.SetStatus(fmt.Sprintf("Creating the file %v", dir))
 	if err == nil {
 		OpenFile(f.Name(), true)
+		return true
 	} else {
 		ui.SetStatus(err.Error())
+		return false
 	}
 }
 
@@ -911,6 +913,9 @@ func CloseCurrentFile() {
 		if CurrentFile.Buffer.IsModified {
 			proposeToSaveFile(n, FLOW_CLOSE)
 		} else {
+			if CurrentFile.IsDatabase {
+				CloseDB(CurrentFile.Database)
+			}
 			copy(OpenFiles[n:], OpenFiles[n+1:])
 			OpenFiles = OpenFiles[:len(OpenFiles)-1]
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
@@ -1157,10 +1162,16 @@ func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 				if mtype[:4] == "text" {
 					OpenFile(path, true)
 					ui.SetStatus(fmt.Sprintf("Opening %s", path))
+					ui.App.SetFocus(ui.EdtMain)
 				} else {
-					ui.SetStatus(fmt.Sprintf("Opening %s in hexadecimal view", path))
 					OpenFile(path, false)
-					ui.App.SetFocus(ui.HexView)
+					if CurrentFile.IsDatabase {
+						ui.SetStatus(fmt.Sprintf("Opening %s as a SQLite3 database", path))
+						ui.App.SetFocus(ui.TxtPromptSQL)
+					} else {
+						ui.SetStatus(fmt.Sprintf("Opening %s in hexadecimal view", path))
+						ui.App.SetFocus(ui.HexView)
+					}
 				}
 			} else {
 				ui.SetStatus(fmt.Sprintf("Can't open file %s of type %s", path, mtype))

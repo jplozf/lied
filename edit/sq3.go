@@ -104,14 +104,15 @@ func XeqSQL(c string) error {
 							} else {
 								if strings.HasPrefix(strings.ToUpper(c), ".CLOSE") {
 									if CurrentFile.Database != nil {
-										return CloseDB(CurrentFile.Database)
+										CloseCurrentFile()
+										return nil
 									} else {
-										ui.SetStatus("No database open")
+										ui.SetStatus("No open database")
 										return errors.New("No open database")
 									}
 								} else {
-									ui.SetStatus(fmt.Sprintf("Unknow command %s", c))
-									return errors.New(fmt.Sprintf("Unknow command %s", c))
+									ui.SetStatus(fmt.Sprintf("Unknown command %s", c))
+									return errors.New(fmt.Sprintf("Unknown command %s", c))
 								}
 							}
 						}
