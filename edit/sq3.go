@@ -361,7 +361,7 @@ func DoSelect(q string) error {
 				}
 				// Header of fields names
 				for k, colName := range colNames {
-					ui.TblSQLOutput.SetCell(0, k, tview.NewTableCell(tview.Escape("["+colName+"]")).SetAlign(tview.AlignLeft).SetTextColor(headerTextColor).SetBackgroundColor(headerBackgroundColor))
+					ui.TblSQLOutput.SetCell(0, k, tview.NewTableCell(tview.Escape("["+colName+"]")).SetAlign(tview.AlignLeft).SetTextColor(headerTextColor).SetBackgroundColor(tcell.GetColor(conf.DEFAULT_COLOR_ACCENT)))
 				}
 				i := 1
 				for rows.Next() {
@@ -426,9 +426,9 @@ func SetSQLMenu() {
 }
 
 // ****************************************************************************
-// ShowMenu()
+// ShowSQLMenu()
 // ****************************************************************************
-func ShowMenu() {
+func ShowSQLMenu() {
 	ui.PgsApp.ShowPage("dlgMenuAction")
 }
 

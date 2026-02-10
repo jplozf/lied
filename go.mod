@@ -5,6 +5,8 @@ go 1.21
 toolchain go1.24.4
 
 require (
+	github.com/gabriel-vasile/mimetype v1.4.13
+	github.com/gdamore/tcell v1.4.1
 	github.com/gdamore/tcell/v2 v2.6.0
 	github.com/mattn/go-sqlite3 v1.14.33
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4

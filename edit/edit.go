@@ -46,6 +46,16 @@ import (
 // ****************************************************************************
 // TYPES
 // ****************************************************************************
+type Seasoning int64
+
+const (
+	Text Seasoning = iota
+	Binary
+	Shell
+	SQLite3
+	Explorer
+)
+
 type editfile struct {
 	Buffer              *femto.Buffer
 	View                *femto.View
@@ -59,11 +69,12 @@ type editfile struct {
 	Follow              bool
 	RWBackup            bool
 	IsMemberOfWorkspace bool
-	IsBinary            bool
-	IsDatabase          bool
-	ContentBytes        []byte
-	HexContentDirty     bool
-	Database            *sql.DB
+	Season              Seasoning
+	// IsBinary            bool
+	// IsDatabase          bool
+	ContentBytes    []byte
+	HexContentDirty bool
+	Database        *sql.DB
 }
 
 type found struct {
@@ -135,10 +146,10 @@ func SwitchToEditor(fName string) {
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
 	OpenFile(fName, true)
-	if CurrentFile.IsDatabase {
+	if CurrentFile.Season == SQLite3 {
 		ui.App.SetFocus(ui.FlxSQLite)
 	} else {
-		if CurrentFile.IsBinary {
+		if CurrentFile.Season == Binary {
 			ui.App.SetFocus(ui.HexView)
 		} else {
 			ui.App.SetFocus(ui.EdtMain)
@@ -173,6 +184,25 @@ func OpenFile(fName string, rw bool) {
 			ui.SetStatus(fmt.Sprintf("File %v doesn't exist", fName))
 			CreateThisFile(fName)
 		} else {
+			// Check if it's a path, then explorer view
+			if utils.IsDir(fName) {
+				SetFilesMenu()
+				CurrentFile.FName = fName
+				CurrentFile.Season = Explorer
+				CurrentFile.ReadWrite = false
+				CurrentFile.Follow = false
+				OpenFiles = append(OpenFiles, CurrentFile)
+				// defer CloseDB(CurrentFile.Database)
+				go UpdateStatus()
+				go focusOpenFile(fName)
+				//
+				ui.SetStatus(fmt.Sprintf("Exploring %s", CurrentFile.FName))
+				ui.PgsApp.SwitchToPage("fileManager")
+				ShowFiles()
+				ui.App.SetFocus(ui.TblFiles)
+
+				return
+			}
 			// Check if the file is a SQLite3 database
 			if utils.IsSQLite3(fName) {
 				// content, err := ioutil.ReadFile(fName)
@@ -181,8 +211,8 @@ func OpenFile(fName string, rw bool) {
 					return
 				}
 				CurrentFile.FName = fName
-				CurrentFile.IsBinary = false
-				CurrentFile.IsDatabase = true
+				// CurrentFile.IsBinary = false
+				CurrentFile.Season = SQLite3
 				CurrentFile.ReadWrite = false
 				CurrentFile.Follow = false
 				CurrentFile.Encoding = "SQLite3"
@@ -211,8 +241,8 @@ func OpenFile(fName string, rw bool) {
 					return
 				}
 				CurrentFile.FName = fName
-				CurrentFile.IsBinary = true
-				CurrentFile.IsDatabase = false
+				CurrentFile.Season = Binary
+				// CurrentFile.IsDatabase = false
 				CurrentFile.ReadWrite = false // Binary files are read-only for now
 				CurrentFile.Follow = false
 				CurrentFile.Encoding = "Binary"
@@ -257,8 +287,8 @@ func OpenFile(fName string, rw bool) {
 				CurrentFile.View = femto.NewView(CurrentFile.Buffer)
 				CurrentFile.ReadWrite = rw
 				CurrentFile.Follow = false
-				CurrentFile.IsBinary = false
-				CurrentFile.IsDatabase = false
+				CurrentFile.Season = Text
+				// CurrentFile.IsDatabase = false
 				CurrentFile.ContentBytes = nil // Ensure this is nil for text files
 				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 				SetTheme(conf.ConfigGeneral.Theme)
@@ -422,7 +452,7 @@ func UpdateStatus() {
 			}
 			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
 
-			if !CurrentFile.IsDatabase {
+			if CurrentFile.Season != SQLite3 {
 				if CurrentFile.Buffer.Modified() {
 					// status = conf.ICON_MODIFIED
 					ui.LblDirty.SetText("*modified*")
@@ -436,7 +466,7 @@ func UpdateStatus() {
 			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
 			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
 
-			if !CurrentFile.IsDatabase {
+			if CurrentFile.Season != SQLite3 {
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
 				if CurrentFile.Follow {
 					_, _, _, lines := ui.EdtMain.GetInnerRect()
@@ -458,7 +488,7 @@ func UpdateStatus() {
 					f = UpdateGITInfos(f)
 					OpenFiles[i] = f
 				}
-				if f.IsDatabase {
+				if f.Season == SQLite3 {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
 				} else {
 					if f.Buffer.Modified() {
@@ -472,7 +502,7 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
 
-			if CurrentFile.IsDatabase {
+			if CurrentFile.Season == SQLite3 {
 				// DISPLAY DATABASE STATUS
 				if count%20 == 0 {
 					ui.DisplayExifInfo(CurrentFile.FName)
@@ -484,7 +514,7 @@ func UpdateStatus() {
 					ui.LblDirty.SetText("")
 				}
 			} else {
-				if CurrentFile.IsBinary {
+				if CurrentFile.Season == Binary {
 					ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
 					ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
 					ui.LblScreen.SetText(CurrentFile.Encoding)
@@ -599,16 +629,15 @@ func SwitchOpenFile(fName string) {
 			CurrentFile.GitBranch = e.GitBranch
 			CurrentFile.ReadWrite = e.ReadWrite
 			CurrentFile.Follow = e.Follow
-			CurrentFile.IsBinary = e.IsBinary
-			CurrentFile.IsDatabase = e.IsDatabase
+			CurrentFile.Season = e.Season
 			CurrentFile.Database = e.Database
-			if CurrentFile.IsDatabase {
+			if CurrentFile.Season == SQLite3 {
 				CurrentView = ui.TxtPromptSQL
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				showTreeDB()
 				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
-				if !CurrentFile.IsBinary {
+				if CurrentFile.Season == Text {
 					CurrentView = ui.EdtMain
 					ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
 					ui.PgsEditorContent.SwitchToPage("textEditor")
@@ -860,7 +889,7 @@ func CheckOpenFilesForSaving() {
 func startQuitSaveFlow() {
 	for ; quitFlowIndex < len(OpenFiles); quitFlowIndex++ {
 		f := OpenFiles[quitFlowIndex]
-		if !f.IsDatabase {
+		if f.Season != SQLite3 {
 			if f.Buffer.Modified() {
 				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
@@ -869,7 +898,7 @@ func startQuitSaveFlow() {
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if !f.IsDatabase {
+			if f.Season != SQLite3 {
 				if f.Buffer.Len() == 0 {
 					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
 					err := os.Remove(f.FName)
@@ -910,10 +939,12 @@ func CloseCurrentFile() {
 	if n >= 0 {
 		onlyOnce = false
 		ui.SetStatus("Closing file " + CurrentFile.FName)
-		if CurrentFile.Buffer.IsModified {
-			proposeToSaveFile(n, FLOW_CLOSE)
+		if CurrentFile.Season == Text {
+			if CurrentFile.Buffer.IsModified {
+				proposeToSaveFile(n, FLOW_CLOSE)
+			}
 		} else {
-			if CurrentFile.IsDatabase {
+			if CurrentFile.Season == SQLite3 {
 				CloseDB(CurrentFile.Database)
 			}
 			copy(OpenFiles[n:], OpenFiles[n+1:])
@@ -1050,7 +1081,7 @@ func GoLine(l int) {
 // ShowTreeDir()
 // ****************************************************************************
 func ShowTreeDir(rootDir string, sh bool) {
-	if !CurrentFile.IsDatabase {
+	if CurrentFile.Season != SQLite3 {
 		root := tview.NewTreeNode(rootDir).
 			SetColor(tcell.ColorYellow)
 		ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
@@ -1165,7 +1196,7 @@ func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 					ui.App.SetFocus(ui.EdtMain)
 				} else {
 					OpenFile(path, false)
-					if CurrentFile.IsDatabase {
+					if CurrentFile.Season == SQLite3 {
 						ui.SetStatus(fmt.Sprintf("Opening %s as a SQLite3 database", path))
 						ui.App.SetFocus(ui.TxtPromptSQL)
 					} else {
@@ -1373,7 +1404,7 @@ func findStringInHexContent(s string, searchType string, fromOffset int) int {
 // FindNext()
 // ****************************************************************************
 func FindNext() {
-	if CurrentFile.IsBinary {
+	if CurrentFile.Season == Binary {
 		findHexNext()
 	} else {
 		findTextNext()
@@ -1384,7 +1415,7 @@ func FindNext() {
 // FindPrevious()
 // ****************************************************************************
 func FindPrevious() {
-	if CurrentFile.IsBinary {
+	if CurrentFile.Season == Binary {
 		findHexPrevious()
 	} else {
 		findTextPrevious()
@@ -1530,7 +1561,7 @@ func findHexPrevious() {
 // ReplaceOne()
 // ****************************************************************************
 func ReplaceOne() {
-	if CurrentFile.IsBinary {
+	if CurrentFile.Season == Binary {
 		ui.SetStatus("Cannot replace in binary files (read-only)")
 		return
 	}
@@ -1567,7 +1598,7 @@ func ReplaceOne() {
 // ReplaceAll()
 // ****************************************************************************
 func ReplaceAll() {
-	if CurrentFile.IsBinary {
+	if CurrentFile.Season == Binary {
 		ui.SetStatus("Cannot replace in binary files (read-only)")
 		return
 	}

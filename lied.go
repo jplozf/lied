@@ -114,6 +114,7 @@ func init() {
 	ui.SetUI(appQuit, greeting)
 
 	ui.PgsApp.AddPage("edit", ui.FlxEditor, true, true)
+	ui.PgsApp.AddPage("fileManager", ui.FlxFileManager, true, false)
 	ui.PgsApp.AddPage("dlgQuit", ui.DlgQuit, false, false)
 
 	userDir, err := os.UserHomeDir()
@@ -172,7 +173,7 @@ func main() {
 		case tcell.KeyF7:
 			edit.SwitchNextFile()
 		case tcell.KeyF9:
-			ShowWorkspaceMenu()
+			ShowContextMenu()
 		case tcell.KeyF10:
 			ShowMainMenu()
 		case tcell.KeyF3:
@@ -186,7 +187,7 @@ func main() {
 					promptVisible = false
 					ui.MidColumn.RemoveItem(ui.TxtPrompt)
 					edit.CloseThisFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT))
-					if edit.CurrentFile.IsBinary {
+					if edit.CurrentFile.Season == edit.Binary {
 						ui.App.SetFocus(ui.HexView)
 					} else {
 						ui.App.SetFocus(ui.EdtMain)
@@ -237,6 +238,9 @@ func main() {
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyCtrlE:
+			DoExplorer(conf.ConfigGeneral.Workspace)
 			return nil
 		case tcell.KeyEsc:
 			if activeCmd != nil {
@@ -322,10 +326,10 @@ func main() {
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenFile(fName)
 			edit.SetFocusOnPath(fName)
-			if edit.CurrentFile.IsDatabase {
+			if edit.CurrentFile.Season == edit.SQLite3 {
 				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
-				if edit.CurrentFile.IsBinary {
+				if edit.CurrentFile.Season == edit.Binary {
 					ui.App.SetFocus(ui.HexView)
 				} else {
 					ui.App.SetFocus(ui.EdtMain)
@@ -393,10 +397,10 @@ func main() {
 			if promptVisible {
 				ui.App.SetFocus(ui.TxtPrompt)
 			} else {
-				if edit.CurrentFile.IsDatabase {
+				if edit.CurrentFile.Season == edit.SQLite3 {
 					ui.App.SetFocus(ui.TxtPromptSQL)
 				} else {
-					if edit.CurrentFile.IsBinary {
+					if edit.CurrentFile.Season == edit.Binary {
 						ui.App.SetFocus(ui.HexView)
 					} else {
 						ui.App.SetFocus(ui.EdtMain)
@@ -405,7 +409,7 @@ func main() {
 			}
 			return nil
 		case tcell.KeyEnter:
-			if !edit.CurrentFile.IsBinary {
+			if edit.CurrentFile.Season != edit.Binary {
 				idx, _ := ui.TblOutline.GetSelection()
 				funcLine := ui.TblOutline.GetCell(idx, 0).Text
 				l, _ := strconv.Atoi(funcLine)
@@ -507,7 +511,7 @@ func main() {
 			}
 			return nil
 		case tcell.KeyF2:
-			if edit.CurrentFile.IsBinary {
+			if edit.CurrentFile.Season == edit.Binary {
 				ui.App.SetFocus(ui.HexView)
 			} else {
 				ui.App.SetFocus(ui.EdtMain)
@@ -570,6 +574,49 @@ func main() {
 		default:
 			return event
 		}
+	})
+
+	// Files panel keyboard's events manager
+	ui.TblFiles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEnter:
+			edit.ProceedFileAction()
+			return nil
+		case tcell.KeyF5:
+			edit.RefreshMe()
+		case tcell.KeyF8:
+			edit.ShowFilesMenu()
+			return nil
+		case tcell.KeyCtrlS:
+			edit.ShowMenuSort()
+			return nil
+		case tcell.KeyInsert:
+			edit.ProceedFileSelect()
+			return nil
+		case tcell.KeyCtrlA:
+			edit.SelectAll(nil)
+			return nil
+		case tcell.KeyCtrlC:
+			edit.DoCopy(nil)
+			return nil
+		case tcell.KeyCtrlX:
+			edit.DoCut(nil)
+			return nil
+		case tcell.KeyCtrlV:
+			edit.DoPaste(nil)
+			return nil
+		case tcell.KeyDelete:
+			edit.DoDelete(nil)
+			return nil
+		case tcell.KeyTab:
+			if ui.TxtPrompt.HasFocus() {
+				ui.App.SetFocus(ui.TblFiles)
+			} else {
+				ui.App.SetFocus(ui.TxtFileInfo)
+			}
+			return nil
+		}
+		return event
 	})
 
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
@@ -650,6 +697,7 @@ func ShowMainMenu() {
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuGitAdd", "Git add…", DoGitAdd, edit.CurrentFile.FName, !IsFileGitTracked(edit.CurrentFile.FName), false)
 	MnuMacros.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -723,6 +771,24 @@ func ShowWorkspaceMenu() {
 	// Popup menu
 	ui.PgsApp.AddPage("dlgWorkspaceMenu", MnuWorkspace.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgWorkspaceMenu")
+}
+
+// ****************************************************************************
+// ShowContextMenu()
+// ****************************************************************************
+func ShowContextMenu() {
+	switch edit.CurrentFile.Season {
+	case edit.Text:
+		ShowWorkspaceMenu()
+	case edit.Binary:
+		ShowWorkspaceMenu()
+	case edit.SQLite3:
+		ShowWorkspaceMenu()
+	case edit.Shell:
+		ShowWorkspaceMenu()
+	case edit.Explorer:
+		edit.ShowFilesMenu()
+	}
 }
 
 // ****************************************************************************
@@ -1078,7 +1144,7 @@ func saveSettings() {
 	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
 	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
 	sec.NewKey("CurrentFile", edit.CurrentFile.FName)
-	if !edit.CurrentFile.IsDatabase {
+	if edit.CurrentFile.Season != edit.SQLite3 {
 		sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.X))
 		sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentFile.Buffer.Cursor.Y))
 	} else {
@@ -2509,6 +2575,16 @@ func DoArchive(f any) {
 	} else {
 		ui.SetStatus(fmt.Sprintf("Archive [%s] created successfully into [%s]", b, userDir))
 	}
+}
+
+// ****************************************************************************
+// DoExplorer()
+// ****************************************************************************
+func DoExplorer(f any) {
+	ui.SetStatus("Exploring " + f.(string))
+	ui.PgsApp.SwitchToPage("fileManager")
+	edit.ShowFiles()
+	ui.App.SetFocus(ui.TblFiles)
 }
 
 // ****************************************************************************
