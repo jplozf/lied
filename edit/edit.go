@@ -46,19 +46,19 @@ import (
 // ****************************************************************************
 // TYPES
 // ****************************************************************************
-type Seasoning int64
+type Modes int64
 
 const (
-	Text Seasoning = iota
+	Text Modes = iota
 	Binary
 	Shell
 	SQLite3
 	Explorer
 )
 
-type editfile struct {
-	Buffer              *femto.Buffer
-	View                *femto.View
+type viewscreen struct {
+	FemtoBuffer         *femto.Buffer
+	FemtoView           *femto.View
 	FName               string
 	Encoding            string
 	GitCommit           string
@@ -69,12 +69,10 @@ type editfile struct {
 	Follow              bool
 	RWBackup            bool
 	IsMemberOfWorkspace bool
-	Season              Seasoning
-	// IsBinary            bool
-	// IsDatabase          bool
-	ContentBytes    []byte
-	HexContentDirty bool
-	Database        *sql.DB
+	Mode                Modes
+	ContentBytes        []byte
+	HexContentDirty     bool
+	Database            *sql.DB
 }
 
 type found struct {
@@ -96,9 +94,9 @@ const (
 // GLOBALS
 // ****************************************************************************
 var (
-	OpenFiles             []editfile
-	CurrentFile           editfile
-	CurrentView           tview.Primitive
+	OpenViews             []viewscreen
+	CurrentView           viewscreen
+	CurrentWidget         tview.Primitive
 	DlgSaveFile           *dialog.Dialog
 	DlgSaveFileAs         *dialog.Dialog
 	currentFlow           int
@@ -145,14 +143,18 @@ func SwitchToEditor(fName string) {
 	ui.PgsApp.SwitchToPage(scr)
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
-	OpenFile(fName, true)
-	if CurrentFile.Season == SQLite3 {
+	OpenView(fName, true)
+	if CurrentView.Mode == SQLite3 {
 		ui.App.SetFocus(ui.FlxSQLite)
 	} else {
-		if CurrentFile.Season == Binary {
-			ui.App.SetFocus(ui.HexView)
+		if CurrentView.Mode == Explorer {
+			ui.App.SetFocus(ui.TblFiles)
 		} else {
-			ui.App.SetFocus(ui.EdtMain)
+			if CurrentView.Mode == Binary {
+				ui.App.SetFocus(ui.HexView)
+			} else {
+				ui.App.SetFocus(ui.EdtMain)
+			}
 		}
 	}
 }
@@ -171,12 +173,12 @@ func SetTheme(theme string) {
 }
 
 // ****************************************************************************
-// OpenFile()
+// OpenView()
 // ****************************************************************************
-func OpenFile(fName string, rw bool) {
+func OpenView(fName string, rw bool) {
 	onlyOnce = false
-	if isFileAlreadyOpen(fName) {
-		SwitchOpenFile(fName)
+	if isViewAlreadyOpen(fName) {
+		SwitchOpenView(fName)
 	} else {
 		ui.EdtMain.SetRuntimeFiles(runtime.Files)
 		// Check if the file exists
@@ -186,21 +188,20 @@ func OpenFile(fName string, rw bool) {
 		} else {
 			// Check if it's a path, then explorer view
 			if utils.IsDir(fName) {
-				SetFilesMenu()
-				CurrentFile.FName = fName
-				CurrentFile.Season = Explorer
-				CurrentFile.ReadWrite = false
-				CurrentFile.Follow = false
-				OpenFiles = append(OpenFiles, CurrentFile)
-				// defer CloseDB(CurrentFile.Database)
+				// SetFilesMenu()
+				CurrentView.FName = fName
+				CurrentView.Mode = Explorer
+				CurrentView.ReadWrite = false
+				CurrentView.Follow = false
+				OpenViews = append(OpenViews, CurrentView)
+				//
 				go UpdateStatus()
 				go focusOpenFile(fName)
 				//
-				ui.SetStatus(fmt.Sprintf("Exploring %s", CurrentFile.FName))
+				ui.SetStatus(fmt.Sprintf("Exploring %s", CurrentView.FName))
 				ui.PgsApp.SwitchToPage("fileManager")
 				ShowFiles()
 				ui.App.SetFocus(ui.TblFiles)
-
 				return
 			}
 			// Check if the file is a SQLite3 database
@@ -210,27 +211,27 @@ func OpenFile(fName string, rw bool) {
 					ui.SetStatus(fmt.Sprintf("Could not read SQLite3 file %v: %v", fName, err))
 					return
 				}
-				CurrentFile.FName = fName
+				CurrentView.FName = fName
 				// CurrentFile.IsBinary = false
-				CurrentFile.Season = SQLite3
-				CurrentFile.ReadWrite = false
-				CurrentFile.Follow = false
-				CurrentFile.Encoding = "SQLite3"
+				CurrentView.Mode = SQLite3
+				CurrentView.ReadWrite = false
+				CurrentView.Follow = false
+				CurrentView.Encoding = "SQLite3"
 				// var errDB error
-				CurrentFile.Database, _ = sql.Open("sqlite3", CurrentFile.FName)
-				OpenFiles = append(OpenFiles, CurrentFile)
+				CurrentView.Database, _ = sql.Open("sqlite3", CurrentView.FName)
+				OpenViews = append(OpenViews, CurrentView)
 				// defer CloseDB(CurrentFile.Database)
 				go UpdateStatus()
 				go focusOpenFile(fName)
-				ui.SetStatus(fmt.Sprintf("Opening SQLite3 file %s", CurrentFile.FName))
-				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for this data
+				ui.SetStatus(fmt.Sprintf("Opening SQLite3 file %s", CurrentView.FName))
+				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for this data
 				showTreeDB()
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				ui.App.SetFocus(ui.TxtPromptSQL)
 				return
 			} else {
-				ui.SetStatus(fmt.Sprintf("%s is not a SQLite3 database", CurrentFile.FName))
+				ui.SetStatus(fmt.Sprintf("%s is not a SQLite3 database", CurrentView.FName))
 			}
 
 			// Check if the file is binary
@@ -240,27 +241,27 @@ func OpenFile(fName string, rw bool) {
 					ui.SetStatus(fmt.Sprintf("Could not read binary file %v: %v", fName, err))
 					return
 				}
-				CurrentFile.FName = fName
-				CurrentFile.Season = Binary
+				CurrentView.FName = fName
+				CurrentView.Mode = Binary
 				// CurrentFile.IsDatabase = false
-				CurrentFile.ReadWrite = false // Binary files are read-only for now
-				CurrentFile.Follow = false
-				CurrentFile.Encoding = "Binary"
-				CurrentFile.ContentBytes = content
-				CurrentFile.HexContentDirty = true // Mark for refresh
-				OpenFiles = append(OpenFiles, CurrentFile)
+				CurrentView.ReadWrite = false // Binary files are read-only for now
+				CurrentView.Follow = false
+				CurrentView.Encoding = "Binary"
+				CurrentView.ContentBytes = content
+				CurrentView.HexContentDirty = true // Mark for refresh
+				OpenViews = append(OpenViews, CurrentView)
 				go UpdateStatus()
 				go focusOpenFile(fName)
-				ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentFile.FName))
+				ui.SetStatus(fmt.Sprintf("Opening binary file %s", CurrentView.FName))
 				displayBinaryContent()
-				ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
 				ui.ConfigureFindFormForBinary(true)
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
 				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				return
 			} else {
-				ui.SetStatus(fmt.Sprintf("%s is not a binary file", CurrentFile.FName))
+				ui.SetStatus(fmt.Sprintf("%s is not a binary file", CurrentView.FName))
 			}
 
 			content, err := ioutil.ReadFile(fName)
@@ -271,35 +272,35 @@ func OpenFile(fName string, rw bool) {
 				detector := chardet.NewTextDetector()
 				result, err := detector.DetectBest(content)
 				if err == nil {
-					CurrentFile.Encoding = result.Charset
+					CurrentView.Encoding = result.Charset
 				} else {
-					CurrentFile.Encoding = "Unknown"
+					CurrentView.Encoding = "Unknown"
 				}
 
-				CurrentFile.FName = fName
-				CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
+				CurrentView.FName = fName
+				CurrentView.FemtoBuffer = femto.NewBufferFromString(string(content), CurrentView.FName)
 				// 				CurrentFile.Buffer.Settings["wordwrap"] = false
-				CurrentFile.Buffer.Settings["keepautoindent"] = true
-				CurrentFile.Buffer.Settings["softwrap"] = true
-				CurrentFile.Buffer.Settings["scrollbar"] = true
-				CurrentFile.Buffer.Settings["statusline"] = false
+				CurrentView.FemtoBuffer.Settings["keepautoindent"] = true
+				CurrentView.FemtoBuffer.Settings["softwrap"] = true
+				CurrentView.FemtoBuffer.Settings["scrollbar"] = true
+				CurrentView.FemtoBuffer.Settings["statusline"] = false
 
-				CurrentFile.View = femto.NewView(CurrentFile.Buffer)
-				CurrentFile.ReadWrite = rw
-				CurrentFile.Follow = false
-				CurrentFile.Season = Text
+				CurrentView.FemtoView = femto.NewView(CurrentView.FemtoBuffer)
+				CurrentView.ReadWrite = rw
+				CurrentView.Follow = false
+				CurrentView.Mode = Text
 				// CurrentFile.IsDatabase = false
-				CurrentFile.ContentBytes = nil // Ensure this is nil for text files
-				ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+				CurrentView.ContentBytes = nil // Ensure this is nil for text files
+				ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 				SetTheme(conf.ConfigGeneral.Theme)
 				ui.EdtMain.SetTitleAlign(tview.AlignRight)
-				ui.LblScreen.SetText(CurrentFile.Encoding)
-				CurrentFile = UpdateGITInfos(CurrentFile)
-				OpenFiles = append(OpenFiles, CurrentFile)
+				ui.LblScreen.SetText(CurrentView.Encoding)
+				CurrentView = UpdateGITInfos(CurrentView)
+				OpenViews = append(OpenViews, CurrentView)
 				go UpdateStatus()
 				go focusOpenFile(fName)
-				ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentFile.FName))
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+				ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentView.FName))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
 				ui.App.SetFocus(ui.EdtMain)
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 			}
@@ -312,10 +313,10 @@ func OpenFile(fName string, rw bool) {
 // SaveFile()
 // ****************************************************************************
 func SaveFile() {
-	err := ioutil.WriteFile(CurrentFile.FName, []byte(CurrentFile.Buffer.String()), 0600)
+	err := ioutil.WriteFile(CurrentView.FName, []byte(CurrentView.FemtoBuffer.String()), 0600)
 	if err == nil {
-		ui.SetStatus(fmt.Sprintf("File %s successfully saved", CurrentFile.FName))
-		CurrentFile.Buffer.IsModified = false
+		ui.SetStatus(fmt.Sprintf("File %s successfully saved", CurrentView.FName))
+		CurrentView.FemtoBuffer.IsModified = false
 	} else {
 		ui.SetStatus(err.Error())
 	}
@@ -333,12 +334,12 @@ func SaveAnyFile(f any) {
 // ****************************************************************************
 func SaveAll() {
 	fIndex := 0
-	of := len(OpenFiles)
+	of := len(OpenViews)
 	for ; fIndex < of; fIndex++ {
-		err := ioutil.WriteFile(OpenFiles[fIndex].FName, []byte(OpenFiles[fIndex].Buffer.String()), 0600)
+		err := ioutil.WriteFile(OpenViews[fIndex].FName, []byte(OpenViews[fIndex].FemtoBuffer.String()), 0600)
 		if err == nil {
-			ui.SetStatus(fmt.Sprintf("File %s successfully saved", OpenFiles[fIndex].FName))
-			OpenFiles[fIndex].Buffer.IsModified = false
+			ui.SetStatus(fmt.Sprintf("File %s successfully saved", OpenViews[fIndex].FName))
+			OpenViews[fIndex].FemtoBuffer.IsModified = false
 		} else {
 			ui.SetStatus(err.Error())
 		}
@@ -353,7 +354,7 @@ func SaveFileAs() {
 	currentFlow = FLOW_SELF
 	DlgSaveFileAs = DlgSaveFileAs.Input("Save File as...", // Title
 		"Please, enter the new name for this file :", // Message
-		CurrentFile.FName,
+		CurrentView.FName,
 		confirmSaveAs,
 		0,
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
@@ -385,7 +386,7 @@ func NewFile(dir string) {
 	f, err := os.CreateTemp(dir, conf.NEW_FILE_TEMPLATE)
 	if err == nil {
 		// SwitchToEditor(f.Name())
-		OpenFile(f.Name(), true)
+		OpenView(f.Name(), true)
 	} else {
 		ui.SetStatus(err.Error())
 	}
@@ -398,7 +399,7 @@ func CreateThisFile(dir string) bool {
 	f, err := os.Create(dir)
 	ui.SetStatus(fmt.Sprintf("Creating the file %v", dir))
 	if err == nil {
-		OpenFile(f.Name(), true)
+		OpenView(f.Name(), true)
 		return true
 	} else {
 		ui.SetStatus(err.Error())
@@ -417,8 +418,8 @@ func NewAnyFile(f any) {
 // NewFileOrLastFile()
 // ****************************************************************************
 func NewFileOrLastFile(dir string) {
-	if len(OpenFiles) > 0 {
-		SwitchToEditor(CurrentFile.FName)
+	if len(OpenViews) > 0 {
+		SwitchToEditor(CurrentView.FName)
 	} else {
 		NewFile(dir)
 	}
@@ -439,10 +440,10 @@ func UpdateStatus() {
 			dp += string(os.PathSeparator)
 			ui.TxtCurrentWorkspace.SetText(dp + "[yellow]" + bp)
 			// ui.TxtCurrentEditName.SetText(filepath.Dir(CurrentFile.FName) + string(os.PathSeparator) + "[yellow]" + filepath.Base(CurrentFile.FName))
-			relativePath, err := filepath.Rel(conf.ConfigGeneral.Workspace, CurrentFile.FName)
+			relativePath, err := filepath.Rel(conf.ConfigGeneral.Workspace, CurrentView.FName)
 			if err != nil {
 				// Handle error: perhaps log it or display a default value
-				relativePath = filepath.Base(CurrentFile.FName)
+				relativePath = filepath.Base(CurrentView.FName)
 			}
 			dirPath := filepath.Dir(relativePath)
 			if dirPath == "." {
@@ -452,8 +453,8 @@ func UpdateStatus() {
 			}
 			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
 
-			if CurrentFile.Season != SQLite3 {
-				if CurrentFile.Buffer.Modified() {
+			if CurrentView.Mode != SQLite3 {
+				if CurrentView.FemtoBuffer.Modified() {
 					// status = conf.ICON_MODIFIED
 					ui.LblDirty.SetText("*modified*")
 				} else {
@@ -461,37 +462,37 @@ func UpdateStatus() {
 					ui.LblDirty.SetText("")
 				}
 			}
-			CurrentFile = UpdateGITInfos(CurrentFile)
-			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
-			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
-			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
+			CurrentView = UpdateGITInfos(CurrentView)
+			ui.LblGITBranch.SetText("⎇  " + CurrentView.GitBranch)
+			ui.LblCommit.SetText("⟟ " + CurrentView.GitCommit)
+			ui.LblGITStatus.SetText("🗨  " + CurrentView.GitStatus)
 
-			if CurrentFile.Season != SQLite3 {
-				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
-				if CurrentFile.Follow {
+			if CurrentView.Mode != SQLite3 && CurrentView.Mode != Explorer {
+				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentView.Encoding, CurrentView.FemtoBuffer.Settings["filetype"].(string), CurrentView.FemtoBuffer.Settings["fileformat"].(string)))
+				if CurrentView.Follow {
 					_, _, _, lines := ui.EdtMain.GetInnerRect()
 					ui.LblReadWrite.SetText("FL")
-					c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentFile.FName)
+					c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentView.FName)
 					output, _ := c.Output()
-					CurrentFile.Buffer = femto.NewBufferFromString(string(output), CurrentFile.FName)
-					CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
-					ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+					CurrentView.FemtoBuffer = femto.NewBufferFromString(string(output), CurrentView.FName)
+					CurrentView.FemtoBuffer.Cursor.Y = CurrentView.FemtoBuffer.End().Y
+					ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 				}
-				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
+				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentView.FemtoBuffer.Len())))
 			}
 
 			ui.TblOpenFiles.Clear()
 			count++
-			for i, f := range OpenFiles {
+			for i, f := range OpenViews {
 				if count%20 == 0 {
 					// Update GIT infos only once in 20 to prevent huge CPU use
 					f = UpdateGITInfos(f)
-					OpenFiles[i] = f
+					OpenViews[i] = f
 				}
-				if f.Season == SQLite3 {
+				if f.Mode == SQLite3 {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
 				} else {
-					if f.Buffer.Modified() {
+					if f.FemtoBuffer.Modified() {
 						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
 					} else {
 						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
@@ -502,11 +503,11 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
 
-			if CurrentFile.Season == SQLite3 {
+			if CurrentView.Mode == SQLite3 {
 				// DISPLAY DATABASE STATUS
 				if count%20 == 0 {
-					ui.DisplayExifInfo(CurrentFile.FName)
-					fi, _ := os.Stat(CurrentFile.FName)
+					ui.DisplayExifInfo(CurrentView.FName)
+					fi, _ := os.Stat(CurrentView.FName)
 					ui.LblSize.SetText(utils.HumanFileSize(float64(fi.Size())))
 					ui.LblCursor.SetText("SQLite3")
 					ui.LblReadWrite.SetText("RW")
@@ -514,66 +515,77 @@ func UpdateStatus() {
 					ui.LblDirty.SetText("")
 				}
 			} else {
-				if CurrentFile.Season == Binary {
-					ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentFile.ContentBytes))))
-					ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentFile.Encoding))
-					ui.LblScreen.SetText(CurrentFile.Encoding)
-					ui.LblReadWrite.SetText("RO")
-					ui.LblDirty.SetText("")
-				} else {
-					x := CurrentFile.Buffer.Cursor.X + 1
-					y := CurrentFile.Buffer.Cursor.Y + 1
-					ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
-					ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
-					if CurrentFile.ReadWrite {
-						ui.LblReadWrite.SetText("RW")
-					} else {
-						ui.LblReadWrite.SetText("RO")
-					}
-
-					// Get funcs for current file and populate the TblOutline
+				if CurrentView.Mode == Explorer {
+					// DISPLAY EXPLORER STATUS
 					if count%20 == 0 {
-						ui.TblOutline.Clear()
-						var funcs = GetFuncs(CurrentFile.Buffer.String(), CurrentFile.Buffer.Settings["filetype"].(string))
-						sort.Slice(funcs, func(i, j int) bool {
-							a := funcs[i]
-							b := funcs[j]
-							return strings.ToUpper(a.name) < strings.ToUpper(b.name)
-						})
-
-						// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-						// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-						for i, f := range funcs {
-							ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
-							ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
-						}
-						if !onlyOnce {
-							ui.TblOutline.ScrollToBeginning()
-							onlyOnce = true
-						}
-					}
-					// Original text file status updates
-					if CurrentFile.Buffer.Modified() {
-						ui.LblDirty.SetText("*modified*")
-					} else {
+						ui.LblSize.SetText("")
+						ui.LblCursor.SetText("Explorer")
+						ui.LblReadWrite.SetText("--")
+						ui.LblPercent.SetText("")
 						ui.LblDirty.SetText("")
 					}
-					ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentFile.Encoding, CurrentFile.Buffer.Settings["filetype"].(string), CurrentFile.Buffer.Settings["fileformat"].(string)))
-					ui.LblScreen.SetText(CurrentFile.Encoding)
-					if CurrentFile.ReadWrite {
-						ui.LblReadWrite.SetText("RW")
-					} else {
+				} else {
+					if CurrentView.Mode == Binary {
+						ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentView.ContentBytes))))
+						ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentView.Encoding))
+						ui.LblScreen.SetText(CurrentView.Encoding)
 						ui.LblReadWrite.SetText("RO")
+						ui.LblDirty.SetText("")
+					} else {
+						x := CurrentView.FemtoBuffer.Cursor.X + 1
+						y := CurrentView.FemtoBuffer.Cursor.Y + 1
+						ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
+						ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentView.FemtoBuffer.Cursor.Y)/float32(CurrentView.FemtoBuffer.NumLines))*100.0)))
+						if CurrentView.ReadWrite {
+							ui.LblReadWrite.SetText("RW")
+						} else {
+							ui.LblReadWrite.SetText("RO")
+						}
+
+						// Get funcs for current file and populate the TblOutline
+						if count%20 == 0 {
+							ui.TblOutline.Clear()
+							var funcs = GetFuncs(CurrentView.FemtoBuffer.String(), CurrentView.FemtoBuffer.Settings["filetype"].(string))
+							sort.Slice(funcs, func(i, j int) bool {
+								a := funcs[i]
+								b := funcs[j]
+								return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+							})
+
+							// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+							// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+							for i, f := range funcs {
+								ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+								ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+							}
+							if !onlyOnce {
+								ui.TblOutline.ScrollToBeginning()
+								onlyOnce = true
+							}
+						}
+						// Original text file status updates
+						if CurrentView.FemtoBuffer.Modified() {
+							ui.LblDirty.SetText("*modified*")
+						} else {
+							ui.LblDirty.SetText("")
+						}
+						ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentView.Encoding, CurrentView.FemtoBuffer.Settings["filetype"].(string), CurrentView.FemtoBuffer.Settings["fileformat"].(string)))
+						ui.LblScreen.SetText(CurrentView.Encoding)
+						if CurrentView.ReadWrite {
+							ui.LblReadWrite.SetText("RW")
+						} else {
+							ui.LblReadWrite.SetText("RO")
+						}
+						ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentView.FemtoBuffer.Len())))
+						ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentView.FemtoBuffer.Cursor.Y)/float32(CurrentView.FemtoBuffer.NumLines))*100.0)))
 					}
-					ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentFile.Buffer.Len())))
-					ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentFile.Buffer.Cursor.Y)/float32(CurrentFile.Buffer.NumLines))*100.0)))
 				}
 			}
 
-			CurrentFile = UpdateGITInfos(CurrentFile)
-			ui.LblGITBranch.SetText("⎇  " + CurrentFile.GitBranch)
-			ui.LblCommit.SetText("⟟ " + CurrentFile.GitCommit)
-			ui.LblGITStatus.SetText("🗨  " + CurrentFile.GitStatus)
+			CurrentView = UpdateGITInfos(CurrentView)
+			ui.LblGITBranch.SetText("⎇  " + CurrentView.GitBranch)
+			ui.LblCommit.SetText("⟟ " + CurrentView.GitCommit)
+			ui.LblGITStatus.SetText("🗨  " + CurrentView.GitStatus)
 		})
 	}
 }
@@ -581,7 +593,7 @@ func UpdateStatus() {
 // ****************************************************************************
 // UpdateGITInfos()
 // ****************************************************************************
-func UpdateGITInfos(f editfile) editfile {
+func UpdateGITInfos(f viewscreen) viewscreen {
 	ws := filepath.Dir(f.FName)
 	// Get GIT Commit
 	commit, err2 := utils.Xeq(ws, "git", "rev-parse", "--short", "HEAD")
@@ -616,58 +628,67 @@ func UpdateGITInfos(f editfile) editfile {
 }
 
 // ****************************************************************************
-// SwitchOpenFile()
+// SwitchOpenView()
 // ****************************************************************************
-func SwitchOpenFile(fName string) {
-	for _, e := range OpenFiles {
+func SwitchOpenView(fName string) {
+	for _, e := range OpenViews {
 		if e.FName == fName {
-			CurrentFile.FName = e.FName
-			CurrentFile.Buffer = e.Buffer
-			CurrentFile.Encoding = e.Encoding
-			CurrentFile.GitCommit = e.GitCommit
-			CurrentFile.GitStatus = e.GitStatus
-			CurrentFile.GitBranch = e.GitBranch
-			CurrentFile.ReadWrite = e.ReadWrite
-			CurrentFile.Follow = e.Follow
-			CurrentFile.Season = e.Season
-			CurrentFile.Database = e.Database
-			if CurrentFile.Season == SQLite3 {
-				CurrentView = ui.TxtPromptSQL
+			CurrentView.FName = e.FName
+			CurrentView.FemtoBuffer = e.FemtoBuffer
+			CurrentView.Encoding = e.Encoding
+			CurrentView.GitCommit = e.GitCommit
+			CurrentView.GitStatus = e.GitStatus
+			CurrentView.GitBranch = e.GitBranch
+			CurrentView.ReadWrite = e.ReadWrite
+			CurrentView.Follow = e.Follow
+			CurrentView.Mode = e.Mode
+			CurrentView.Database = e.Database
+			if CurrentView.Mode == SQLite3 {
+				CurrentWidget = ui.TxtPromptSQL
+				ui.PgsApp.SwitchToPage("edit")
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				showTreeDB()
 				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
-				if CurrentFile.Season == Text {
-					CurrentView = ui.EdtMain
-					ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
-					ui.PgsEditorContent.SwitchToPage("textEditor")
-					ui.App.SetFocus(CurrentView)
-
-					// Configure FrmFind for text files
-					ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
-					ui.ChkToggleReplace.SetDisabled(false)
-					ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
-					ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
-					ui.DpdSearchType.SetDisabled(true)
-					ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
-					ui.ChkCase.SetDisabled(false)
+				if CurrentView.Mode == Explorer {
+					CurrentWidget = ui.TblFiles
+					ui.PgsApp.SwitchToPage("fileManager")
+					ui.App.SetFocus(ui.TblFiles)
 				} else {
-					CurrentView = ui.HexView
-					CurrentFile.HexContentDirty = true // Mark for refresh
-					displayBinaryContent()
-					ui.PgsEditorContent.SwitchToPage("hexViewer")
-					ui.App.SetFocus(CurrentView)
-					ui.DisplayExifInfo(CurrentFile.FName) // Display EXIF info for binary files
+					if CurrentView.Mode == Text {
+						CurrentWidget = ui.EdtMain
+						ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
+						ui.PgsApp.SwitchToPage("edit")
+						ui.PgsEditorContent.SwitchToPage("textEditor")
+						ui.App.SetFocus(CurrentWidget)
 
-					// Configure FrmFind for binary files
-					ui.ConfigureFindFormForBinary(true)
+						// Configure FrmFind for text files
+						ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
+						ui.ChkToggleReplace.SetDisabled(false)
+						ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
+						ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
+						ui.DpdSearchType.SetDisabled(true)
+						ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
+						ui.ChkCase.SetDisabled(false)
+					} else {
+						CurrentWidget = ui.HexView
+						CurrentView.HexContentDirty = true // Mark for refresh
+						displayBinaryContent()
+						ui.PgsApp.SwitchToPage("edit")
+						ui.PgsEditorContent.SwitchToPage("hexViewer")
+						ui.App.SetFocus(CurrentWidget)
+						ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
+
+						// Configure FrmFind for binary files
+						ui.ConfigureFindFormForBinary(true)
+					}
 				}
 			}
 
 			// FocusOnPath(fName)
-			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentFile.FName))
-			for idx, file := range OpenFiles {
-				if file.FName == CurrentFile.FName {
+			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentView.FName))
+			for idx, file := range OpenViews {
+				if file.FName == CurrentView.FName {
 					ui.TblOpenFiles.Select(idx, 0)
 					break
 				}
@@ -683,20 +704,20 @@ func SwitchOpenFile(fName string) {
 // SwitchAnyFile()
 // ****************************************************************************
 func SwitchAnyFile(fName any) {
-	SwitchOpenFile(fName.(string))
+	SwitchOpenView(fName.(string))
 }
 
 // ****************************************************************************
 // SwitchPreviousFile()
 // ****************************************************************************
 func SwitchPreviousFile() {
-	for i, e := range OpenFiles {
-		if e.FName == CurrentFile.FName {
+	for i, e := range OpenViews {
+		if e.FName == CurrentView.FName {
 			prev := i - 1
 			if prev < 0 {
-				prev = len(OpenFiles) - 1
+				prev = len(OpenViews) - 1
 			}
-			SwitchOpenFile(OpenFiles[prev].FName)
+			SwitchOpenView(OpenViews[prev].FName)
 			break
 		}
 	}
@@ -706,24 +727,24 @@ func SwitchPreviousFile() {
 // SwitchNextFile()
 // ****************************************************************************
 func SwitchNextFile() {
-	for i, e := range OpenFiles {
-		if e.FName == CurrentFile.FName {
+	for i, e := range OpenViews {
+		if e.FName == CurrentView.FName {
 			next := i + 1
-			if next == len(OpenFiles) {
+			if next == len(OpenViews) {
 				next = 0
 			}
-			SwitchOpenFile(OpenFiles[next].FName)
+			SwitchOpenView(OpenViews[next].FName)
 			break
 		}
 	}
 }
 
 // ****************************************************************************
-// isFileAlreadyOpen()
+// isViewAlreadyOpen()
 // ****************************************************************************
-func isFileAlreadyOpen(fName string) bool {
+func isViewAlreadyOpen(fName string) bool {
 	rc := false
-	for _, e := range OpenFiles {
+	for _, e := range OpenViews {
 		if e.FName == fName {
 			rc = true
 			break
@@ -750,8 +771,8 @@ func focusOpenFile(fName string) {
 // ****************************************************************************
 func GetGlobalDirtyFlag() bool {
 	rc := false
-	for _, f := range OpenFiles {
-		if f.Buffer.Modified() {
+	for _, f := range OpenViews {
+		if f.FemtoBuffer.Modified() {
 			rc = true
 			break
 		}
@@ -764,7 +785,7 @@ func GetGlobalDirtyFlag() bool {
 // ****************************************************************************
 func proposeToSaveFile(idx int, flow int) {
 	currentFlow = flow
-	DlgSaveFile = DlgSaveFile.YesNoCancel(fmt.Sprintf("Save File %s", OpenFiles[idx].FName), // Title
+	DlgSaveFile = DlgSaveFile.YesNoCancel(fmt.Sprintf("Save File %s", OpenViews[idx].FName), // Title
 		"This file has been modified. Do you want to save it ?", // Message
 		confirmSave,
 		idx,
@@ -808,10 +829,10 @@ func proposeToSaveFile(idx int, flow int) {
 // ****************************************************************************
 func confirmSave(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_YES {
-		err := ioutil.WriteFile(OpenFiles[idx].FName, []byte(OpenFiles[idx].Buffer.String()), 0600)
+		err := ioutil.WriteFile(OpenViews[idx].FName, []byte(OpenViews[idx].FemtoBuffer.String()), 0600)
 		if err == nil {
-			ui.SetStatus(fmt.Sprintf("File %s successfully saved", OpenFiles[idx].FName))
-			OpenFiles[idx].Buffer.IsModified = false
+			ui.SetStatus(fmt.Sprintf("File %s successfully saved", OpenViews[idx].FName))
+			OpenViews[idx].FemtoBuffer.IsModified = false
 			if currentFlow == FLOW_CLOSE {
 				CloseCurrentFile()
 			} else if currentFlow == FLOW_QUIT {
@@ -823,7 +844,7 @@ func confirmSave(rc dialog.DlgButton, idx int) {
 		}
 	}
 	if rc == dialog.BUTTON_NO {
-		OpenFiles[idx].Buffer.IsModified = false
+		OpenViews[idx].FemtoBuffer.IsModified = false
 		if currentFlow == FLOW_CLOSE {
 			CloseCurrentFile()
 		} else if currentFlow == FLOW_QUIT {
@@ -844,23 +865,23 @@ func confirmSave(rc dialog.DlgButton, idx int) {
 func confirmSaveAs(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_OK {
 		newName := DlgSaveFileAs.Value
-		err := ioutil.WriteFile(newName, []byte(CurrentFile.Buffer.String()), 0600)
+		err := ioutil.WriteFile(newName, []byte(CurrentView.FemtoBuffer.String()), 0600)
 		if err == nil {
-			ui.SetStatus(fmt.Sprintf("File %s successfully saved", CurrentFile.FName))
-			CurrentFile.Buffer.IsModified = false
+			ui.SetStatus(fmt.Sprintf("File %s successfully saved", CurrentView.FName))
+			CurrentView.FemtoBuffer.IsModified = false
 			if currentFlow == FLOW_CLOSE {
 				CloseCurrentFile()
 			} else {
 				var n = -1
-				for i, f := range OpenFiles {
-					if f.FName == CurrentFile.FName {
+				for i, f := range OpenViews {
+					if f.FName == CurrentView.FName {
 						n = i
 						break
 					}
 				}
-				copy(OpenFiles[n:], OpenFiles[n+1:])
-				OpenFiles = OpenFiles[:len(OpenFiles)-1]
-				OpenFile(newName, true)
+				copy(OpenViews[n:], OpenViews[n+1:])
+				OpenViews = OpenViews[:len(OpenViews)-1]
+				OpenView(newName, true)
 			}
 		} else {
 			ui.SetStatus(err.Error())
@@ -868,7 +889,7 @@ func confirmSaveAs(rc dialog.DlgButton, idx int) {
 	}
 	if rc == dialog.BUTTON_CANCEL {
 		if currentFlow == FLOW_CLOSE {
-			OpenFiles[idx].Buffer.IsModified = false
+			OpenViews[idx].FemtoBuffer.IsModified = false
 			CloseCurrentFile()
 		}
 	}
@@ -887,10 +908,10 @@ func CheckOpenFilesForSaving() {
 // startQuitSaveFlow()
 // ****************************************************************************
 func startQuitSaveFlow() {
-	for ; quitFlowIndex < len(OpenFiles); quitFlowIndex++ {
-		f := OpenFiles[quitFlowIndex]
-		if f.Season != SQLite3 {
-			if f.Buffer.Modified() {
+	for ; quitFlowIndex < len(OpenViews); quitFlowIndex++ {
+		f := OpenViews[quitFlowIndex]
+		if f.Mode != SQLite3 {
+			if f.FemtoBuffer.Modified() {
 				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
 				return // Wait for user input from dialog
@@ -898,8 +919,8 @@ func startQuitSaveFlow() {
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Season != SQLite3 {
-				if f.Buffer.Len() == 0 {
+			if f.Mode != SQLite3 {
+				if f.FemtoBuffer.Len() == 0 {
 					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
 					err := os.Remove(f.FName)
 					if err != nil {
@@ -917,7 +938,7 @@ func startQuitSaveFlow() {
 // CloseAll()
 // ****************************************************************************
 func CloseAll() {
-	of := len(OpenFiles)
+	of := len(OpenViews)
 	for ; quitFlowIndex < of; quitFlowIndex++ {
 		CloseCurrentFile()
 	}
@@ -929,8 +950,8 @@ func CloseAll() {
 func CloseCurrentFile() {
 	var n = -1
 	var d = ""
-	for i, f := range OpenFiles {
-		if f.FName == CurrentFile.FName {
+	for i, f := range OpenViews {
+		if f.FName == CurrentView.FName {
 			n = i
 			d = filepath.Dir(f.FName)
 			break
@@ -938,21 +959,21 @@ func CloseCurrentFile() {
 	}
 	if n >= 0 {
 		onlyOnce = false
-		ui.SetStatus("Closing file " + CurrentFile.FName)
-		if CurrentFile.Season == Text {
-			if CurrentFile.Buffer.IsModified {
+		ui.SetStatus("Closing file " + CurrentView.FName)
+		if CurrentView.Mode == Text {
+			if CurrentView.FemtoBuffer.IsModified {
 				proposeToSaveFile(n, FLOW_CLOSE)
 			}
 		} else {
-			if CurrentFile.Season == SQLite3 {
-				CloseDB(CurrentFile.Database)
+			if CurrentView.Mode == SQLite3 {
+				CloseDB(CurrentView.Database)
 			}
-			copy(OpenFiles[n:], OpenFiles[n+1:])
-			OpenFiles = OpenFiles[:len(OpenFiles)-1]
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+			copy(OpenViews[n:], OpenViews[n+1:])
+			OpenViews = OpenViews[:len(OpenViews)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
 			if n > 0 {
-				CurrentFile = OpenFiles[n-1]
-				SwitchOpenFile(CurrentFile.FName)
+				CurrentView = OpenViews[n-1]
+				SwitchOpenView(CurrentView.FName)
 			} else {
 				NewFile(d)
 			}
@@ -966,7 +987,7 @@ func CloseCurrentFile() {
 func CloseThisFile(fName string) {
 	var n = -1
 	var d = ""
-	for i, f := range OpenFiles {
+	for i, f := range OpenViews {
 		if f.FName == fName {
 			n = i
 			d = filepath.Dir(f.FName)
@@ -976,16 +997,16 @@ func CloseThisFile(fName string) {
 	if n >= 0 {
 		onlyOnce = false
 		ui.SetStatus("Closing file " + fName)
-		CurrentFile = OpenFiles[n]
-		if CurrentFile.Buffer.IsModified {
+		CurrentView = OpenViews[n]
+		if CurrentView.FemtoBuffer.IsModified {
 			proposeToSaveFile(n, FLOW_CLOSE)
 		} else {
-			copy(OpenFiles[n:], OpenFiles[n+1:])
-			OpenFiles = OpenFiles[:len(OpenFiles)-1]
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenFiles)))
+			copy(OpenViews[n:], OpenViews[n+1:])
+			OpenViews = OpenViews[:len(OpenViews)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
 			if n > 0 {
-				CurrentFile = OpenFiles[n-1]
-				SwitchOpenFile(CurrentFile.FName)
+				CurrentView = OpenViews[n-1]
+				SwitchOpenView(CurrentView.FName)
 			} else {
 				NewFile(d)
 			}
@@ -1004,29 +1025,29 @@ func CloseAnyFile(f any) {
 // SwitchReadWrite()
 // ****************************************************************************
 func SwitchReadWrite(f any) {
-	CurrentFile.ReadWrite = !CurrentFile.ReadWrite
-	ui.SetStatus(fmt.Sprintf("Read Only attribute is set to %t", !CurrentFile.ReadWrite))
+	CurrentView.ReadWrite = !CurrentView.ReadWrite
+	ui.SetStatus(fmt.Sprintf("Read Only attribute is set to %t", !CurrentView.ReadWrite))
 }
 
 // ****************************************************************************
 // SwitchFollow()
 // ****************************************************************************
 func SwitchFollow(f any) {
-	CurrentFile.Follow = !CurrentFile.Follow
-	ui.SetStatus(fmt.Sprintf("Follow mode is set to %t", CurrentFile.Follow))
-	if CurrentFile.Follow {
-		CurrentFile.RWBackup = CurrentFile.ReadWrite
-		CurrentFile.ReadWrite = false
+	CurrentView.Follow = !CurrentView.Follow
+	ui.SetStatus(fmt.Sprintf("Follow mode is set to %t", CurrentView.Follow))
+	if CurrentView.Follow {
+		CurrentView.RWBackup = CurrentView.ReadWrite
+		CurrentView.ReadWrite = false
 	} else {
 		ui.SetStatus("Restoring buffer")
-		content, err := ioutil.ReadFile(CurrentFile.FName)
+		content, err := ioutil.ReadFile(CurrentView.FName)
 		if err != nil {
-			ui.SetStatus(fmt.Sprintf("Could not read %v", CurrentFile.FName))
+			ui.SetStatus(fmt.Sprintf("Could not read %v", CurrentView.FName))
 			ui.SetStatus(fmt.Sprintf("%v", err))
 		} else {
-			CurrentFile.Buffer = femto.NewBufferFromString(string(content), CurrentFile.FName)
-			CurrentFile.Buffer.Cursor.Y = CurrentFile.Buffer.End().Y
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			CurrentView.FemtoBuffer = femto.NewBufferFromString(string(content), CurrentView.FName)
+			CurrentView.FemtoBuffer.Cursor.Y = CurrentView.FemtoBuffer.End().Y
+			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 		}
 	}
 }
@@ -1037,9 +1058,9 @@ func SwitchFollow(f any) {
 func GoBottom() {
 	var loc femto.Loc
 	loc.X = 0
-	loc.Y = CurrentFile.Buffer.End().Y
-	CurrentFile.Buffer.Cursor.GotoLoc(loc)
-	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+	loc.Y = CurrentView.FemtoBuffer.End().Y
+	CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+	ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 	ui.SetStatus("Go to bottom")
 }
 
@@ -1050,8 +1071,8 @@ func GoTop() {
 	var loc femto.Loc
 	loc.X = 0
 	loc.Y = 0
-	CurrentFile.Buffer.Cursor.GotoLoc(loc)
-	ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+	CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+	ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 	ui.SetStatus("Go to top")
 }
 
@@ -1063,12 +1084,12 @@ func GoLine(l int) {
 		ui.SetStatus(fmt.Sprintf("Jump outside bounds"))
 		GoTop()
 	} else {
-		if l <= CurrentFile.Buffer.LinesNum() {
+		if l <= CurrentView.FemtoBuffer.LinesNum() {
 			var loc femto.Loc
 			loc.X = 0
 			loc.Y = l - 1
-			CurrentFile.Buffer.Cursor.GotoLoc(loc)
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 			ui.SetStatus(fmt.Sprintf("Go to line #%d", l))
 		} else {
 			ui.SetStatus(fmt.Sprintf("Jump too far"))
@@ -1081,7 +1102,7 @@ func GoLine(l int) {
 // ShowTreeDir()
 // ****************************************************************************
 func ShowTreeDir(rootDir string, sh bool) {
-	if CurrentFile.Season != SQLite3 {
+	if CurrentView.Mode != SQLite3 {
 		root := tview.NewTreeNode(rootDir).
 			SetColor(tcell.ColorYellow)
 		ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
@@ -1191,12 +1212,12 @@ func addDirToNode(target *tview.TreeNode, path string, showHidden bool) {
 			mtype := utils.GetMimeType(path)
 			if len(mtype) >= 4 {
 				if mtype[:4] == "text" {
-					OpenFile(path, true)
+					OpenView(path, true)
 					ui.SetStatus(fmt.Sprintf("Opening %s", path))
 					ui.App.SetFocus(ui.EdtMain)
 				} else {
-					OpenFile(path, false)
-					if CurrentFile.Season == SQLite3 {
+					OpenView(path, false)
+					if CurrentView.Mode == SQLite3 {
 						ui.SetStatus(fmt.Sprintf("Opening %s as a SQLite3 database", path))
 						ui.App.SetFocus(ui.TxtPromptSQL)
 					} else {
@@ -1259,8 +1280,8 @@ func findStringInLines(s string, fromLine int, fromColumn int, caseInsensitive b
 	foundLine := -1
 
 	// Iterate from the given line (0-based)
-	for i := fromLine - 1; i < CurrentFile.Buffer.NumLines; i++ {
-		lineContent := CurrentFile.Buffer.Line(i)
+	for i := fromLine - 1; i < CurrentView.FemtoBuffer.NumLines; i++ {
+		lineContent := CurrentView.FemtoBuffer.Line(i)
 		searchString := s
 
 		if caseInsensitive {
@@ -1306,7 +1327,7 @@ func startFindSession(s string, caseInsensitive bool) {
 	fromL := 1
 	fromC := 1
 	previousWhat = s
-	previousWhere = CurrentFile.Buffer
+	previousWhere = CurrentView.FemtoBuffer
 	previousCase = caseInsensitive
 	findSession = true
 	foundSomething := true
@@ -1346,7 +1367,7 @@ func startHexFindSession(s string, searchType string) {
 		}
 	}
 	ui.SetStatus(fmt.Sprintf("startHexFindSession finished. Found %d occurrences.", len(HexFounds)))
-	CurrentFile.HexContentDirty = false
+	CurrentView.HexContentDirty = false
 }
 
 // ****************************************************************************
@@ -1354,12 +1375,12 @@ func startHexFindSession(s string, searchType string) {
 // ****************************************************************************
 func findStringInHexContent(s string, searchType string, fromOffset int) int {
 	ui.SetStatus(fmt.Sprintf("findStringInHexContent called. Search string: '%s', Search type: '%s', From offset: %d", s, searchType, fromOffset))
-	if fromOffset >= len(CurrentFile.ContentBytes) {
+	if fromOffset >= len(CurrentView.ContentBytes) {
 		ui.SetStatus("findStringInHexContent: From offset is beyond content length.")
 		return -1
 	}
 
-	contentToSearch := CurrentFile.ContentBytes[fromOffset:]
+	contentToSearch := CurrentView.ContentBytes[fromOffset:]
 
 	if searchType == "ASCII" {
 		// ASCII search
@@ -1404,7 +1425,7 @@ func findStringInHexContent(s string, searchType string, fromOffset int) int {
 // FindNext()
 // ****************************************************************************
 func FindNext() {
-	if CurrentFile.Season == Binary {
+	if CurrentView.Mode == Binary {
 		findHexNext()
 	} else {
 		findTextNext()
@@ -1415,7 +1436,7 @@ func FindNext() {
 // FindPrevious()
 // ****************************************************************************
 func FindPrevious() {
-	if CurrentFile.Season == Binary {
+	if CurrentView.Mode == Binary {
 		findHexPrevious()
 	} else {
 		findTextPrevious()
@@ -1427,7 +1448,7 @@ func FindPrevious() {
 // ****************************************************************************
 func findTextNext() {
 	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentFile.Buffer
+	whereToFind = CurrentView.FemtoBuffer
 	caseToFind = !ui.ChkCase.IsChecked()
 	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
 		go startFindSession(whatToFind, caseToFind)
@@ -1441,8 +1462,8 @@ func findTextNext() {
 			var loc femto.Loc
 			loc.X = c - 1
 			loc.Y = l - 1
-			CurrentFile.Buffer.Cursor.GotoLoc(loc)
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 			currentFoundIndex++
 			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
 		} else {
@@ -1457,7 +1478,7 @@ func findTextNext() {
 // ****************************************************************************
 func findTextPrevious() {
 	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentFile.Buffer
+	whereToFind = CurrentView.FemtoBuffer
 	caseToFind = !ui.ChkCase.IsChecked()
 	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
 		go startFindSession(whatToFind, caseToFind)
@@ -1471,8 +1492,8 @@ func findTextPrevious() {
 			var loc femto.Loc
 			loc.X = c - 1
 			loc.Y = l - 1
-			CurrentFile.Buffer.Cursor.GotoLoc(loc)
-			ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+			CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 			currentFoundIndex--
 			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
 		} else {
@@ -1490,7 +1511,7 @@ func findHexNext() {
 	_, searchType := ui.DpdSearchType.GetCurrentOption()
 	ui.SetStatus(fmt.Sprintf("findHexNext called. Search string: '%s', Search type: '%s'", whatToFind, searchType))
 
-	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentFile.HexContentDirty {
+	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentView.HexContentDirty {
 		ui.SetStatus("Starting new hex find session...")
 		go startHexFindSession(whatToFind, searchType)
 		time.Sleep(300 * time.Millisecond)
@@ -1528,7 +1549,7 @@ func findHexPrevious() {
 	_, searchType := ui.DpdSearchType.GetCurrentOption()
 	ui.SetStatus(fmt.Sprintf("findHexPrevious called. Search string: '%s', Search type: '%s'", whatToFind, searchType))
 
-	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentFile.HexContentDirty {
+	if whatToFind != previousHexWhat || searchType != previousHexSearchType || CurrentView.HexContentDirty {
 		ui.SetStatus("Starting new hex find session (previous)....")
 		go startHexFindSession(whatToFind, searchType)
 		time.Sleep(300 * time.Millisecond)
@@ -1561,7 +1582,7 @@ func findHexPrevious() {
 // ReplaceOne()
 // ****************************************************************************
 func ReplaceOne() {
-	if CurrentFile.Season == Binary {
+	if CurrentView.Mode == Binary {
 		ui.SetStatus("Cannot replace in binary files (read-only)")
 		return
 	}
@@ -1585,7 +1606,7 @@ func ReplaceOne() {
 		// you might need to adjust cursor position and handle line changes.
 		start := femto.Loc{X: foundItem.c - 2, Y: foundItem.l - 1}
 		end := femto.Loc{X: start.X + len(foundItem.s), Y: start.Y}
-		CurrentFile.Buffer.Replace(start, end, replaceText)
+		CurrentView.FemtoBuffer.Replace(start, end, replaceText)
 
 		// After replacing, automatically find the next occurrence
 		FindNext()
@@ -1598,7 +1619,7 @@ func ReplaceOne() {
 // ReplaceAll()
 // ****************************************************************************
 func ReplaceAll() {
-	if CurrentFile.Season == Binary {
+	if CurrentView.Mode == Binary {
 		ui.SetStatus("Cannot replace in binary files (read-only)")
 		return
 	}
@@ -1610,7 +1631,7 @@ func ReplaceAll() {
 	replaceText := ui.TxtReplace.GetText()
 	caseSensitive := ui.ChkCase.IsChecked()
 
-	bufferContent := CurrentFile.Buffer.String()
+	bufferContent := CurrentView.FemtoBuffer.String()
 	var newBufferContent string
 	var replacements int
 
@@ -1630,23 +1651,23 @@ func ReplaceAll() {
 	}
 
 	if replacements > 0 {
-		cursor := CurrentFile.Buffer.Cursor
-		CurrentFile.Buffer = femto.NewBufferFromString(newBufferContent, CurrentFile.FName)
-		CurrentFile.Buffer.IsModified = true
-		for i, e := range OpenFiles {
-			if e.FName == CurrentFile.FName {
-				OpenFiles[i].Buffer = CurrentFile.Buffer
+		cursor := CurrentView.FemtoBuffer.Cursor
+		CurrentView.FemtoBuffer = femto.NewBufferFromString(newBufferContent, CurrentView.FName)
+		CurrentView.FemtoBuffer.IsModified = true
+		for i, e := range OpenViews {
+			if e.FName == CurrentView.FName {
+				OpenViews[i].FemtoBuffer = CurrentView.FemtoBuffer
 			}
 		}
-		ui.EdtMain.OpenBuffer(CurrentFile.Buffer)
+		ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 
-		if cursor.Y < CurrentFile.Buffer.NumLines {
-			CurrentFile.Buffer.Cursor.Y = cursor.Y
-			lineLen := len(CurrentFile.Buffer.Line(cursor.Y))
+		if cursor.Y < CurrentView.FemtoBuffer.NumLines {
+			CurrentView.FemtoBuffer.Cursor.Y = cursor.Y
+			lineLen := len(CurrentView.FemtoBuffer.Line(cursor.Y))
 			if cursor.X < lineLen {
-				CurrentFile.Buffer.Cursor.X = cursor.X
+				CurrentView.FemtoBuffer.Cursor.X = cursor.X
 			} else {
-				CurrentFile.Buffer.Cursor.X = lineLen
+				CurrentView.FemtoBuffer.Cursor.X = lineLen
 			}
 		}
 
@@ -1663,7 +1684,7 @@ func ReplaceAll() {
 // ReplaceOnlyThisOne()
 // ****************************************************************************
 func ReplaceOnlyThisOne(l int, c int, n int, subst string) {
-	array := bytes.Split([]byte(CurrentFile.Buffer.String()), []byte("\n"))
+	array := bytes.Split([]byte(CurrentView.FemtoBuffer.String()), []byte("\n"))
 	line := array[l-1]
 	sLine := string(line[:])
 	ui.SetStatus(sLine)
@@ -1699,7 +1720,7 @@ func RecallFind(way int) {
 // InsertString()
 // ****************************************************************************
 func InsertString(txt string) {
-	CurrentFile.Buffer.Insert(CurrentFile.Buffer.Cursor.Loc, txt)
+	CurrentView.FemtoBuffer.Insert(CurrentView.FemtoBuffer.Cursor.Loc, txt)
 }
 
 // ****************************************************************************
@@ -1714,7 +1735,7 @@ func stripTviewColorTags(s string) string {
 // displayBinaryContent()
 // ****************************************************************************
 func displayBinaryContent() {
-	hexAndAsciiStr := utils.BytesToHexAndASCII(CurrentFile.ContentBytes)
+	hexAndAsciiStr := utils.BytesToHexAndASCII(CurrentView.ContentBytes)
 
 	// Split the content into lines for individual processing
 	lines := strings.Split(hexAndAsciiStr, "\n")
@@ -1832,7 +1853,7 @@ func displayBinaryContent() {
 		ui.LblCursor.SetText(fmt.Sprintf("Offset: %08X", foundItem.l))
 
 		// Calculate percentage based on the found offset
-		totalBytes := len(CurrentFile.ContentBytes)
+		totalBytes := len(CurrentView.ContentBytes)
 		if totalBytes > 0 {
 			percent := int((float64(foundItem.l) / float64(totalBytes)) * 100.0)
 			ui.LblPercent.SetText(fmt.Sprintf("%d%%", percent))

@@ -103,7 +103,7 @@ func XeqSQL(c string) error {
 								}
 							} else {
 								if strings.HasPrefix(strings.ToUpper(c), ".CLOSE") {
-									if CurrentFile.Database != nil {
+									if CurrentView.Database != nil {
 										CloseCurrentFile()
 										return nil
 									} else {
@@ -124,7 +124,7 @@ func XeqSQL(c string) error {
 			if strings.HasPrefix(strings.ToUpper(c), "SELECT") {
 				return DoSelect(c)
 			} else {
-				if CurrentFile.Database != nil {
+				if CurrentView.Database != nil {
 					return DoExec(c)
 				} else {
 					ui.SetStatus("No open database")
@@ -140,7 +140,7 @@ func XeqSQL(c string) error {
 // DoExec()
 // ****************************************************************************
 func DoExec(cmd string) error {
-	_, err := CurrentFile.Database.Exec(cmd)
+	_, err := CurrentView.Database.Exec(cmd)
 	if err != nil {
 		ui.SetStatus(err.Error())
 		return err
@@ -155,8 +155,8 @@ func DoExec(cmd string) error {
 func OpenDB(fName string) error {
 	db, err := sql.Open("sqlite3", fName)
 	if err == nil {
-		CurrentFile.Database = db
-		CurrentFile.FName = fName
+		CurrentView.Database = db
+		CurrentView.FName = fName
 		// dummy instruction to create the header
 		_, err = db.Exec("PRAGMA user_version = 0;")
 		ui.SetStatus(fmt.Sprintf("Database %s open successfully", fName))
@@ -176,8 +176,8 @@ func CloseDB(db *sql.DB) error {
 	// ui.TrvSQLDatabase.GetRoot().ClearChildren()
 	root = tview.NewTreeNode("")
 	// ui.TrvSQLDatabase.SetRoot(root).SetCurrentNode(root)
-	CurrentFile.Database = nil
-	CurrentFile.FName = ""
+	CurrentView.Database = nil
+	CurrentView.FName = ""
 	return err
 }
 
@@ -185,7 +185,7 @@ func CloseDB(db *sql.DB) error {
 // DoCloseDB()
 // ****************************************************************************
 func DoCloseDB() {
-	DlgCloseDB = DlgCloseDB.YesNoCancel(fmt.Sprintf("Close Database %s", CurrentFile.FName), // Title
+	DlgCloseDB = DlgCloseDB.YesNoCancel(fmt.Sprintf("Close Database %s", CurrentView.FName), // Title
 		"This file has been modified. Do you want to save it ?", // Message
 		confirmCloseDB,
 		0,
@@ -199,7 +199,7 @@ func DoCloseDB() {
 // ****************************************************************************
 func confirmCloseDB(rc dialog.DlgButton, idx int) {
 	if rc == dialog.BUTTON_YES {
-		CloseDB(CurrentFile.Database)
+		CloseDB(CurrentView.Database)
 	}
 }
 
@@ -236,7 +236,7 @@ func confirmOpenDB(rc dialog.DlgButton, idx int) {
 // showTreeDB()
 // ****************************************************************************
 func showTreeDB() {
-	root = tview.NewTreeNode(filepath.Base(CurrentFile.FName))
+	root = tview.NewTreeNode(filepath.Base(CurrentView.FName))
 	ui.TrvExplorer.SetRoot(root).SetCurrentNode(root)
 	nodeTables := tview.NewTreeNode("Tables")
 	tables := getTables()
@@ -269,7 +269,7 @@ func showTreeDB() {
 // ****************************************************************************
 func getTables() []string {
 	var tables []string
-	rows, err := CurrentFile.Database.Query("SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%';")
+	rows, err := CurrentView.Database.Query("SELECT name FROM sqlite_schema WHERE type ='table' AND name NOT LIKE 'sqlite_%';")
 	if err == nil {
 		for rows.Next() {
 			var name string
@@ -287,7 +287,7 @@ func getTables() []string {
 // ****************************************************************************
 func getViews() []string {
 	var views []string
-	rows, err := CurrentFile.Database.Query("SELECT name FROM sqlite_schema WHERE type = 'view';")
+	rows, err := CurrentView.Database.Query("SELECT name FROM sqlite_schema WHERE type = 'view';")
 	if err == nil {
 		for rows.Next() {
 			var name string
@@ -305,7 +305,7 @@ func getViews() []string {
 // ****************************************************************************
 func getIndexes() []string {
 	var indexes []string
-	rows, err := CurrentFile.Database.Query("SELECT name FROM sqlite_master WHERE type = 'index';")
+	rows, err := CurrentView.Database.Query("SELECT name FROM sqlite_master WHERE type = 'index';")
 	if err == nil {
 		for rows.Next() {
 			var name string
@@ -323,7 +323,7 @@ func getIndexes() []string {
 // ****************************************************************************
 func getTriggers() []string {
 	var triggers []string
-	rows, err := CurrentFile.Database.Query("select name from sqlite_master where type = 'trigger';")
+	rows, err := CurrentView.Database.Query("select name from sqlite_master where type = 'trigger';")
 	if err == nil {
 		for rows.Next() {
 			var name string
@@ -340,10 +340,10 @@ func getTriggers() []string {
 // DoSelect()
 // ****************************************************************************
 func DoSelect(q string) error {
-	if CurrentFile.Database != nil {
+	if CurrentView.Database != nil {
 		ui.TblSQLOutput.Clear()
 		var myMap = make(map[string]interface{})
-		rows, err := CurrentFile.Database.Query(q)
+		rows, err := CurrentView.Database.Query(q)
 		if err != nil {
 			ui.SetStatus(err.Error())
 			return err

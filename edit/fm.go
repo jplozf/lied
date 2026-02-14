@@ -87,7 +87,8 @@ var pasteTarget string
 // SetFilesMenu()
 // ****************************************************************************
 func SetFilesMenu() {
-	MnuFiles = MnuFiles.New("Actions", ui.GetCurrentScreen(), ui.TblFiles)
+	// MnuFiles = MnuFiles.New("Actions", ui.GetCurrentScreen(), ui.TblFiles)
+	MnuFiles = MnuFiles.New("Actions", "fileManager", ui.TblFiles)
 	MnuFiles.AddItem("mnuEdit", "Edit", DoEdit, nil, true, false)
 	MnuFiles.AddItem("mnuSelect", "Select / Unselect All", SelectAll, nil, true, false)
 	MnuFiles.AddItem("mnuDelete", "Delete", DoDelete, nil, true, false)
@@ -102,7 +103,7 @@ func SetFilesMenu() {
 	MnuFiles.AddItem("mnuShowHiddenFiles", "Show hidden files", DoSwitchHiddenFiles, nil, true, false)
 	ui.PgsApp.AddPage("dlgFileAction", MnuFiles.Popup(), true, false)
 
-	MnuFilesSort = MnuFilesSort.New("Sort by", ui.GetCurrentScreen(), ui.TblFiles)
+	MnuFilesSort = MnuFilesSort.New("Sort by", "fileManager", ui.TblFiles)
 	MnuFilesSort.AddItem("mnuSortNameA", "Name Ascending", doSortNameA, nil, false, true)
 	MnuFilesSort.AddItem("mnuSortNameD", "Name Descending", doSortNameD, nil, true, false)
 	MnuFilesSort.AddItem("mnuSortSizeA", "Size Ascending", doSortSizeA, nil, true, false)
@@ -165,7 +166,7 @@ func DoDelete(p any) {
 					"Are you sure you want to delete this file ?", // Message
 					DeleteFile,
 					idx,
-					ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+					"fileManager", ui.TblFiles) // Focus return
 				ui.PgsApp.AddPage("dlgConfirmDeleteFile", DlgConfirm.Popup(), true, false)
 				ui.PgsApp.ShowPage("dlgConfirmDeleteFile")
 			} else {
@@ -173,7 +174,7 @@ func DoDelete(p any) {
 					"Are you sure you want to delete this folder and all its content ?", // Message
 					DeleteFolder,
 					idx,
-					ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+					"fileManager", ui.TblFiles) // Focus return
 				ui.PgsApp.AddPage("dlgConfirmDeleteFolder", DlgConfirm.Popup(), true, false)
 				ui.PgsApp.ShowPage("dlgConfirmDeleteFolder")
 			}
@@ -185,7 +186,7 @@ func DoDelete(p any) {
 			"Are you sure you want to delete all of these files ?", // Message
 			DeleteSelection,
 			0,
-			ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+			"fileManager", ui.TblFiles) // Focus return
 		ui.PgsApp.AddPage("dlgConfirmDeleteSelection", DlgConfirm.Popup(), true, false)
 		ui.PgsApp.ShowPage("dlgConfirmDeleteSelection")
 	}
@@ -284,7 +285,7 @@ func DoRename(p any) {
 				filepath.Base(fName),
 				RenameFile,
 				idx,
-				ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+				"fileManager", ui.TblFiles) // Focus return
 			ui.PgsApp.AddPage("dlgConfirmRenameFile", DlgConfirm.Popup(), true, false)
 			ui.PgsApp.ShowPage("dlgConfirmRenameFile")
 		} else {
@@ -293,7 +294,7 @@ func DoRename(p any) {
 				filepath.Base(fName),
 				RenameFolder,
 				idx,
-				ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+				"fileManager", ui.TblFiles) // Focus return
 			ui.PgsApp.AddPage("dlgConfirmRenameFolder", DlgConfirm.Popup(), true, false)
 			ui.PgsApp.ShowPage("dlgConfirmRenameFolder")
 		}
@@ -486,7 +487,7 @@ func DoNewFile(p any) {
 		"new_file",
 		CreateNewFile,
 		0,
-		ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+		"fileManager", ui.TblFiles) // Focus return
 	ui.PgsApp.AddPage("dlgCreateNewFile", DlgConfirm.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgCreateNewFile")
 
@@ -501,7 +502,7 @@ func DoNewFolder(p any) {
 		"new_folder",
 		CreateNewFolder,
 		0,
-		ui.GetCurrentScreen(), ui.TblFiles) // Focus return
+		"fileManager", ui.TblFiles) // Focus return
 	ui.PgsApp.AddPage("dlgCreateNewFolder", DlgConfirm.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgCreateNewFolder")
 
@@ -690,6 +691,7 @@ func DoSwitchHiddenFiles(p any) {
 // ****************************************************************************
 func ShowFiles() {
 	// ui.TxtSelection.Clear()
+	// SetFilesMenu()
 	files, err := os.ReadDir(conf.ConfigGeneral.Workspace)
 	if err != nil {
 		ui.SetStatus(err.Error())
@@ -1140,6 +1142,7 @@ func displaySelection() {
 			"02Size":    fmt.Sprintf("%d Bytes (%s)", nSize, utils.HumanFileSize(float64(nSize))),
 		}
 		ui.DisplayMap(ui.TxtSelection, infos)
+		SetFilesMenu()
 		MnuFiles.SetEnabled("mnuPaste", true)
 	} else {
 		ui.TxtSelection.Clear()

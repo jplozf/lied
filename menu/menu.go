@@ -14,6 +14,7 @@ package menu
 // IMPORTS
 // ****************************************************************************
 import (
+	"fmt"
 	"lied/ui"
 	"strings"
 
@@ -93,12 +94,14 @@ func (m *Menu) AddSeparator() {
 // SetEnabled() Menu
 // ****************************************************************************
 func (m *Menu) SetEnabled(miName string, e bool) {
-	for index, item := range m.items {
-		if item.Name == miName {
-			m.items[index].Enabled = e
+	if len(m.items) > 0 {
+		for index, item := range m.items {
+			if item.Name == miName {
+				m.items[index].Enabled = e
+			}
 		}
+		m.refresh()
 	}
-	m.refresh()
 }
 
 // ****************************************************************************
@@ -196,6 +199,7 @@ func (m *Menu) refresh() {
 func (m *Menu) Popup() tview.Primitive {
 	m.refresh()
 	m.Table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		ui.SetStatus(fmt.Sprintf("Parent : %s", m.parent))
 		switch event.Key() {
 		case tcell.KeyEnter:
 			idx, _ := m.Table.GetSelection()

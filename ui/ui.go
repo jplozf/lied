@@ -303,67 +303,6 @@ func SetUI(fQuit Fn, hostname string) {
 	FlxSQLite = tview.NewFlex().SetDirection(tview.FlexRow).AddItem(TblSQLOutput, 0, 1, false).AddItem(TxtPromptSQL, 7, 0, true)
 
 	//*************************************************************************
-	// Files Layout
-	//*************************************************************************
-	FrmFileInfo = tview.NewTextView()
-	FrmFileInfo.SetBorder(true)
-	FrmFileInfo.SetDynamicColors(true)
-	FrmFileInfo.SetTitle("Infos")
-
-	TxtFileInfo = tview.NewTextView().Clear()
-	TxtFileInfo.SetBorder(true)
-	TxtFileInfo.SetDynamicColors(true)
-	TxtFileInfo.SetTitle("Preview")
-	TxtFileInfo.SetWrap(false)
-	TxtFileInfo.SetScrollable(true)
-
-	TxtSelection = tview.NewTextView()
-	TxtSelection.SetBorder(true)
-	TxtSelection.SetDynamicColors(true)
-	TxtSelection.SetTitle("Selection")
-
-	TblFiles = tview.NewTable()
-	TblFiles.SetBorder(true)
-	TblFiles.SetSelectable(true, false)
-
-	TxtPath = tview.NewTextView()
-	TxtPath.Clear()
-	TxtPath.SetBorder(true)
-
-	FlxFileManager = tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(tview.NewFlex().
-			AddItem(lblDate, 10, 0, false).
-			AddItem(lblTitle, 0, 1, false).
-			AddItem(lblTime, 8, 0, false), 1, 0, false).
-		AddItem(tview.NewFlex().
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(TxtPath, 3, 0, false).
-				AddItem(TblFiles, 0, 1, true), 0, 2, true).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(FrmFileInfo, 9, 0, false).
-				AddItem(TxtFileInfo, 0, 1, false).
-				AddItem(TxtSelection, 5, 0, false), 0, 1, false), 0, 1, false).
-		AddItem(LblKeys, 2, 1, false).
-		AddItem(tview.NewFlex().
-			AddItem(LblHostname, len(hostname)+3, 0, false).
-			AddItem(lblStatus, 0, 1, false).
-			AddItem(LblSize, 10, 0, false).
-			AddItem(LblPercent, 6, 0, false).
-			AddItem(LblCursor, 20, 0, false).
-			AddItem(LblReadWrite, 4, 0, false).
-			AddItem(LblDirty, 10, 0, false).
-			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
-
-	TblFiles.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			TblFiles.SetSelectable(true, true)
-		}
-	}).SetSelectedFunc(func(row int, column int) {
-		TblFiles.GetCell(row, column).SetTextColor(tcell.ColorRed)
-		TblFiles.SetSelectable(false, false)
-	})
-
-	//*************************************************************************
 	// The Pages
 	//*************************************************************************
 	PgsEditorContent = tview.NewPages().
@@ -443,6 +382,68 @@ func SetUI(fQuit Fn, hostname string) {
 	FrmFind.AddButton("All", nil)
 	FrmFind.GetButton(2).SetDisabled(!ChkToggleReplace.IsChecked())
 	FrmFind.GetButton(3).SetDisabled(!ChkToggleReplace.IsChecked())
+
+	//*************************************************************************
+	// Files Layout
+	//*************************************************************************
+	FrmFileInfo = tview.NewTextView()
+	FrmFileInfo.SetBorder(true)
+	FrmFileInfo.SetDynamicColors(true)
+	FrmFileInfo.SetTitle("Infos")
+
+	TxtFileInfo = tview.NewTextView().Clear()
+	TxtFileInfo.SetBorder(true)
+	TxtFileInfo.SetDynamicColors(true)
+	TxtFileInfo.SetTitle("Preview")
+	TxtFileInfo.SetWrap(false)
+	TxtFileInfo.SetScrollable(true)
+
+	TxtSelection = tview.NewTextView()
+	TxtSelection.SetBorder(true)
+	TxtSelection.SetDynamicColors(true)
+	TxtSelection.SetTitle("Selection")
+
+	TblFiles = tview.NewTable()
+	TblFiles.SetBorder(true)
+	TblFiles.SetSelectable(true, false)
+
+	TxtPath = tview.NewTextView()
+	TxtPath.Clear()
+	TxtPath.SetBorder(true)
+
+	FlxFileManager = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(tview.NewFlex().
+			AddItem(lblDate, 10, 0, false).
+			AddItem(lblTitle, 0, 1, false).
+			AddItem(lblTime, 8, 0, false), 1, 0, false).
+		AddItem(tview.NewFlex().
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(TxtPath, 3, 0, false).
+				AddItem(TblFiles, 0, 1, true), 0, 2, true).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(TblOpenFiles, 12, 0, false).
+				AddItem(FrmFileInfo, 9, 0, false).
+				AddItem(TxtFileInfo, 0, 1, false).
+				AddItem(TxtSelection, 5, 0, false), 0, 1, false), 0, 1, false).
+		AddItem(LblKeys, 2, 1, false).
+		AddItem(tview.NewFlex().
+			AddItem(LblHostname, len(hostname)+3, 0, false).
+			AddItem(lblStatus, 0, 1, false).
+			AddItem(LblSize, 10, 0, false).
+			AddItem(LblPercent, 6, 0, false).
+			AddItem(LblCursor, 20, 0, false).
+			AddItem(LblReadWrite, 4, 0, false).
+			AddItem(LblDirty, 10, 0, false).
+			AddItem(LblHourglass, 2, 0, false), 1, 0, false)
+
+	TblFiles.Select(0, 0).SetFixed(1, 1).SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			TblFiles.SetSelectable(true, true)
+		}
+	}).SetSelectedFunc(func(row int, column int) {
+		TblFiles.GetCell(row, column).SetTextColor(tcell.ColorRed)
+		TblFiles.SetSelectable(false, false)
+	})
 
 	//*************************************************************************
 	// Editor Layout
