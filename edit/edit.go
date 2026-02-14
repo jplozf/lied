@@ -963,6 +963,16 @@ func CloseCurrentFile() {
 		if CurrentView.Mode == Text {
 			if CurrentView.FemtoBuffer.IsModified {
 				proposeToSaveFile(n, FLOW_CLOSE)
+			} else {
+				copy(OpenViews[n:], OpenViews[n+1:])
+				OpenViews = OpenViews[:len(OpenViews)-1]
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+				if n > 0 {
+					CurrentView = OpenViews[n-1]
+					SwitchOpenView(CurrentView.FName)
+				} else {
+					NewFile(d)
+				}
 			}
 		} else {
 			if CurrentView.Mode == SQLite3 {
