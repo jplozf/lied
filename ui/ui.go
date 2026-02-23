@@ -328,7 +328,7 @@ func SetUI(fQuit Fn, hostname string) {
 	TblOpenFiles = tview.NewTable()
 	TblOpenFiles.SetBorder(true)
 	TblOpenFiles.SetSelectable(true, false)
-	TblOpenFiles.SetTitle("Open Files")
+	TblOpenFiles.SetTitle("Open Views")
 
 	TrvExplorer = tview.NewTreeView()
 	TrvExplorer.SetBorder(true)
@@ -401,7 +401,7 @@ func SetUI(fQuit Fn, hostname string) {
 	TxtSelection = tview.NewTextView()
 	TxtSelection.SetBorder(true)
 	TxtSelection.SetDynamicColors(true)
-	TxtSelection.SetTitle("Selection")
+	TxtSelection.SetTitle("Selection (ins to select/deselect)")
 
 	TblFiles = tview.NewTable()
 	TblFiles.SetBorder(true)

@@ -188,10 +188,16 @@ func main() {
 					promptVisible = false
 					ui.MidColumn.RemoveItem(ui.TxtPrompt)
 					edit.CloseThisFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT))
-					if edit.CurrentView.Mode == edit.Binary {
+					switch edit.CurrentView.Mode {
+					case edit.SQLite3:
+						ui.App.SetFocus(ui.TxtPromptSQL)
+					case edit.Binary:
 						ui.App.SetFocus(ui.HexView)
-					} else {
+					case edit.Text:
 						ui.App.SetFocus(ui.EdtMain)
+					case edit.Explorer:
+						ui.PgsApp.SwitchToPage("fileManager")
+						ui.App.SetFocus(ui.TrvExplorer)
 					}
 				}
 			} else {
@@ -241,7 +247,7 @@ func main() {
 			edit.CloseCurrentFile()
 			return nil
 		case tcell.KeyCtrlE:
-			DoExplorer(conf.ConfigGeneral.Workspace)
+			DoExplorer(edit.CurrentView.FName)
 			return nil
 		case tcell.KeyEsc:
 			if activeCmd != nil {
@@ -386,6 +392,9 @@ func main() {
 			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
 			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
 			ui.App.SetFocus(ui.FrmFind)
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
 			return nil
 		}
 		return event
@@ -615,6 +624,9 @@ func main() {
 			} else {
 				ui.App.SetFocus(ui.TxtFileInfo)
 			}
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
 			return nil
 		}
 		return event
@@ -1146,7 +1158,7 @@ func saveSettings() {
 	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
 	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
 	sec.NewKey("CurrentFile", edit.CurrentView.FName)
-	if edit.CurrentView.Mode != edit.SQLite3 {
+	if edit.CurrentView.Mode != edit.SQLite3 && edit.CurrentView.Mode != edit.Explorer && edit.CurrentView.FemtoBuffer != nil {
 		sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.X))
 		sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.Y))
 	} else {
@@ -1681,6 +1693,7 @@ func doDialogShell(f any) {
 // ****************************************************************************
 func doInteractiveShell() {
 	// ui.FlxEditor.SetItemIndex(TxtPrompt, 1, 1, false)
+	ui.PgsApp.SwitchToPage("edit")
 	ui.MidColumn.AddItem(ui.TxtPrompt, 1, 1, false)
 	edit.OpenView(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
 	edit.SwitchFollow("dummy")

@@ -226,7 +226,7 @@ func OpenView(fName string, rw bool) {
 				ui.SetStatus(fmt.Sprintf("Opening SQLite3 file %s", CurrentView.FName))
 				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for this data
 				showTreeDB()
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				ui.App.SetFocus(ui.TxtPromptSQL)
 				return
@@ -256,7 +256,7 @@ func OpenView(fName string, rw bool) {
 				displayBinaryContent()
 				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
 				ui.ConfigureFindFormForBinary(true)
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				return
@@ -300,7 +300,7 @@ func OpenView(fName string, rw bool) {
 				go UpdateStatus()
 				go focusOpenFile(fName)
 				ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentView.FName))
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 				ui.App.SetFocus(ui.EdtMain)
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 			}
@@ -453,7 +453,7 @@ func UpdateStatus() {
 			}
 			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
 
-			if CurrentView.Mode != SQLite3 {
+			if CurrentView.Mode != SQLite3 && CurrentView.Mode != Explorer {
 				if CurrentView.FemtoBuffer.Modified() {
 					// status = conf.ICON_MODIFIED
 					ui.LblDirty.SetText("*modified*")
@@ -492,10 +492,14 @@ func UpdateStatus() {
 				if f.Mode == SQLite3 {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
 				} else {
-					if f.FemtoBuffer.Modified() {
-						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
+					if f.Mode == Explorer {
+						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_EXPLORER+f.GitFileStatus))
 					} else {
-						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
+						if f.FemtoBuffer.Modified() {
+							ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
+						} else {
+							ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
+						}
 					}
 				}
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
@@ -643,6 +647,9 @@ func SwitchOpenView(fName string) {
 			CurrentView.Follow = e.Follow
 			CurrentView.Mode = e.Mode
 			CurrentView.Database = e.Database
+			if utils.IsDir(CurrentView.FName) {
+				CurrentView.Mode = Explorer
+			}
 			if CurrentView.Mode == SQLite3 {
 				CurrentWidget = ui.TxtPromptSQL
 				ui.PgsApp.SwitchToPage("edit")
@@ -910,7 +917,7 @@ func CheckOpenFilesForSaving() {
 func startQuitSaveFlow() {
 	for ; quitFlowIndex < len(OpenViews); quitFlowIndex++ {
 		f := OpenViews[quitFlowIndex]
-		if f.Mode != SQLite3 {
+		if f.Mode != SQLite3 && f.Mode != Explorer {
 			if f.FemtoBuffer.Modified() {
 				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
@@ -919,7 +926,7 @@ func startQuitSaveFlow() {
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Mode != SQLite3 {
+			if f.Mode != SQLite3 && f.Mode != Explorer {
 				if f.FemtoBuffer.Len() == 0 {
 					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
 					err := os.Remove(f.FName)
@@ -966,7 +973,7 @@ func CloseCurrentFile() {
 			} else {
 				copy(OpenViews[n:], OpenViews[n+1:])
 				OpenViews = OpenViews[:len(OpenViews)-1]
-				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 				if n > 0 {
 					CurrentView = OpenViews[n-1]
 					SwitchOpenView(CurrentView.FName)
@@ -980,7 +987,7 @@ func CloseCurrentFile() {
 			}
 			copy(OpenViews[n:], OpenViews[n+1:])
 			OpenViews = OpenViews[:len(OpenViews)-1]
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 			if n > 0 {
 				CurrentView = OpenViews[n-1]
 				SwitchOpenView(CurrentView.FName)
@@ -1013,7 +1020,7 @@ func CloseThisFile(fName string) {
 		} else {
 			copy(OpenViews[n:], OpenViews[n+1:])
 			OpenViews = OpenViews[:len(OpenViews)-1]
-			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Files (%d)", len(OpenViews)))
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
 			if n > 0 {
 				CurrentView = OpenViews[n-1]
 				SwitchOpenView(CurrentView.FName)

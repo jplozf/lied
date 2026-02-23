@@ -517,7 +517,9 @@ func DoExportCell(p any) {
 // ****************************************************************************
 func SwitchToSQLite3() {
 	// ui.AddNewScreen(ui.ModeSQLite3, nil, nil)
-	ui.App.SetFocus(ui.TxtPrompt)
+	ui.PgsApp.SwitchToPage("edit")
+	ui.PgsEditorContent.SwitchToPage("sqlViewer")
+	ui.App.SetFocus(ui.TxtPromptSQL)
 	ui.SetStatus("Switching to [SQLite3]")
 }
 
