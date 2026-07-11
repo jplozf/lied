@@ -176,7 +176,6 @@ func main() {
 		}
 		switch event.Key() {
 		case tcell.KeyF1:
-			// ShowHelp()
 			ShowManual()
 		case tcell.KeyF8:
 			ShowConfigMenu()
@@ -1770,7 +1769,7 @@ func Xeq(c string) {
 			case "!macr":
 				edit.OpenView(filepath.Join(appDir, conf.FILE_MACROS), false)
 			case "!help":
-				ShowHelp()
+				ShowManual()
 			case "!info":
 				ShowSysInfo()
 			case "!shel":
@@ -2755,16 +2754,6 @@ func createFile(fName string, text string) {
 		defer f.Close()
 		fmt.Fprintln(f, text)
 	}
-}
-
-// ****************************************************************************
-// ShowHelp()
-// ****************************************************************************
-func ShowHelp() {
-	MsgBox = MsgBox.OK(" Help ", help.HelpText, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
-	ui.SetStatus("Displaying Help screen")
 }
 
 // ****************************************************************************

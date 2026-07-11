@@ -44,7 +44,8 @@ CTRL + N : Opens a new blank document
 CTRL + O : Opens an existing document for editing
 CTRL + T : Closes the current document
 ALT  + M : Opens the macros menu
-ALT  + Q : Temporary escape to the Shell
+CTRL + Q : Quits the editor (same as F12)
+ALT  + Q : Temporary escapes to the Shell
 
 ⯈ When editing a text, common editing functions are of course supported :
 
