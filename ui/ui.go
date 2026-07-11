@@ -378,8 +378,8 @@ func SetUI(fQuit Fn, hostname string) {
 	FrmFind.AddFormItem(ChkCase)
 	FrmFind.AddButton("Next", nil)
 	FrmFind.AddButton("Previous", nil)
-	FrmFind.AddButton("Replace", nil)
-	FrmFind.AddButton("All", nil)
+	FrmFind.AddButton("Replace One", nil)
+	FrmFind.AddButton("Replace All", nil)
 	FrmFind.GetButton(2).SetDisabled(!ChkToggleReplace.IsChecked())
 	FrmFind.GetButton(3).SetDisabled(!ChkToggleReplace.IsChecked())
 
