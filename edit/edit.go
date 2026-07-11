@@ -103,10 +103,10 @@ var (
 	showHidden            bool
 	Founds                []found
 	iFounds               int
-	currentFoundIndex     int
+	currentFoundIndex     int // Cet index doit être géré avec soin
 	findSession           bool
 	previousWhat          string
-	whatToFind            string
+	whatToFind            string // Renommé pour éviter la confusion avec previousWhat
 	whereToFind           *femto.Buffer
 	previousWhere         *femto.Buffer
 	caseToFind            bool
@@ -120,6 +120,9 @@ var (
 	hexFindSession        bool
 	previousHexWhat       string
 	previousHexSearchType string
+	// AJOUTÉ : La dernière commande de recherche lancée
+	lastSearchString string
+	lastSearchCase   bool
 )
 
 // ****************************************************************************
@@ -799,37 +802,39 @@ func proposeToSaveFile(idx int, flow int) {
 		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
 	ui.PgsApp.AddPage("dlgSaveFile", DlgSaveFile.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgSaveFile")
+	/*
+	   DlgSave = tview.NewModal().
+
+	   	SetText("Do you want to quit the application ?").
+	   	AddButtons([]string{"Yes", "No", "Cancel"}).
+	   	SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+	   		if buttonLabel == "Quit" {
+	   			fQuit()
+	   		} else {
+	   			PgsApp.SwitchToPage(GetCurrentScreen())
+	   		}
+	   	})
+
+	   DlgYesNo = DlgYesNo.YesNo("Git Fetch", // Title
+
+	   	"The Git Fetch will fetch the remote version but no merging is processed locally.\n\nAre you sure you want to proceed ?", // Message
+	   	func(rc dialog.DlgButton, idx int) {
+	   		if rc == dialog.BUTTON_YES {
+	   			out := fmt.Sprintf("Fetching...\n%s", XeqOut("git fetch origin"))
+	   			MsgBox = MsgBox.OK("Git Fetch", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
+	   			ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
+	   			ui.PgsApp.ShowPage("msgBox")
+	   		} else {
+	   			ui.SetStatus("Aborting Git Fetch")
+	   		}
+	   	},
+	   	0,
+	   	ui.GetCurrentScreen(), ui.EdtMain) // Focus return
+
+	   ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
+	   ui.PgsApp.ShowPage("dlgYesNo")
+	*/
 }
-
-/*
-	DlgSave = tview.NewModal().
-		SetText("Do you want to quit the application ?").
-		AddButtons([]string{"Yes", "No", "Cancel"}).
-		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
-			if buttonLabel == "Quit" {
-				fQuit()
-			} else {
-				PgsApp.SwitchToPage(GetCurrentScreen())
-			}
-		})
-
-	DlgYesNo = DlgYesNo.YesNo("Git Fetch", // Title
-		"The Git Fetch will fetch the remote version but no merging is processed locally.\n\nAre you sure you want to proceed ?", // Message
-		func(rc dialog.DlgButton, idx int) {
-			if rc == dialog.BUTTON_YES {
-				out := fmt.Sprintf("Fetching...\n%s", XeqOut("git fetch origin"))
-				MsgBox = MsgBox.OK("Git Fetch", out, nil, 0, ui.GetCurrentScreen(), ui.EdtMain)
-				ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-				ui.PgsApp.ShowPage("msgBox")
-			} else {
-				ui.SetStatus("Aborting Git Fetch")
-			}
-		},
-		0,
-		ui.GetCurrentScreen(), ui.EdtMain) // Focus return
-	ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgYesNo")
-*/
 
 // ****************************************************************************
 // confirmSave()
@@ -1338,27 +1343,52 @@ func findStringInLines(s string, fromLine int, fromColumn int, caseInsensitive b
 // startFindSession()
 // ****************************************************************************
 func startFindSession(s string, caseInsensitive bool) {
+	Founds = nil // Réinitialise les résultats de la recherche
 	iFounds = 0
-	currentFoundIndex = 0
-	Founds = nil
-	fromL := 1
-	fromC := 1
-	previousWhat = s
-	previousWhere = CurrentView.FemtoBuffer
-	previousCase = caseInsensitive
-	findSession = true
-	foundSomething := true
-	AFind = append(AFind, s)
-	for foundSomething == true {
-		l, c := findStringInLines(s, fromL, fromC, caseInsensitive)
+
+	tempFromL := 1
+	tempFromC := 1
+	for {
+		l, c := findStringInLines(s, tempFromL, tempFromC, caseInsensitive)
 		if l != 0 && c != 0 {
-			Founds = append(Founds, found{s, l, c})
-			fromL = l
-			fromC = c
-			iFounds++
+			Founds = append(Founds, found{s: s, l: l, c: c})
+			// Pour la prochaine recherche, on commence juste après la trouvaille actuelle
+			tempFromL = l
+			// Correction : s'assurer que tempFromC ne dépasse pas la longueur de la ligne
+			currentLineLen := len(CurrentView.FemtoBuffer.Line(tempFromL - 1))
+			tempFromC = c + len(s) // Commence après la fin de la correspondance trouvée
+			if tempFromC > currentLineLen {
+				tempFromL++
+				tempFromC = 1
+			}
 		} else {
-			foundSomething = false
+			break
 		}
+	}
+	iFounds = len(Founds)
+	findSession = true // Marque qu'une session de recherche est active
+
+	// Après avoir trouvé toutes les occurrences, trouver celle la plus proche du curseur actuel
+	// pour initialiser currentFoundIndex.
+	if len(Founds) > 0 {
+		cursorLoc := CurrentView.FemtoBuffer.Cursor.Loc
+		bestIndex := 0
+		minDist := (CurrentView.FemtoBuffer.NumLines * 1000) // Une très grande distance
+
+		for i, f := range Founds {
+			// Calculer la "distance" du résultat par rapport au curseur actuel
+			// Priorité à la ligne, puis à la colonne
+			dist := (f.l-1-cursorLoc.Y)*1000 + (f.c - 1 - cursorLoc.X)
+			if dist >= 0 && dist < minDist { // Cherche la première occurrence après ou sur le curseur
+				minDist = dist
+				bestIndex = i
+			}
+		}
+		currentFoundIndex = bestIndex + 1 // Convertir en 1-basé
+		ui.SetStatus(fmt.Sprintf("Search found %d occurrences. Initial focus on %d/%d.", len(Founds), currentFoundIndex, len(Founds)))
+	} else {
+		currentFoundIndex = 0
+		ui.SetStatus("No occurrences found.")
 	}
 }
 
@@ -1445,7 +1475,7 @@ func FindNext() {
 	if CurrentView.Mode == Binary {
 		findHexNext()
 	} else {
-		findTextNext()
+		findTextNavigate(FIND_DOWN) // <--- Passage de direction
 	}
 }
 
@@ -1456,67 +1486,72 @@ func FindPrevious() {
 	if CurrentView.Mode == Binary {
 		findHexPrevious()
 	} else {
-		findTextPrevious()
+		findTextNavigate(FIND_UP) // <--- Passage de direction
 	}
 }
 
 // ****************************************************************************
-// findTextNext()
+// findTextNavigate() - FUSIONNÉE
 // ****************************************************************************
-func findTextNext() {
-	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentView.FemtoBuffer
-	caseToFind = !ui.ChkCase.IsChecked()
-	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
-		go startFindSession(whatToFind, caseToFind)
-		time.Sleep(300 * time.Millisecond)
+func findTextNavigate(direction int) {
+	searchString := ui.TxtFind.GetText()
+	caseInsensitive := !ui.ChkCase.IsChecked()
+
+	// Si la recherche ou le fichier a changé, relancer une nouvelle session
+	if searchString != lastSearchString || caseInsensitive != lastSearchCase || CurrentView.FemtoBuffer.Modified() {
+		ui.SetStatus(fmt.Sprintf("Starting new search session for '%s'...", searchString))
+		startFindSession(searchString, caseInsensitive) // Cette fonction doit remplir Founds
+		lastSearchString = searchString
+		lastSearchCase = caseInsensitive
+		// Après une nouvelle session, l'index doit pointer vers le début
+		currentFoundIndex = 0
+		if len(Founds) == 0 {
+			ui.SetStatus(fmt.Sprintf("No occurrences of '%s' found.", searchString))
+			ui.FrmFind.SetTitle("Find & Replace (0/0)")
+			return
+		}
+	} else if len(Founds) == 0 { // Aucune occurrence trouvée lors de la session précédente
+		ui.SetStatus(fmt.Sprintf("No occurrences of '%s' found.", searchString))
+		ui.FrmFind.SetTitle("Find & Replace (0/0)")
+		return
 	}
-	if iFounds > 0 {
-		if currentFoundIndex <= iFounds-1 {
-			l := Founds[currentFoundIndex].l
-			c := Founds[currentFoundIndex].c
-			ui.SetStatus("Found at Line " + strconv.Itoa(l) + ", Col " + strconv.Itoa(c))
-			var loc femto.Loc
-			loc.X = c - 1
-			loc.Y = l - 1
-			CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
-			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
+
+	// Naviguer dans les occurrences trouvées
+	if direction == FIND_DOWN {
+		if currentFoundIndex < len(Founds) {
 			currentFoundIndex++
-			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
-		} else {
-			ui.SetStatus("No more found")
-			currentFoundIndex = 0
+		} else { // Wrap around
+			currentFoundIndex = 1
+			ui.SetStatus("Wrapping around to first occurrence.")
 		}
-	}
-}
-
-// ****************************************************************************
-// findTextPrevious()
-// ****************************************************************************
-func findTextPrevious() {
-	whatToFind = ui.TxtFind.GetText()
-	whereToFind = CurrentView.FemtoBuffer
-	caseToFind = !ui.ChkCase.IsChecked()
-	if whatToFind != previousWhat || whereToFind != previousWhere || caseToFind != previousCase || whereToFind.Modified() {
-		go startFindSession(whatToFind, caseToFind)
-		time.Sleep(300 * time.Millisecond)
-	}
-	if iFounds > 0 {
-		if currentFoundIndex > 0 {
-			l := Founds[currentFoundIndex].l
-			c := Founds[currentFoundIndex].c
-			ui.SetStatus("Found at Line " + strconv.Itoa(l) + ", Col " + strconv.Itoa(c))
-			var loc femto.Loc
-			loc.X = c - 1
-			loc.Y = l - 1
-			CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
-			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
+	} else if direction == FIND_UP {
+		if currentFoundIndex > 1 {
 			currentFoundIndex--
-			ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, iFounds))
-		} else {
-			ui.SetStatus("No more found")
-			currentFoundIndex = iFounds - 1
+		} else { // Wrap around
+			currentFoundIndex = len(Founds)
+			ui.SetStatus("Wrapping around to last occurrence.")
 		}
+	}
+
+	if len(Founds) > 0 {
+		// Ajuster l'index pour accéder à la slice (0-basé)
+		displayIndex := currentFoundIndex - 1
+		foundItem := Founds[displayIndex]
+
+		ui.SetStatus(fmt.Sprintf("Found at Line %d, Col %d (%d/%d)", foundItem.l, foundItem.c, currentFoundIndex, len(Founds)))
+
+		var loc femto.Loc
+		loc.X = foundItem.c - 1 // Convertir en 0-basé
+		loc.Y = foundItem.l - 1 // Convertir en 0-basé
+
+		CurrentView.FemtoBuffer.Cursor.GotoLoc(loc)
+		// CurrentView.FemtoBuffer.Make // Cette ligne était peut-être une erreur de frappe ? (pas de méthode .Make sur FemtoBuffer)
+		ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer) // S'assure que le buffer est bien affiché
+
+		ui.FrmFind.SetTitle(fmt.Sprintf("Find & Replace (%d/%d)", currentFoundIndex, len(Founds)))
+	} else {
+		ui.SetStatus("Nothing found.")
+		ui.FrmFind.SetTitle("Find & Replace (0/0)")
 	}
 }
 
@@ -1603,33 +1638,51 @@ func ReplaceOne() {
 		ui.SetStatus("Cannot replace in binary files (read-only)")
 		return
 	}
-	// If no search has been performed or nothing was found, try to find the next occurrence first.
-	if iFounds == 0 || currentFoundIndex == 0 {
-		FindNext()
-		// After FindNext, if still nothing found, return
-		if iFounds == 0 {
-			ui.SetStatus("Nothing found to replace")
+
+	if len(Founds) == 0 {
+		searchString := ui.TxtFind.GetText()
+		caseInsensitive := !ui.ChkCase.IsChecked()
+		if searchString != "" {
+			startFindSession(searchString, caseInsensitive)
+			time.Sleep(100 * time.Millisecond)
+		}
+		if len(Founds) == 0 {
+			ui.SetStatus("Nothing found to replace.")
 			return
 		}
 	}
 
-	if currentFoundIndex > 0 && currentFoundIndex <= iFounds {
-		// Get the location of the current found item
-		foundItem := Founds[currentFoundIndex-1]
-		replaceText := ui.TxtReplace.GetText()
-
-		// Perform the replacement in the buffer
-		// Note: This is a simplified replacement. For more complex scenarios,
-		// you might need to adjust cursor position and handle line changes.
-		start := femto.Loc{X: foundItem.c - 2, Y: foundItem.l - 1}
-		end := femto.Loc{X: start.X + len(foundItem.s), Y: start.Y}
-		CurrentView.FemtoBuffer.Replace(start, end, replaceText)
-
-		// After replacing, automatically find the next occurrence
-		FindNext()
-	} else {
-		ui.SetStatus("Nothing selected to replace")
+	if currentFoundIndex <= 0 || currentFoundIndex > len(Founds) {
+		currentFoundIndex = 1
+		if len(Founds) == 0 {
+			ui.SetStatus("Nothing found to replace.")
+			return
+		}
 	}
+
+	foundItem := Founds[currentFoundIndex-1]
+	replaceText := ui.TxtReplace.GetText()
+	whatToFind := ui.TxtFind.GetText()
+
+	start := femto.Loc{X: foundItem.c - 1, Y: foundItem.l - 1}
+	end := femto.Loc{X: start.X + len(whatToFind), Y: start.Y}
+
+	CurrentView.FemtoBuffer.Replace(start, end, replaceText)
+	CurrentView.FemtoBuffer.IsModified = true
+
+	ui.SetStatus(fmt.Sprintf("Replaced '%s' with '%s' at Line %d, Col %d", whatToFind, replaceText, foundItem.l, foundItem.c))
+
+	searchString := ui.TxtFind.GetText()
+	caseInsensitive := !ui.ChkCase.IsChecked()
+
+	startFindSession(searchString, caseInsensitive)
+	time.Sleep(100 * time.Millisecond)
+
+	// Après un remplacement, le curseur est probablement après le texte remplacé.
+	// Nous voulons naviguer vers la *prochaine* occurrence valide.
+	findTextNavigate(FIND_DOWN)
+	ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
+	ui.App.SetFocus(ui.EdtMain)
 }
 
 // ****************************************************************************
@@ -1654,9 +1707,8 @@ func ReplaceAll() {
 
 	if caseSensitive {
 		replacements = strings.Count(bufferContent, whatToFind)
-		newBufferContent = strings.Replace(bufferContent, whatToFind, replaceText, -1)
+		newBufferContent = strings.ReplaceAll(bufferContent, whatToFind, replaceText) // Use ReplaceAll
 	} else {
-		// Use regex for case-insensitive replacement
 		re, err := regexp.Compile("(?i)" + regexp.QuoteMeta(whatToFind))
 		if err != nil {
 			ui.SetStatus("Error in find pattern: " + err.Error())
@@ -1668,16 +1720,19 @@ func ReplaceAll() {
 	}
 
 	if replacements > 0 {
-		cursor := CurrentView.FemtoBuffer.Cursor
+		cursor := CurrentView.FemtoBuffer.Cursor // Sauvegarder la position du curseur
 		CurrentView.FemtoBuffer = femto.NewBufferFromString(newBufferContent, CurrentView.FName)
 		CurrentView.FemtoBuffer.IsModified = true
+
 		for i, e := range OpenViews {
 			if e.FName == CurrentView.FName {
 				OpenViews[i].FemtoBuffer = CurrentView.FemtoBuffer
+				break
 			}
 		}
 		ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 
+		// CORRECTION : Implémenter GotoEnd manuellement
 		if cursor.Y < CurrentView.FemtoBuffer.NumLines {
 			CurrentView.FemtoBuffer.Cursor.Y = cursor.Y
 			lineLen := len(CurrentView.FemtoBuffer.Line(cursor.Y))
@@ -1686,12 +1741,25 @@ func ReplaceAll() {
 			} else {
 				CurrentView.FemtoBuffer.Cursor.X = lineLen
 			}
+		} else {
+			// Aller à la fin du document si l'ancienne ligne n'existe plus
+			lastLine := CurrentView.FemtoBuffer.NumLines - 1
+			if lastLine < 0 {
+				lastLine = 0
+			} // Gérer le cas d'un buffer vide
+			CurrentView.FemtoBuffer.Cursor.Y = lastLine
+			CurrentView.FemtoBuffer.Cursor.X = len(CurrentView.FemtoBuffer.Line(lastLine))
 		}
 
 		SetTheme(conf.ConfigGeneral.Theme)
 		ui.SetStatus(fmt.Sprintf("%d replacement(s) made", replacements))
 		ui.App.SetFocus(ui.EdtMain)
-		previousWhat = ""
+
+		lastSearchString = ""
+		Founds = nil
+		iFounds = 0
+		currentFoundIndex = 0
+		ui.FrmFind.SetTitle("Find & Replace (0/0)")
 	} else {
 		ui.SetStatus("Nothing to replace")
 	}
