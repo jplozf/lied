@@ -44,6 +44,7 @@ Pay honour to whom honour is due, packages used in this project are as follows :
 [red]CTRL + O :[white] Opens an existing document for editing
 [red]CTRL + T :[white] Closes the current document
 [red]ALT  + M :[white] Opens the macros menu
+[red]ALT  + Q :[white] Temporary escape to the Shell
 
 ⯈ When editing a text, common editing functions are of course supported :
 

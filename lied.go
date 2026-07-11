@@ -164,6 +164,15 @@ func main() {
 			edit.SaveFileAs()
 			return nil
 		}
+		// ALT+Q
+		evkShell := tcell.NewEventKey(tcell.KeyRune, 'q', tcell.ModAlt)
+		if event.Key() == evkShell.Key() &&
+			event.Rune() == evkShell.Rune() &&
+			event.Modifiers() == evkShell.Modifiers() {
+
+			shellEscape()
+			return nil
+		}
 		switch event.Key() {
 		case tcell.KeyF1:
 			ShowHelp()
@@ -2853,4 +2862,31 @@ func CreateOrOverwriteIfItAlreadyExists(target string, source string, fn createF
 			ui.SetStatus(fmt.Sprintf("Error when created %s", target))
 		}
 	}
+}
+
+// ****************************************************************************
+// shellEscape()
+// ****************************************************************************
+func shellEscape() {
+	ui.App.Suspend(func() {
+		shell := os.Getenv("SHELL")
+		if shell == "" {
+			shell = "/bin/sh"
+		}
+
+		cmd := exec.Command(shell)
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		fmt.Println()
+		fmt.Println("--------- Temporary return to shell ---------")
+		fmt.Println("Type 'exit' or press Ctrl+D to return to Lied")
+		fmt.Println("---------------------------------------------")
+		fmt.Println()
+
+		_ = cmd.Run()
+
+		fmt.Println("Returning to Lied...")
+	})
 }
