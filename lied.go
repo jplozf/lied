@@ -43,6 +43,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
 	"github.com/google/uuid"
+	"github.com/pgavlin/femto"
 	"github.com/rivo/tview"
 	"gopkg.in/ini.v1"
 )
@@ -175,7 +176,8 @@ func main() {
 		}
 		switch event.Key() {
 		case tcell.KeyF1:
-			ShowHelp()
+			// ShowHelp()
+			ShowManual()
 		case tcell.KeyF8:
 			ShowConfigMenu()
 		case tcell.KeyF6:
@@ -2759,7 +2761,7 @@ func createFile(fName string, text string) {
 // ShowHelp()
 // ****************************************************************************
 func ShowHelp() {
-	MsgBox = MsgBox.OK(" Help ", help.Help, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
+	MsgBox = MsgBox.OK(" Help ", help.HelpText, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
 	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
 	ui.PgsApp.ShowPage("msgBox")
 	ui.SetStatus("Displaying Help screen")
@@ -2889,4 +2891,34 @@ func shellEscape() {
 
 		fmt.Println("Returning to Lied...")
 	})
+}
+
+// ****************************************************************************
+// ShowManual()
+// ****************************************************************************
+func ShowManual() {
+	for _, f := range edit.OpenViews {
+		if f.FName == "Bled Manual" {
+			edit.SwitchAnyFile(f.FName)
+			ui.SetStatus("Switching to help manual")
+			return
+		}
+	}
+
+	helpBuf := femto.NewBufferFromString(help.HelpText, "Help.txt")
+
+	helpView := &edit.ViewScreen{
+		FName:       "Bled Manual",
+		FemtoBuffer: helpBuf,
+		FemtoView:   femto.NewView(helpBuf),
+		ReadWrite:   false,
+	}
+
+	/*
+		efiles = append(efiles, helpFile)
+		switchDocument(len(efiles) - 1)
+	*/
+	edit.OpenViews = append(edit.OpenViews, *helpView)
+	edit.SwitchAnyFile(helpView.FName)
+	ui.SetStatus("Opening help manual")
 }

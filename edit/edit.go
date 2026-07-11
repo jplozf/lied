@@ -56,7 +56,7 @@ const (
 	Explorer
 )
 
-type viewscreen struct {
+type ViewScreen struct {
 	FemtoBuffer         *femto.Buffer
 	FemtoView           *femto.View
 	FName               string
@@ -94,8 +94,8 @@ const (
 // GLOBALS
 // ****************************************************************************
 var (
-	OpenViews             []viewscreen
-	CurrentView           viewscreen
+	OpenViews             []ViewScreen
+	CurrentView           ViewScreen
 	CurrentWidget         tview.Primitive
 	DlgSaveFile           *dialog.Dialog
 	DlgSaveFileAs         *dialog.Dialog
@@ -600,7 +600,7 @@ func UpdateStatus() {
 // ****************************************************************************
 // UpdateGITInfos()
 // ****************************************************************************
-func UpdateGITInfos(f viewscreen) viewscreen {
+func UpdateGITInfos(f ViewScreen) ViewScreen {
 	ws := filepath.Dir(f.FName)
 	// Get GIT Commit
 	commit, err2 := utils.Xeq(ws, "git", "rev-parse", "--short", "HEAD")
