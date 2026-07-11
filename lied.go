@@ -307,18 +307,16 @@ func main() {
 			return event
 		} else {
 			switch event.Key() {
-			case tcell.KeyEnter, tcell.KeyCtrlS, tcell.KeyCtrlV:
+			case tcell.KeyUp, tcell.KeyDown, tcell.KeyLeft, tcell.KeyRight,
+				tcell.KeyPgUp, tcell.KeyPgDn, tcell.KeyHome, tcell.KeyEnd:
+				return event
+			default:
+				// If a key produces a character or a modification action, we cancel it (return nil)
+				if event.Rune() != 0 || event.Key() == tcell.KeyEnter || event.Key() == tcell.KeyTab {
+					return nil
+				}
 				return nil
 			}
-			switch event.Rune() {
-			// there must be an easier way to do this...
-			case 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
-				'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-				'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '&', 'é', '"', '\'', '(', '-', 'è', '_', 'ç', 'à', ')', '=', '+', '°', 'ê', 'ë',
-				'~', '#', '{', '[', '|', '`', '\\', '^', '@', ']', '}', '/', '*', '<', '>', ',', ';', ':', '!', '?', '.', '§', 'µ', 'ù', '%':
-				return nil
-			}
-			return event
 		}
 	})
 
