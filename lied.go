@@ -203,7 +203,7 @@ func main() {
 			} else {
 				doDialogShell(nil)
 			}
-		case tcell.KeyF12:
+		case tcell.KeyF12, tcell.KeyCtrlQ:
 			ShowQuitDialog(nil)
 		case tcell.KeyCtrlC:
 			edit.CurrentView.FemtoView.Copy()
