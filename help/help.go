@@ -7,11 +7,11 @@
 //	|_|_|\___|\__,_|
 //
 // ****************************************************************************
-// L I E D   -   Copyright © JPL 2024
+// L I E D   -   Copyright © JPL 2024-2026
 // ****************************************************************************
 package help
 
-var HelpText = `♯ L I E D   -   Copyright © JPL 2024
+var HelpText = `♯ L I E D   -   Copyright © JPL 2024-2026
 
 Lied is a TUI (Text User Interface) Editor.
 Lied is written in Go and has been tested on Linux sytem.

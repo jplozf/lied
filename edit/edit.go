@@ -459,7 +459,7 @@ func UpdateStatus() {
 			if CurrentView.Mode != SQLite3 && CurrentView.Mode != Explorer {
 				if CurrentView.FemtoBuffer.Modified() {
 					// status = conf.ICON_MODIFIED
-					ui.LblDirty.SetText("*modified*")
+					ui.LblDirty.SetText("MODIFIED")
 				} else {
 					// status = " "
 					ui.LblDirty.SetText("")
@@ -572,7 +572,7 @@ func UpdateStatus() {
 						}
 						// Original text file status updates
 						if CurrentView.FemtoBuffer.Modified() {
-							ui.LblDirty.SetText("*modified*")
+							ui.LblDirty.SetText("MODIFIED")
 						} else {
 							ui.LblDirty.SetText("")
 						}

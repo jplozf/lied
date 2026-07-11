@@ -40,6 +40,7 @@ import (
 	"lied/ui"
 	"lied/utils"
 
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
 	"github.com/google/uuid"
@@ -93,6 +94,7 @@ var (
 	Macros              map[string]string
 	activeCmd           *cmd.Cmd
 	promptVisible       bool
+	LocalClipboard      string
 )
 
 // ****************************************************************************
@@ -216,12 +218,25 @@ func main() {
 		case tcell.KeyF12, tcell.KeyCtrlQ:
 			ShowQuitDialog(nil)
 		case tcell.KeyCtrlC:
+			LocalClipboard = edit.CurrentView.FemtoBuffer.Cursor.GetSelection()
+			if LocalClipboard != "" {
+				clipboard.WriteAll(LocalClipboard)
+				ui.SetStatus("Copied to system clipboard")
+			}
 			edit.CurrentView.FemtoView.Copy()
 			return nil
 		case tcell.KeyCtrlX:
-			if edit.CurrentView.ReadWrite {
-				edit.CurrentView.FemtoView.Cut()
+			if edit.CurrentView.ReadWrite == false {
+				ui.SetStatus("Cannot cut from a read-only file")
+				return nil
 			}
+			LocalClipboard = edit.CurrentView.FemtoBuffer.Cursor.GetSelection()
+			if LocalClipboard != "" {
+				clipboard.WriteAll(LocalClipboard)
+				ui.SetStatus("Cut to system clipboard")
+			}
+			edit.CurrentView.FemtoView.Cut()
+			edit.CurrentView.FemtoBuffer.Cursor.Relocate()
 			return nil
 		case tcell.KeyCtrlZ:
 			edit.CurrentView.FemtoView.Undo()
@@ -233,9 +248,33 @@ func main() {
 			edit.CurrentView.FemtoView.SelectAll()
 			return nil
 		case tcell.KeyCtrlV:
-			if edit.CurrentView.ReadWrite {
-				edit.CurrentView.FemtoView.Paste()
+			if edit.CurrentView.ReadWrite == false {
+				ui.SetStatus("Cannot paste into a read-only file")
+				return nil
 			}
+			ui.SetStatus("Copying from clipboard")
+			systemContent, err := clipboard.ReadAll()
+
+			if err != nil {
+				// Diagnostic message for clipboard read error (e.g., no clipboard available, xsel/xclip not installed, etc.)
+				ui.SetStatus("[red]Clipboard error: " + err.Error())
+				return nil
+			}
+			if systemContent == "" && LocalClipboard == "" {
+				ui.SetStatus("[yellow]Clipboard is empty (system & local)")
+				return nil
+			}
+
+			if systemContent != "" {
+				cleanContent := strings.ReplaceAll(systemContent, "\r\n", "\n")
+				edit.CurrentView.FemtoBuffer.Insert(edit.CurrentView.FemtoBuffer.Cursor.Loc, cleanContent)
+				ui.SetStatus("Pasted from system clipboard")
+			} else if LocalClipboard != "" {
+				edit.CurrentView.FemtoBuffer.Insert(edit.CurrentView.FemtoBuffer.Cursor.Loc, LocalClipboard)
+				ui.SetStatus("Pasted from local clipboard")
+			}
+
+			edit.CurrentView.FemtoBuffer.Cursor.Relocate()
 			return nil
 		case tcell.KeyCtrlL:
 			if edit.CurrentView.ReadWrite {
