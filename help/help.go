@@ -13,7 +13,7 @@ package help
 
 var HelpText = `♯ L I E D   -   Copyright © JPL 2024-2026
 
-Lied is a TUI (Text User Interface) Editor.
+Lied is a TUI (Text User Interface) enhanced editor.
 Lied is written in Go and has been tested on Linux sytem.
 Built from source, it should run on Windows or MacOS systems as well.
 
@@ -60,10 +60,8 @@ All these commands are summarized in the two lines at the bottom of the screen.
 Let's take a look at all these features...
 
 ⯈ H E L P
-The Help panel is displayed by pressing the F1 key. 
-This panel can also be invoked by running the special command !help in the Shell input box.
-You can browse this panel and all other panels with the arrow keys.
-To exit this panel, activate the OK button or press the Escape key.
+The embedded Help panel is opened by pressing the F1 key. 
+This help can also be invoked by running the special command !help in the Shell input box.
 
 ⯈ M O V I N G   B E T W E E N   P A N E L S
 The F2 key allow you to move the focus from the current panel to the next one.
@@ -127,18 +125,10 @@ Theses placeholders, prefixed by a % char and case sensitive, are as follows :
 ● %H : Home directory of current user
 ● %s : OS path separator
 
-⯈ P A N E L S
-The main panels displayed are :
-● The Editor panel
-● The Open Files panel
-● The Find & Replace panel
-● The Explorer panel
-● The Outline panel
-
 ⯈ S P E C I A L   C O M M A N D S
-These special commands are available when entering command in the Shell input box (F4).
+These special commands are available when entering command in the Shell input box by pressing the F4 key.
 These special commands all have a maximum of 4 letters and are prefixed by an exclamation point (!).
-!quit : Quit the editor (same as F12)
+!quit : Quit the editor (same as F12 or CRTL + Q)
 !exit : ----------- idem ------------
 !bye  : ----------- idem ------------
 !log  : Opens the log file of the Lied editor
@@ -174,7 +164,7 @@ These files are the following :
 ● lied.log        : Log of the application
 ● lied.log.bak    : Backup of the log file when archiving
 ● lied_YYYYMM.zip : Archived log files by month and year
-● macros          : Macros that are runned with the ALT+M key
+● macros          : Macros that are runned with the ALT + M key
 ● mru             : Most Recent Used files
 ● output          : Commands output
 `
