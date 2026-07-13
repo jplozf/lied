@@ -63,6 +63,7 @@ type SConfigGeneral struct {
 	Theme            string
 	GitUser          string
 	GitKey           string
+	GitEmail         string
 	Workspace        string
 	ShowHidden       bool
 	ConfirmExit      bool

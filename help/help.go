@@ -16,6 +16,7 @@ var HelpText = `♯ L I E D   -   Copyright © JPL 2024-2026
 Lied is a TUI (Text User Interface) enhanced editor.
 Lied is written in Go and has been tested on Linux sytem.
 Built from source, it should run on Windows or MacOS systems as well.
+Lied is capable of displaying text with syntax highlighting; however, beyond source code, it can also open binary files in hexadecimal view, as well as SQLite3 databases, allowing you to run queries and view their contents.
 
 Pay honour to whom honour is due, packages used in this project are as follows :
 rivo/tview    : Package tview implements rich widgets for terminal based user interfaces.

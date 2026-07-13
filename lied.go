@@ -26,7 +26,6 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -58,22 +57,19 @@ type createFunc func(string, string) bool
 // GLOBALS
 // ****************************************************************************
 var (
-	appDir       string
-	hostname     string
-	greeting     string
-	err          error
-	MnuMacros    *menu.Menu
-	MnuConfig    *menu.Menu
-	MnuGit       *menu.Menu
-	MnuWorkspace *menu.Menu
-	MnuLicenses  *menu.Menu
-	MnuTemplates *menu.Menu
-	args         []string
-	// conf.ConfigGeneral       conf.SConfigGeneral
-	// configPrivate       conf.SConfigPrivate
+	appDir              string
+	hostname            string
+	greeting            string
+	err                 error
+	MnuConfig           *menu.Menu
+	MnuWorkspace        *menu.Menu
+	MnuLicenses         *menu.Menu
+	MnuTemplates        *menu.Menu
+	args                []string
 	MnuInputTheme       *menu.Menu
 	DlgInputGitUser     *dialog.Dialog
 	DlgInputGitPassword *dialog.Dialog
+	DlgInputGitEmail    *dialog.Dialog
 	DlgInputFormatTime  *dialog.Dialog
 	DlgInputFormatDate  *dialog.Dialog
 	DlgInputFileOpen    *dialog.Dialog
@@ -91,7 +87,6 @@ var (
 	ACmd                []string
 	ICmd                int
 	MsgBox              *dialog.Dialog
-	Macros              map[string]string
 	activeCmd           *cmd.Cmd
 	promptVisible       bool
 	LocalClipboard      string
@@ -789,29 +784,6 @@ func ShowConfigMenu() {
 }
 
 // ****************************************************************************
-// ShowGitMenu()
-// ****************************************************************************
-func ShowGitMenu() {
-	MnuGit = MnuGit.New(" Git Tracking ", ui.GetCurrentScreen(), edit.CurrentWidget)
-	// Menu Options
-	MnuGit.AddItem("mnuGitStatus", "Status", DoGitStatus, nil, true, false)
-	MnuGit.AddItem("mnuGitLog", "Log", DoGitLog, nil, true, false)
-	MnuGit.AddItem("mnuGitAddAll", "Add All (.)", DoGitAddAll, nil, true, false)
-	MnuGit.AddItem("mnuGitCommit", "Commit", DoGitCommit, nil, true, false)
-	MnuGit.AddItem("mnuGitPush", "Push", DoGitPush, nil, true, false)
-	MnuGit.AddItem("mnuGitCommitPush", "Commit & Push", DoGitCommitPush, nil, true, false)
-	MnuGit.AddItem("mnuGitFetch", "Fetch", DoGitFetch, nil, true, false)
-	MnuGit.AddItem("mnuGitPull", "Pull (Fetch & Merge)", DoGitPull, nil, true, false)
-	MnuGit.AddItem("mnuGitInit", "Initialize", DoGitInit, nil, true, false)
-	MnuGit.AddItem("mnuGitBang", "Initialize & Push", DoGitBang, nil, true, false)
-	MnuGit.AddItem("mnuGitClone", "Clone", DoGitClone, nil, true, false)
-	MnuGit.AddItem("mnuGitConfigure", "Configure", DoGitConfigure, nil, true, false)
-	// Popup menu
-	ui.PgsApp.AddPage("dlgGitMenu", MnuGit.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgGitMenu")
-}
-
-// ****************************************************************************
 // ShowWorkspaceMenu()
 // ****************************************************************************
 func ShowWorkspaceMenu() {
@@ -968,38 +940,6 @@ func AddTemplate(f any) {
 }
 
 // ****************************************************************************
-// ShowMacrosMenu()
-// ****************************************************************************
-func ShowMacrosMenu() {
-	ReadMacros()
-	MnuMacros = MnuMacros.New(" Macros ", ui.GetCurrentScreen(), edit.CurrentWidget)
-	// Sort macros
-	keys := make([]string, 0, len(Macros))
-	for k := range Macros {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	// Read macros
-	for _, k := range keys {
-		MnuMacros.AddItem(k,
-			k,
-			XeqMacro,
-			k,
-			true,
-			false)
-	}
-	// Fixed options
-	if len(Macros) == 0 {
-		MnuMacros.AddItem("mnuEmpty", "Empty", nil, nil, false, false)
-	}
-	MnuMacros.AddSeparator()
-	MnuMacros.AddItem("mnuEditMacros", "Edit", editMacrosFile, nil, edit.CurrentView.ReadWrite, false)
-	// Popup menu
-	ui.PgsApp.AddPage("dlgMacrosMenu", MnuMacros.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgMacrosMenu")
-}
-
-// ****************************************************************************
 // appQuit()
 // appQuit performs some cleanup and saves persistent data before quitting application
 // ****************************************************************************
@@ -1082,6 +1022,7 @@ func readSettings() {
 		conf.ConfigGeneral.Theme = section.Key("Theme").String()
 		conf.ConfigGeneral.GitUser = section.Key("GitUser").String()
 		conf.ConfigGeneral.GitKey = section.Key("GitKey").String()
+		conf.ConfigGeneral.GitEmail = section.Key("GitEmail").String()
 		conf.ConfigGeneral.Workspace = section.Key("Workspace").String()
 		conf.ConfigGeneral.ShowHidden, _ = section.Key("ShowHidden").Bool()
 		conf.ConfigGeneral.ConfirmExit, _ = section.Key("ConfirmExit").Bool()
@@ -1198,6 +1139,7 @@ func saveSettings() {
 	sec.NewKey("Theme", conf.ConfigGeneral.Theme)
 	sec.NewKey("GitUser", conf.ConfigGeneral.GitUser)
 	sec.NewKey("GitKey", conf.ConfigGeneral.GitKey)
+	sec.NewKey("GitEmail", conf.ConfigGeneral.GitEmail)
 	sec.NewKey("Workspace", conf.ConfigGeneral.Workspace)
 	sec.NewKey("ShowHidden", utils.If(conf.ConfigGeneral.ShowHidden, "True", "False"))
 	sec.NewKey("ConfirmExit", utils.If(conf.ConfigGeneral.ConfirmExit, "True", "False"))
@@ -1307,54 +1249,6 @@ func setColorAccent(rc dialog.DlgButton, idx int) {
 		conf.ConfigGeneral.ColorAccent = DlgInputColorAccent.Value
 		ui.SetColorAccent(conf.ConfigGeneral.ColorAccent)
 		ui.SetStatus(fmt.Sprintf("Color accent is set to %s", conf.ConfigGeneral.ColorAccent))
-	}
-}
-
-// ****************************************************************************
-// InputConfigGitUser()
-// ****************************************************************************
-func InputConfigGitUser(f any) {
-	DlgInputGitUser = DlgInputGitUser.Input("Git User", // Title
-		"Please, enter the Git user :", // Message
-		conf.ConfigGeneral.GitUser,
-		setGitUser,
-		0,
-		ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-	ui.PgsApp.AddPage("dlgInputGitUser", DlgInputGitUser.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgInputGitUser")
-}
-
-// ****************************************************************************
-// setGitUser()
-// ****************************************************************************
-func setGitUser(rc dialog.DlgButton, idx int) {
-	if rc == dialog.BUTTON_OK {
-		conf.ConfigGeneral.GitUser = DlgInputGitUser.Value
-		ui.SetStatus(fmt.Sprintf("Git User is set to %s", conf.ConfigGeneral.GitUser))
-	}
-}
-
-// ****************************************************************************
-// InputConfigGitPassword()
-// ****************************************************************************
-func InputConfigGitPassword(f any) {
-	DlgInputGitPassword = DlgInputGitPassword.Input("Git Password", // Title
-		"Please, enter the Git password :", // Message
-		conf.ConfigGeneral.GitKey,
-		setGitPassword,
-		0,
-		ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-	ui.PgsApp.AddPage("dlgInputGitPassword", DlgInputGitPassword.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgInputGitPassword")
-}
-
-// ****************************************************************************
-// setGitPassword()
-// ****************************************************************************
-func setGitPassword(rc dialog.DlgButton, idx int) {
-	if rc == dialog.BUTTON_OK {
-		conf.ConfigGeneral.GitKey = DlgInputGitPassword.Value
-		ui.SetStatus(fmt.Sprintf("Git Password is set to %s", conf.ConfigGeneral.GitKey))
 	}
 }
 
@@ -2032,554 +1926,6 @@ func XeqRaw(c string) string {
 }
 
 // ****************************************************************************
-// DoGitStatus()
-// ****************************************************************************
-func DoGitStatus(f any) {
-	if IsInsideGitWorkTree() {
-		out := fmt.Sprintf("Current local commit : %s\n\n", XeqOut("git rev-parse --short HEAD"))
-		out += fmt.Sprintf("%s\n", XeqOut("git status"))
-		out += fmt.Sprintf("%s\n", XeqOut("git diff"))
-		MsgBox = MsgBox.OK("Git Status", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-		ui.PgsApp.ShowPage("msgBox")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitLog()
-// ****************************************************************************
-func DoGitLog(f any) {
-	if IsInsideGitWorkTree() {
-		out := fmt.Sprintf("%s", XeqOut("git log"))
-		MsgBox = MsgBox.OK("Git Log", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-		ui.PgsApp.ShowPage("msgBox")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitBang()
-// ****************************************************************************
-func DoGitBang(f any) {
-	if !IsInsideGitWorkTree() {
-		pjname := filepath.Base(filepath.Dir(edit.CurrentView.FName))
-		DlgYesNo1 = DlgYesNo1.YesNo("Git Bang", // Title
-			fmt.Sprintf("This will initialize and push a Git environment\nfor your project \"%s\".\n\nAre you sure you want to proceed ?", pjname), // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					if conf.ConfigGeneral.GitUser == "" {
-						ui.SetStatus("Git User is not yet configured")
-					} else {
-						DlgYesNo2 = DlgYesNo2.YesNo("Git Bang", // Title
-							"The following repository should already exist :\n\nhttps://github.com/"+conf.ConfigGeneral.GitUser+"/"+pjname+"\n\nHas the repository already been created ?", // Message
-							func(rc dialog.DlgButton, idx int) {
-								if rc == dialog.BUTTON_YES {
-									url := "https://" + conf.ConfigGeneral.GitKey + "@github.com/" + conf.ConfigGeneral.GitUser + "/" + pjname
-									Xeq("git init")
-									Xeq("git add .")
-									Xeq("git commit -m \"First Commit\"")
-									Xeq("git remote add origin " + url)
-									Xeq("git branch -M main")
-									Xeq("git pull --rebase origin main")
-									Xeq("git push -u origin main")
-									currentDir := filepath.Dir(edit.CurrentView.FName)
-									if !utils.IsFileExist(filepath.Join(currentDir, "README.md")) {
-										createFile(filepath.Join(currentDir, "README.md"), "#"+pjname)
-										Xeq("git add README.md")
-									}
-									if !utils.IsFileExist(filepath.Join(currentDir, ".gitignore")) {
-										createFile(filepath.Join(currentDir, ".gitignore"),
-											`# This file is used to ignore files which are generated
-# ----------------------------------------------------------------------------
-
-github.key
-*~
-*.autosave
-*.a
-*.core
-*.moc
-*.o
-*.obj
-*.orig
-*.rej
-*.so
-*.so.*
-*_pch.h.cpp
-*_resource.rc
-*.qm
-.#*
-*.*#
-core
-!core/
-tags
-.DS_Store
-.directory
-*.debug
-Makefile*
-*.prl
-*.app
-moc_*.cpp
-ui_*.h
-qrc_*.cpp
-Thumbs.db
-*.res
-*.rc
-/.qmake.cache
-/.qmake.stash
-
-# qtcreator generated files
-*.pro.user*
-*.qbs.user*
-CMakeLists.txt.user*
-
-# xemacs temporary files
-*.flc
-
-# Vim temporary files
-.*.swp
-
-# Visual Studio generated files
-*.ib_pdb_index
-*.idb
-*.ilk
-*.pdb
-*.sln
-*.suo
-*.vcproj
-*vcproj.*.*.user
-*.ncb
-*.sdf
-*.opensdf
-*.vcxproj
-*vcxproj.*
-
-# MinGW generated files
-*.Debug
-*.Release
-
-# Python byte code
-*.pyc
-
-# Binaries
-# --------
-*.dll
-*.exe
-
-# Directories with generated files
-.moc/
-.obj/
-.pch/
-.rcc/
-.uic/
-/build*/
-`)
-										Xeq("git add .gitignore")
-									}
-									DoGitStatus("dummy")
-								} else {
-									ui.SetStatus("Aborting Git Bang")
-								}
-							},
-							0,
-							ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-						ui.PgsApp.AddPage("dlgYesNo2", DlgYesNo2.Popup(), true, false)
-						ui.PgsApp.ShowPage("dlgYesNo2")
-					}
-				} else {
-					ui.SetStatus("Aborting Git Bang")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo1", DlgYesNo1.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo1")
-	} else {
-		ui.SetStatus("Git repository already created")
-	}
-}
-
-// ****************************************************************************
-// DoGitInit()
-// ****************************************************************************
-func DoGitInit(f any) {
-	if !IsInsideGitWorkTree() {
-		pjname := filepath.Base(filepath.Dir(edit.CurrentView.FName))
-		DlgYesNo1 = DlgYesNo1.YesNo("Git Init", // Title
-			fmt.Sprintf("This will initialize a Git environment\nfor your project \"%s\".\n\nAre you sure you want to proceed ?", pjname), // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					if conf.ConfigGeneral.GitUser == "" {
-						ui.SetStatus("Git User is not yet configured")
-					} else {
-						currentDir := filepath.Dir(edit.CurrentView.FName)
-						if !utils.IsFileExist(filepath.Join(currentDir, "README.md")) {
-							createFile(filepath.Join(currentDir, "README.md"), "#"+pjname)
-						}
-						if !utils.IsFileExist(filepath.Join(currentDir, ".gitignore")) {
-							createFile(filepath.Join(currentDir, ".gitignore"),
-								`# This file is used to ignore files which are generated
-# ----------------------------------------------------------------------------
-
-github.key
-*~
-*.autosave
-*.a
-*.core
-*.moc
-*.o
-*.obj
-*.orig
-*.rej
-*.so
-*.so.*
-*_pch.h.cpp
-*_resource.rc
-*.qm
-.#*
-*.*#
-core
-!core/
-tags
-.DS_Store
-.directory
-*.debug
-Makefile*
-*.prl
-*.app
-moc_*.cpp
-ui_*.h
-qrc_*.cpp
-Thumbs.db
-*.res
-*.rc
-/.qmake.cache
-/.qmake.stash
-
-# qtcreator generated files
-*.pro.user*
-*.qbs.user*
-CMakeLists.txt.user*
-
-# xemacs temporary files
-*.flc
-
-# Vim temporary files
-.*.swp
-
-# Visual Studio generated files
-*.ib_pdb_index
-*.idb
-*.ilk
-*.pdb
-*.sln
-*.suo
-*.vcproj
-*vcproj.*.*.user
-*.ncb
-*.sdf
-*.opensdf
-*.vcxproj
-*vcxproj.*
-
-# MinGW generated files
-*.Debug
-*.Release
-
-# Python byte code
-*.pyc
-
-# Binaries
-# --------
-*.dll
-*.exe
-
-# Directories with generated files
-.moc/
-.obj/
-.pch/
-.rcc/
-.uic/
-/build*/
-`)
-						}
-						Xeq("git init")
-						// Xeq("git add .")
-						DoGitStatus("dummy")
-						Xeq("git branch -M main")
-						go edit.UpdateStatus()
-						edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
-					}
-				} else {
-					ui.SetStatus("Aborting Git Init")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo1", DlgYesNo1.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo1")
-	} else {
-		ui.SetStatus("Git repository already created")
-	}
-}
-
-// ****************************************************************************
-// DoGitCommitPush()
-// ****************************************************************************
-func DoGitCommitPush(f any) {
-	if IsInsideGitWorkTree() {
-		DlgInput = DlgInput.Input("Git Commit & Push", // Title
-			"Please, enter the message :", // Message
-			"",                            // Default value
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_OK {
-					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
-					branch := XeqRaw("git rev-parse --abbrev-ref HEAD")
-					out += fmt.Sprintf("\n\nPushing...\n%s", XeqOut("git push origin "+branch))
-
-					MsgBox = MsgBox.OK("Git Commit & Push", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Commit & Push")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgInput")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitConfigure()
-// ****************************************************************************
-func DoGitConfigure(f any) {
-	form := tview.NewForm()
-	form.SetTitle("Git Configure")
-	form.AddInputField("User", conf.ConfigGeneral.GitUser, 40, nil, nil)
-	form.AddInputField("Key", conf.ConfigGeneral.GitKey, 40, nil, nil)
-	form.AddButton("OK", func() {
-		conf.ConfigGeneral.GitUser = form.GetFormItem(0).(*tview.InputField).GetText()
-		conf.ConfigGeneral.GitKey = form.GetFormItem(1).(*tview.InputField).GetText()
-		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
-		ui.App.SetFocus(edit.CurrentWidget)
-	})
-	form.AddButton("Cancel", func() {
-		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
-		ui.App.SetFocus(ui.EdtMain)
-	})
-	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyEsc:
-			ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
-			ui.App.SetFocus(edit.CurrentWidget)
-			return nil
-		}
-		return event
-	})
-
-	form.SetButtonsAlign(tview.AlignCenter)
-	form.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
-	form.SetButtonTextColor(tview.Styles.PrimaryTextColor)
-	form.SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorderPadding(0, 0, 0, 0)
-	form.SetBorder(true).
-		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
-		SetBorderPadding(1, 1, 1, 1)
-
-	ui.PgsApp.AddPage("myForm",
-		tview.NewFlex().
-			AddItem(nil, 0, 1, false).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(nil, 0, 1, false).
-				AddItem(form, 9, 1, true).
-				AddItem(nil, 0, 1, false), 49, 1, true).
-			AddItem(nil, 0, 1, false),
-		true, false)
-	ui.PgsApp.ShowPage("myForm")
-}
-
-// ****************************************************************************
-// DoGitFetch()
-// ****************************************************************************
-func DoGitFetch(f any) {
-	if IsInsideGitWorkTree() {
-		DlgYesNo = DlgYesNo.YesNo("Git Fetch", // Title
-			"The Git Fetch will fetch the remote version but no merging is processed locally.\n\nAre you sure you want to proceed ?", // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					out := fmt.Sprintf("Fetching...\n%s", XeqOut("git fetch origin"))
-					MsgBox = MsgBox.OK("Git Fetch", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Fetch")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitPull()
-// ****************************************************************************
-func DoGitPull(f any) {
-	if IsInsideGitWorkTree() {
-		branch := XeqOut("git rev-parse --abbrev-ref HEAD")
-		DlgYesNo = DlgYesNo.YesNo("Git Pull", // Title
-			"The Git Pull will fetch the remote version and merge it with you local branch which is currently ["+branch+"].\n\nAre you sure you want to proceed ?", // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					out := fmt.Sprintf("Pulling...\n%s", XeqOut("git pull origin "+branch))
-					MsgBox = MsgBox.OK("Git Pull", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Pull")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitPush()
-// ****************************************************************************
-func DoGitPush(f any) {
-	if IsInsideGitWorkTree() {
-		branch := XeqRaw("git rev-parse --abbrev-ref HEAD")
-		out := fmt.Sprintf("Pushing...\n%s", XeqOut("git push origin "+branch))
-		MsgBox = MsgBox.OK("Git Push", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-		ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-		ui.PgsApp.ShowPage("msgBox")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitCommit()
-// ****************************************************************************
-func DoGitCommit(f any) {
-	if IsInsideGitWorkTree() {
-		DlgInput = DlgInput.Input("Git Commit", // Title
-			"Please, enter the message :", // Message
-			"",                            // Default value
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_OK {
-					out := fmt.Sprintf("Committing...\n%s", XeqOut("git commit -a -m \""+DlgInput.Value+"\""))
-					MsgBox = MsgBox.OK("Git Commit", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Commit")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgInput")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitClone()
-// ****************************************************************************
-func DoGitClone(f any) {
-	if !IsInsideGitWorkTree() {
-		DlgInput = DlgInput.Input("Git Clone", // Title
-			"Please, enter the distant repository to clone locally :", // Message
-			"https://github.com/repo/project.git",                     // Default value
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_OK {
-					out := fmt.Sprintf("Cloning...\n%s", XeqOut("git clone \""+DlgInput.Value+"\""))
-					MsgBox = MsgBox.OK("Git Clone", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Clone")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgInput", DlgInput.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgInput")
-	} else {
-		ui.SetStatus("Already in a Git repository")
-	}
-}
-
-// ****************************************************************************
-// DoGitAdd()
-// ****************************************************************************
-func DoGitAdd(f any) {
-	if IsInsideGitWorkTree() {
-		DlgYesNo = DlgYesNo.YesNo("Git Add", // Title
-			"This will add the file :\n\n"+f.(string)+"\n\nto the Git tracking.\n\nAre you sure you want to proceed ?", // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					b := filepath.Base(f.(string))
-					out := fmt.Sprintf("Adding...\n%s", XeqOut("git add ./"+utils.EscapeSpaces(b)))
-					MsgBox = MsgBox.OK("Git Add", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Add")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
-// DoGitAddAll()
-// ****************************************************************************
-func DoGitAddAll(f any) {
-	if IsInsideGitWorkTree() {
-		DlgYesNo = DlgYesNo.YesNo("Git Add All", // Title
-			"This will add all the files to the Git tracking.\n\nAre you sure you want to proceed ?", // Message
-			func(rc dialog.DlgButton, idx int) {
-				if rc == dialog.BUTTON_YES {
-					out := fmt.Sprintf("Adding...\n%s", XeqOut("git add ."))
-					MsgBox = MsgBox.OK("Git Add All", out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-					ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-					ui.PgsApp.ShowPage("msgBox")
-				} else {
-					ui.SetStatus("Aborting Git Add All")
-				}
-			},
-			0,
-			ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-		ui.PgsApp.AddPage("dlgYesNo", DlgYesNo.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgYesNo")
-	} else {
-		ui.SetStatus("No Git repository found")
-	}
-}
-
-// ****************************************************************************
 // checkNewVersion()
 // ****************************************************************************
 func checkNewVersion() {
@@ -2650,138 +1996,6 @@ func DoExplorer(f any) {
 		ui.App.SetFocus(ui.TblFiles)
 	*/
 	edit.OpenView(path.Dir(f.(string)), false)
-}
-
-// ****************************************************************************
-// IsInsideGitWorkTree()
-// ****************************************************************************
-func IsInsideGitWorkTree() bool {
-	rc := false
-	out := XeqOut("git rev-parse --is-inside-work-tree")
-	if out[:4] == "true" {
-		rc = true
-	}
-	return rc
-}
-
-// ****************************************************************************
-// IsFileGitTracked()
-// ****************************************************************************
-func IsFileGitTracked(f string) bool {
-	rc := false
-	out := XeqOut("git ls-files --error-unmatch " + utils.EscapeSpaces(f))
-	b := filepath.Base(f)
-	if out[:len(b)] == b {
-		ui.SetStatus(fmt.Sprintf("File [%s] is git-tracked", f))
-		rc = true
-	} else {
-		ui.SetStatus(fmt.Sprintf("File [%s] is NOT git-tracked", f))
-	}
-	return rc
-}
-
-// ****************************************************************************
-// SaveMacros()
-// ****************************************************************************
-func SaveMacros() {
-	fMac, err := os.Create(filepath.Join(appDir, conf.FILE_MACROS))
-	if err == nil {
-		defer fMac.Close()
-		wMac := bufio.NewWriter(fMac)
-		fmt.Fprintln(wMac, "################################################################################")
-		fmt.Fprintln(wMac, "# Macros file generated on "+time.Now().Format("20060201-150405"))
-		fmt.Fprintln(wMac, "################################################################################")
-		fmt.Fprintln(wMac, "# These placeholders can be used into macros :")
-		fmt.Fprintln(wMac, "# %D : Full directory of current file")
-		fmt.Fprintln(wMac, "# %P : Parent directory of current file")
-		fmt.Fprintln(wMac, "# %W : Full directory of current workspace")
-		fmt.Fprintln(wMac, "# %F : Full file name with directory and extension of current file")
-		fmt.Fprintln(wMac, "# %f : File name without path and with extension of current file")
-		fmt.Fprintln(wMac, "# %e : File name without path nor extension of current file")
-		fmt.Fprintln(wMac, "# %L : Line number of current file in editor")
-		fmt.Fprintln(wMac, "# %T : Current timestamp")
-		fmt.Fprintln(wMac, "# %H : Home directory of current user")
-		fmt.Fprintln(wMac, "# %s : OS path separator")
-		fmt.Fprintln(wMac, "################################################################################")
-		fmt.Fprintln(wMac, "")
-		for k, v := range Macros {
-			fmt.Fprintln(wMac, k+" : "+v)
-		}
-		wMac.Flush()
-	}
-}
-
-// ****************************************************************************
-// ReadMacros()
-// ****************************************************************************
-func ReadMacros() {
-	fMac, err := os.Open(filepath.Join(appDir, conf.FILE_MACROS))
-	if err == nil {
-		for k := range Macros {
-			delete(Macros, k)
-		}
-		defer fMac.Close()
-		sMac := bufio.NewScanner(fMac)
-		for sMac.Scan() {
-			if strings.TrimSpace(string(sMac.Text())) != "" {
-				if strings.TrimSpace(string(sMac.Text()[0])) != "#" {
-					m := strings.Split(sMac.Text(), ":")
-					Macros[strings.TrimSpace(m[0])] = strings.TrimSpace(strings.Join(m[1:], ":"))
-				}
-			}
-		}
-	}
-}
-
-// ****************************************************************************
-// XeqMacro()
-// ****************************************************************************
-func XeqMacro(k any) {
-	ui.SetStatus("Executing macro : [" + k.(string) + "]")
-	out := fmt.Sprintf("%s\n", XeqOutErr(replaceVariablesInMacro(k.(string))))
-	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
-	MsgBox = MsgBox.OK("Macro : "+k.(string), out, nil, 0, ui.GetCurrentScreen(), edit.CurrentWidget)
-	ui.PgsApp.AddPage("msgBox", MsgBox.Popup(), true, false)
-	ui.PgsApp.ShowPage("msgBox")
-}
-
-// ****************************************************************************
-// replaceVariablesInMacro()
-// ****************************************************************************
-func replaceVariablesInMacro(k string) string {
-	// %D : Full directory of current file
-	// %P : Parent directory of current file
-	// %W : Full directory of current workspace
-	// %F : Full file name with directory and extension of current file
-	// %f : File name without path and with extension of current file
-	// %e : File name without path nor extension of current file
-	// %L : Line number of current file in editor
-	// %T : Current timestamp
-	// %H : Home directory of current user
-	// %s : OS path separator
-	out := Macros[k]
-	userDir, _ := os.UserHomeDir()
-	r := strings.NewReplacer(
-		"%D", utils.EscapeSpaces(filepath.Dir(edit.CurrentView.FName)),
-		"%P", utils.EscapeSpaces(filepath.Base(filepath.Dir(edit.CurrentView.FName))),
-		"%W", utils.EscapeSpaces(conf.ConfigGeneral.Workspace),
-		"%F", utils.EscapeSpaces(edit.CurrentView.FName),
-		"%f", utils.EscapeSpaces(filepath.Base(edit.CurrentView.FName)),
-		"%e", utils.EscapeSpaces(filepath.Base(strings.TrimSuffix(filepath.Base(edit.CurrentView.FName), filepath.Ext(edit.CurrentView.FName)))),
-		"%T", time.Now().Format("20060102-150405"),
-		"%L", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.Y+1),
-		"%s", string(os.PathSeparator),
-		"%H", userDir,
-	)
-	out = r.Replace(out)
-	return out
-}
-
-// ****************************************************************************
-// editMacrosFile()
-// ****************************************************************************
-func editMacrosFile(f any) {
-	edit.OpenView(filepath.Join(appDir, conf.FILE_MACROS), true)
 }
 
 // ****************************************************************************
@@ -2926,7 +2140,7 @@ func shellEscape() {
 // ****************************************************************************
 func ShowManual() {
 	for _, f := range edit.OpenViews {
-		if f.FName == "Bled Manual" {
+		if f.FName == "Lied Manual" {
 			edit.SwitchAnyFile(f.FName)
 			ui.SetStatus("Switching to help manual")
 			return
@@ -2936,7 +2150,7 @@ func ShowManual() {
 	helpBuf := femto.NewBufferFromString(help.HelpText, "Help.txt")
 
 	helpView := &edit.ViewScreen{
-		FName:       "Bled Manual",
+		FName:       "Lied Manual",
 		FemtoBuffer: helpBuf,
 		FemtoView:   femto.NewView(helpBuf),
 		ReadWrite:   false,
