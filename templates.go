@@ -22,9 +22,12 @@ import (
 	"lied/dialog"
 	"lied/edit"
 	"lied/ui"
+	"lied/utils"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ****************************************************************************
@@ -82,16 +85,18 @@ func AddTemplate(f any) {
 		d, // Default file name
 		func(rc dialog.DlgButton, idx int) {
 			if rc == dialog.BUTTON_OK {
-				CreateOrOverwriteIfItAlreadyExists(filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value), filepath.Join("templates", d), func(s1, s2 string) bool {
+				CreateOrOverwriteIfItAlreadyExists(filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value), filepath.Join(appDir, conf.FOLDER_TEMPLATES, d), func(s1, s2 string) bool {
 					// Close the file if it is open
 					edit.CloseThisFile(s1)
 					ui.SetStatus(fmt.Sprintf("Adding template %s to the current workspace", s2))
-					fileContent, err := conf.TemplatesFS.ReadFile(s2)
+					// fileContent, err := conf.TemplatesFS.ReadFile(s2)
+					fileContent, err := os.ReadFile(s2)
 					if err != nil {
 						ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
 						return false
 					}
-					if err := os.WriteFile(s1, fileContent, 0644); err != nil { // nolint: gosec
+					finalContent := replaceVariablesInTemplate(string(fileContent))
+					if err := os.WriteFile(s1, []byte(finalContent), 0644); err != nil { // nolint: gosec
 						ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
 						return false
 					}
@@ -143,4 +148,44 @@ func extractEmbedFS(fsys embed.FS, root string, destDir string) error {
 
 		return os.WriteFile(destPath, data, 0o644)
 	})
+}
+
+// ****************************************************************************
+// replaceVariablesInTemplate()
+// ****************************************************************************
+func replaceVariablesInTemplate(template string) string {
+	// %D  : Full directory of current file
+	// %P  : Parent directory of current file
+	// %F  : Full file name with directory and extension of current file
+	// %f  : File name without path and with extension of current file
+	// %e  : File name without path nor extension of current file
+	// %L  : Line number of current file in editor
+	// %T  : Current timestamp
+	// %H  : Home directory of current user
+	// %U  : Current user name
+	// %s  : OS path separator
+	// %GU : GitHub user from config file
+	// %GK : GitHub key from config file
+	// %GE : GitHub email from config file
+
+	out := template
+	userDir, _ := os.UserHomeDir()
+	r := strings.NewReplacer(
+		"%D", utils.EscapeSpaces(filepath.Dir(edit.CurrentView.FName)),
+		"%P", utils.EscapeSpaces(filepath.Base(filepath.Dir(edit.CurrentView.FName))),
+		"%W", utils.EscapeSpaces(conf.ConfigGeneral.Workspace),
+		"%F", utils.EscapeSpaces(edit.CurrentView.FName),
+		"%f", utils.EscapeSpaces(filepath.Base(edit.CurrentView.FName)),
+		"%e", utils.EscapeSpaces(filepath.Base(strings.TrimSuffix(filepath.Base(edit.CurrentView.FName), filepath.Ext(edit.CurrentView.FName)))),
+		"%T", time.Now().Format("20060102-150405"),
+		"%L", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.Y+1),
+		"%s", string(os.PathSeparator),
+		"%H", userDir,
+		"%U", os.Getenv("USER"),
+		"%GU", conf.ConfigGeneral.GitUser,
+		"%GK", conf.ConfigGeneral.GitKey,
+		"%GE", conf.ConfigGeneral.GitEmail,
+	)
+	out = r.Replace(out)
+	return out
 }

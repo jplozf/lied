@@ -194,6 +194,14 @@ For example, the following macro will insert a main function template in Go and 
 
 You can create as many macros as you want, and they will be available in the **Macros** menu `ALT + M` for easy access.
 
+### Templates
+---
+* Templates for new files are located into the `~/.lied/templates` directory. 
+* By default, this folder is populated by embedded templates.
+* You can add or remove templates as you wish. 
+* These templates can accept the same placeholders as macros.
+* To create a file from a template, open the **Workspace** menu by pressing the `F9` key, and then select **New file**.
+  
 ### Specials Commands
 ---
 These special commands are available when entering command in the Shell input box by pressing the `F4` key.
