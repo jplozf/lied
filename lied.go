@@ -674,6 +674,7 @@ func main() {
 		return event
 	})
 
+	initializeTemplatesFolder()
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
@@ -869,74 +870,6 @@ func AddLicense(l any) {
 	}
 	// Refresh the TrvExplorer
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
-}
-
-// ****************************************************************************
-// ShowTemplatesMenu()
-// ****************************************************************************
-func ShowTemplatesMenu(f any) {
-	// Read the directory entry for the "templates" embedded folder
-	entries, err := conf.TemplatesFS.ReadDir("templates")
-	ui.SetStatus("Reading templates")
-	if err == nil {
-		MnuTemplates = MnuTemplates.New(" Templates ", ui.GetCurrentScreen(), edit.CurrentWidget)
-		for _, entry := range entries {
-			if !entry.IsDir() { // Only list files, not subdirectories
-				template := entry.Name()
-				MnuTemplates.AddItem(template,
-					strings.TrimSuffix(template, filepath.Ext(template)),
-					AddTemplate,
-					template,
-					true,
-					false)
-			}
-		}
-		// Popup menu
-		ui.PgsApp.AddPage("dlgTemplatesMenu", MnuTemplates.Popup(), true, false)
-		ui.PgsApp.ShowPage("dlgTemplatesMenu")
-	} else {
-		ui.SetStatus("No template found")
-	}
-}
-
-// ****************************************************************************
-// AddTemplate()
-// ****************************************************************************
-func AddTemplate(f any) {
-	d := f.(string)
-	DlgNewFile = DlgNewFile.Input("New File", // Title
-		fmt.Sprintf("Creating a new file into %s", conf.ConfigGeneral.Workspace), // Message
-		d, // Default file name
-		func(rc dialog.DlgButton, idx int) {
-			if rc == dialog.BUTTON_OK {
-				CreateOrOverwriteIfItAlreadyExists(filepath.Join(conf.ConfigGeneral.Workspace, DlgNewFile.Value), filepath.Join("templates", d), func(s1, s2 string) bool {
-					// Close the file if it is open
-					edit.CloseThisFile(s1)
-					ui.SetStatus(fmt.Sprintf("Adding template %s to the current workspace", s2))
-					fileContent, err := conf.TemplatesFS.ReadFile(s2)
-					if err != nil {
-						ui.SetStatus(fmt.Sprintf("Error reading file: %v", err))
-						return false
-					}
-					if err := os.WriteFile(s1, fileContent, 0644); err != nil { // nolint: gosec
-						ui.SetStatus(fmt.Sprintf("Error writing file: %w", err))
-						return false
-					}
-					// and open it
-					edit.OpenView(s1, true)
-					edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
-					return true
-				})
-			} else {
-				ui.SetStatus("Canceling creating new file")
-			}
-			// Refresh the TrvExplorer
-			edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
-		},
-		0,
-		ui.GetCurrentScreen(), edit.CurrentWidget) // Focus return
-	ui.PgsApp.AddPage("dlgNewFile", DlgNewFile.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgNewFile")
 }
 
 // ****************************************************************************

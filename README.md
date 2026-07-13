@@ -230,9 +230,48 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 ### Internal Files
 ---
 Some files are generated and managed internally to keep the current settings and history.
-These files are located into the `.lied` directory, which is itself into the user folder : `~/.lied` for **Linux** and **MacOS**.
+These files are located into the `.lied` directory, which is itself into the user folder : `~/.lied` for **Linux** and **MacOS**. They look like something like this :
 
-These files are the following :
+```bash
+.
+├── find
+├── history
+├── lied_202604.zip
+├── lied_202605.zip
+├── lied_202606.zip
+├── lied.ini
+├── lied.log
+├── lied.log.bak
+├── macros
+├── mru
+├── output
+├── sql
+└── templates
+    ├── Assembly Source Code 32 bits.asm
+    ├── Assembly Source Code 64 bits.asm
+    ├── Bash Script
+    ├── C C++ Header.h
+    ├── C GTK Source Code.c
+    ├── C Ncurses Source Code.c
+    ├── C Source Code.c
+    ├── C++ Source Code.cpp
+    ├── C++ wxWidgets Source Code.cpp
+    ├── _Empty File
+    ├── Go Source Code.go
+    ├── HTML Page.html
+    ├── Java Applet.java
+    ├── Java Source Code.java
+    ├── Java Swing Application.java
+    ├── Makefile
+    ├── Markdown File.md
+    ├── Python Script.py
+    ├── Python TkInter.py
+    ├── QT MainWindow.ui
+    ├── Rust Source Code.rs
+    ├── Text File.txt
+    └── XML File.xml
+```
+Where :
 | File | Purpose |
 | :--- | :--- |
 | `find` | Find & replace history |
@@ -244,6 +283,8 @@ These files are the following :
 | `macros` | Macros file *(edited from menu **Macros**)* |
 | `mru` | Most Recent Used files |
 | `output` | Commands output |
+| `sql` | SQL history |
+| `templates` | Folder for templates *(filled by default embedded templates, feel free to add your own templates or delete unwanted items)* |
 
 ## License
 This project is licensed under the terms of the [MIT license](https://www.mit.edu/~amini/LICENSE.md).
