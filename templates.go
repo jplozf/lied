@@ -154,19 +154,23 @@ func extractEmbedFS(fsys embed.FS, root string, destDir string) error {
 // replaceVariablesInTemplate()
 // ****************************************************************************
 func replaceVariablesInTemplate(template string) string {
-	// %D  : Full directory of current file
-	// %P  : Parent directory of current file
-	// %F  : Full file name with directory and extension of current file
-	// %f  : File name without path and with extension of current file
-	// %e  : File name without path nor extension of current file
-	// %L  : Line number of current file in editor
-	// %T  : Current timestamp
-	// %H  : Home directory of current user
+	// %D : Full directory of current file
+	// %P : Parent directory of current file
+	// %W : Full directory of current workspace
+	// %w : Base name of current workspace
+	// %F : Full file name with directory and extension of current file
+	// %f : File name without path and with extension of current file
+	// %e : File name without path nor extension of current file
+	// %L : Line number of current file in editor
+	// %T : Current timestamp
+	// %H : Home directory of current user
 	// %U  : Current user name
 	// %s  : OS path separator
 	// %GU : GitHub user from config file
 	// %GK : GitHub key from config file
 	// %GE : GitHub email from config file
+	// %ON : Organization name from config file
+	// %OE : Organization extension from config file
 
 	out := template
 	userDir, _ := os.UserHomeDir()
@@ -174,6 +178,7 @@ func replaceVariablesInTemplate(template string) string {
 		"%D", utils.EscapeSpaces(filepath.Dir(edit.CurrentView.FName)),
 		"%P", utils.EscapeSpaces(filepath.Base(filepath.Dir(edit.CurrentView.FName))),
 		"%W", utils.EscapeSpaces(conf.ConfigGeneral.Workspace),
+		"%w", utils.EscapeSpaces(filepath.Base(conf.ConfigGeneral.Workspace)),
 		"%F", utils.EscapeSpaces(edit.CurrentView.FName),
 		"%f", utils.EscapeSpaces(filepath.Base(edit.CurrentView.FName)),
 		"%e", utils.EscapeSpaces(filepath.Base(strings.TrimSuffix(filepath.Base(edit.CurrentView.FName), filepath.Ext(edit.CurrentView.FName)))),
@@ -185,6 +190,8 @@ func replaceVariablesInTemplate(template string) string {
 		"%GU", conf.ConfigGeneral.GitUser,
 		"%GK", conf.ConfigGeneral.GitKey,
 		"%GE", conf.ConfigGeneral.GitEmail,
+		"%ON", conf.ConfigGeneral.OrgName,
+		"%OE", conf.ConfigGeneral.OrgExtension,
 	)
 	out = r.Replace(out)
 	return out

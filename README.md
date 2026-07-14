@@ -134,7 +134,7 @@ We can also add some interesting spots like (from up to down) :
 | The Workspace and File text boxes | Just to be sure to edit the good file. |
 | The Keys' Summary Area | Keys functions are summarized as a reminder. |
 | The Git Status Bar | Useful when editing a tracked file, it displays the branch name, the current commit hash and the pending status. |
-| The Status Bar | The classical status bar displays the size of the current file, the relative position of the cursor in percentage, the position of the cursor in terms of line and column numbers, and other various indicators. These informations may change depending of the currently edited file's type (Source Code, Binary, Database...).
+| The Status Bar | The classical status bar displays the size of the current file, the relative position of the cursor in percentage, the position of the cursor in terms of line and column numbers, and other various indicators. These informations may change depending of the currently edited file's type (Source Code, Binary, Database...). |
 
 ### Macros `Alt + M`
 ---
@@ -156,6 +156,7 @@ Theses placeholders, prefixed by a `%` char and case sensitive, are as follows :
 | `%D` | Full directory of current file |
 | `%P` | Parent directory of current file |
 | `%W` | Full directory of current workspace |
+| `%w` | Base name of current workspace |
 | `%F` | Full file name with directory and extension of current file |
 | `%f` | File name without path and with extension of current file |
 | `%e` | File name without path nor extension of current file |
@@ -167,6 +168,8 @@ Theses placeholders, prefixed by a `%` char and case sensitive, are as follows :
 | `%GU` | GitHub user from config file |
 | `%GK` | GitHub key from config file |
 | `%GE` | GitHub email from config file |
+| `%ON` | Organization name from config file |
+| `%OE` | Organization extension from config file |
 
 As we already said, macros syntax is simple, each line in the macros file represents a macro, with the following format :
 

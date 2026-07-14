@@ -16,7 +16,6 @@ package main
 // ****************************************************************************
 import (
 	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"log"
@@ -42,7 +41,6 @@ import (
 	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	"github.com/go-cmd/cmd"
-	"github.com/google/uuid"
 	"github.com/pgavlin/femto"
 	"github.com/rivo/tview"
 	"gopkg.in/ini.v1"
@@ -767,11 +765,9 @@ func ShowMainMenu() {
 func ShowConfigMenu() {
 	MnuConfig = MnuConfig.New(" Settings ", ui.GetCurrentScreen(), edit.CurrentWidget)
 	// Menu Options
+	MnuConfig.AddItem("mnuCfgOrgSettings", "Organization", DoOrgConfigure, nil, true, false)
 	MnuConfig.AddItem("mnuCfgTheme", "Theme", InputConfigTheme, nil, true, false)
 	MnuConfig.AddItem("mnuCfgColorAccent", "Color Accent", InputColorAccent, nil, true, false)
-	// These two options are now into the Git Menu :
-	// MnuConfig.AddItem("mnuCfgGitUser", "Git User", InputConfigGitUser, nil, true, false)
-	// MnuConfig.AddItem("mnuCfgGitPassword", "Git Password", InputConfigGitPassword, nil, true, false)
 	MnuConfig.AddItem("mnuCfgConfirmExit", "Confirm Exit", SwitchConfirmExit, nil, true, conf.ConfigGeneral.ConfirmExit)
 	MnuConfig.AddItem("mnuCfgCleanUpOnExit", "Clean Up on Exit", SwitchCleanUpOnExit, nil, true, conf.ConfigGeneral.CleanUpOnExit)
 	MnuConfig.AddItem("mnuCfgShowHidden", "Show Hidden", SwitchShowHidden, nil, true, conf.ConfigGeneral.ShowHidden)
@@ -965,6 +961,8 @@ func readSettings() {
 		conf.ConfigGeneral.ColorAccent = section.Key("ColorAccent").String()
 		conf.ConfigGeneral.InteractiveShell, _ = section.Key("InteractiveShell").Bool()
 		conf.ConfigGeneral.OutErrPrefix, _ = section.Key("OutErrPrefix").Bool()
+		conf.ConfigGeneral.OrgName = section.Key("OrgName").String()
+		conf.ConfigGeneral.OrgExtension = section.Key("OrgExtension").String()
 		// Set them
 		if conf.ConfigGeneral.Theme == "" {
 			conf.ConfigGeneral.Theme = "monokai"
@@ -1090,6 +1088,8 @@ func saveSettings() {
 	sec.NewKey("ColorAccent", conf.ConfigGeneral.ColorAccent)
 	sec.NewKey("InteractiveShell", utils.If(conf.ConfigGeneral.InteractiveShell, "True", "False"))
 	sec.NewKey("OutErrPrefix", utils.If(conf.ConfigGeneral.OutErrPrefix, "True", "False"))
+	sec.NewKey("OrgName", conf.ConfigGeneral.OrgName)
+	sec.NewKey("OrgExtension", conf.ConfigGeneral.OrgExtension)
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
@@ -1585,280 +1585,6 @@ func runShell(rc dialog.DlgButton, idx int) {
 }
 
 // ****************************************************************************
-// Xeq()
-// ****************************************************************************
-func Xeq(c string) {
-	sCmd := strings.Fields(c)
-	if len(ACmd) > 0 {
-		if ACmd[len(ACmd)-1] != c {
-			ACmd = append(ACmd, c)
-			ICmd++
-		}
-	} else {
-		ACmd = append(ACmd, c)
-		ICmd++
-	}
-
-	if len(sCmd) > 0 {
-		ui.SetStatus(fmt.Sprintf("Running [%s]", c))
-		if sCmd[0][0] == '!' {
-			xCmd := sCmd[0] + "     "
-			// Is it a line number ?
-			if l, err := strconv.Atoi(strings.TrimSpace(xCmd[1:])); err == nil {
-				// Yes, go to that line number
-				edit.GoLine(l)
-				return
-			}
-			// No, continue...
-			xCmd = xCmd[:5]
-			xCmd = strings.TrimSpace(xCmd)
-			switch xCmd {
-			case "!quit", "!exit", "!bye":
-				ui.PgsApp.SwitchToPage("dlgQuit")
-			case "!log":
-				edit.OpenView(filepath.Join(appDir, conf.FILE_LOG), false)
-			case "!out":
-				edit.OpenView(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), false)
-				edit.SwitchFollow("dummy")
-			case "!foll", "!tail":
-				edit.SwitchFollow("dummy")
-			case "!next":
-				edit.SwitchNextFile()
-			case "!prev":
-				edit.SwitchPreviousFile()
-			case "!clos":
-				edit.CloseCurrentFile()
-			case "!save":
-				edit.SaveFile()
-			case "!conf":
-				edit.OpenView(filepath.Join(appDir, conf.FILE_INI), false)
-			case "!macr":
-				edit.OpenView(filepath.Join(appDir, conf.FILE_MACROS), false)
-			case "!help":
-				ShowManual()
-			case "!info":
-				ShowSysInfo()
-			case "!shel":
-				doInteractiveShell()
-			case "!b", "!bott":
-				edit.GoBottom()
-			case "!t", "!top":
-				edit.GoTop()
-			case "!h", "!time":
-				t := time.Now()
-				edit.InsertString(t.Format("20060102-150405"))
-			case "!uuid":
-				id := uuid.New()
-				edit.InsertString(id.String())
-			case "!lore":
-				edit.InsertString(utils.GenerateLoremIpsum(1, 3, 5, 8, 15))
-			default:
-				ui.SetStatus(fmt.Sprintf("Invalid command %s", sCmd[0]))
-			}
-		} else {
-			// 1. Setup the command
-			cmdOptions := cmd.Options{
-				Buffered:  false, // We want streaming
-				Streaming: true,
-			}
-			xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
-			activeCmd = xCmd // Assign to the shared variable
-			xCmd.Dir = conf.ConfigGeneral.Workspace
-
-			// 2. Open the log file once (use O_APPEND)
-			fOut, err := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				// Handle error
-			}
-
-			// 3. Start the command in the background
-			statusChan := xCmd.Start()
-			// Check if the command failed to even start (e.g., command not found)
-			initialStatus := xCmd.Status()
-			if initialStatus.Error != nil {
-				ui.SetStatus("Error: " + initialStatus.Error.Error())
-				// Log it to the file as well
-				fmt.Fprintln(fOut, "START ERROR: "+initialStatus.Error.Error())
-				return
-			}
-
-			// 4. Handle Output & Lifecycle in a single Goroutine
-
-			go func() {
-				defer fOut.Close()
-
-				// Write header to file
-				fmt.Fprintf(fOut, "%s ⯈ %s\n", time.Now().Format("20060102-150405"), c)
-				outPrefix := ""
-				errPrefix := ""
-				if conf.ConfigGeneral.OutErrPrefix {
-					outPrefix = "OUT : "
-					errPrefix = "ERR : "
-				}
-				for {
-					select {
-					case line, open := <-xCmd.Stdout:
-						if !open {
-							xCmd.Stdout = nil
-						} else {
-							fmt.Fprintln(fOut, outPrefix+line)
-						}
-					case line, open := <-xCmd.Stderr:
-						if !open {
-							xCmd.Stderr = nil
-						} else {
-							fmt.Fprintln(fOut, errPrefix+line)
-						}
-					case status := <-statusChan:
-						// Command finished!
-						fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, status.Exit))
-						ui.App.QueueUpdateDraw(func() {
-							ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, status.Exit))
-						})
-						return // Exit the goroutine
-					}
-
-					// If both streams are closed but status hasn't arrived,
-					// we still need to wait for statusChan to avoid leaking
-					if xCmd.Stdout == nil && xCmd.Stderr == nil && statusChan == nil {
-						return
-					}
-				}
-			}()
-		}
-	} else {
-		ui.SetStatus("Nothing to run")
-	}
-}
-
-// ****************************************************************************
-// XeqOut()
-// ****************************************************************************
-func XeqOut(c string) string {
-	// sCmd := strings.Fields(c)
-	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
-	quoted := false
-	sCmd := strings.FieldsFunc(c, func(r rune) bool {
-		if r == '"' {
-			quoted = !quoted
-		}
-		return !quoted && r == ' '
-	})
-
-	out := ""
-	if len(sCmd) > 0 {
-		cmd := exec.Command(sCmd[0], sCmd[1:]...)
-		cmd.Dir = conf.ConfigGeneral.Workspace
-		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
-		var outb, errb bytes.Buffer
-		cmd.Stdout = &outb
-		cmd.Stderr = &errb
-		if err := cmd.Run(); err != nil {
-			out = "Error : " + err.Error()
-			if exitError, ok := err.(*exec.ExitError); ok {
-				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
-			}
-		} else {
-			out = outb.String()
-			out = out + errb.String()
-			out = out + "\nExit code 0"
-		}
-	} else {
-		out = "Nothing to run\n\nExit code 0"
-	}
-
-	out = strings.TrimSpace(out)
-	ui.SetStatus(out)
-	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
-	return out
-}
-
-// ****************************************************************************
-// XeqOutErr()
-// ****************************************************************************
-func XeqOutErr(c string) string {
-	// sCmd := strings.Fields(c)
-	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
-	quoted := false
-	sCmd := strings.FieldsFunc(c, func(r rune) bool {
-		if r == '"' {
-			quoted = !quoted
-		}
-		return !quoted && r == ' '
-	})
-
-	out := ""
-	if len(sCmd) > 0 {
-		cmd := exec.Command(sCmd[0], sCmd[1:]...)
-		cmd.Dir = conf.ConfigGeneral.Workspace
-		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
-		var outb, errb bytes.Buffer
-		cmd.Stdout = &outb
-		cmd.Stderr = &errb
-		if err := cmd.Run(); err != nil {
-			out = "Error : " + err.Error()
-			if exitError, ok := err.(*exec.ExitError); ok {
-				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
-				out = out + outb.String()
-				out = out + errb.String()
-			}
-		} else {
-			out = outb.String()
-			out = out + errb.String()
-			out = out + "\nExit code 0"
-		}
-	} else {
-		out = "Nothing to run\n\nExit code 0"
-	}
-
-	out = strings.TrimSpace(out)
-	ui.SetStatus(out)
-	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
-	return out
-}
-
-// ****************************************************************************
-// XeqRaw()
-// ****************************************************************************
-func XeqRaw(c string) string {
-	// sCmd := strings.Fields(c)
-	// https://stackoverflow.com/questions/47489745/splitting-a-string-at-space-except-inside-quotation-marks
-	quoted := false
-	sCmd := strings.FieldsFunc(c, func(r rune) bool {
-		if r == '"' {
-			quoted = !quoted
-		}
-		return !quoted && r == ' '
-	})
-
-	out := ""
-	if len(sCmd) > 0 {
-		cmd := exec.Command(sCmd[0], sCmd[1:]...)
-		cmd.Dir = conf.ConfigGeneral.Workspace
-		ui.SetStatus(fmt.Sprintf("Executing [%s] in %s", c, cmd.Dir))
-		var outb, errb bytes.Buffer
-		cmd.Stdout = &outb
-		cmd.Stderr = &errb
-		if err := cmd.Run(); err != nil {
-			out = "Error : " + err.Error()
-			if exitError, ok := err.(*exec.ExitError); ok {
-				out = out + fmt.Sprintf("\nExit code %d", exitError.ExitCode())
-			}
-		} else {
-			out = outb.String()
-			out = out + errb.String()
-		}
-	} else {
-		out = "Nothing to run\n\nExit code 0"
-	}
-
-	out = strings.TrimSpace(out)
-	ui.SetStatus(out)
-	ui.SetStatus(fmt.Sprintf("Done [%s]", c))
-	return out
-}
-
-// ****************************************************************************
 // checkNewVersion()
 // ****************************************************************************
 func checkNewVersion() {
@@ -2081,6 +1807,10 @@ func ShowManual() {
 	}
 
 	helpBuf := femto.NewBufferFromString(help.HelpText, "Help.txt")
+	helpBuf.Settings["keepautoindent"] = true
+	helpBuf.Settings["softwrap"] = true
+	helpBuf.Settings["scrollbar"] = true
+	helpBuf.Settings["statusline"] = false
 
 	helpView := &edit.ViewScreen{
 		FName:       "Lied Manual",
@@ -2096,4 +1826,52 @@ func ShowManual() {
 	edit.OpenViews = append(edit.OpenViews, *helpView)
 	edit.SwitchAnyFile(helpView.FName)
 	ui.SetStatus("Opening help manual")
+}
+
+// ****************************************************************************
+// DoOrgConfigure()
+// ****************************************************************************
+func DoOrgConfigure(f any) {
+	form := tview.NewForm()
+	form.SetTitle("Organization Settings")
+	form.AddInputField("Name", conf.ConfigGeneral.OrgName, 40, nil, nil)
+	form.AddInputField("Extension", conf.ConfigGeneral.OrgExtension, 40, nil, nil)
+	form.AddButton("OK", func() {
+		conf.ConfigGeneral.OrgName = strings.ToLower(form.GetFormItem(0).(*tview.InputField).GetText())
+		conf.ConfigGeneral.OrgExtension = strings.ToLower(form.GetFormItem(1).(*tview.InputField).GetText())
+		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+		ui.App.SetFocus(edit.CurrentWidget)
+	})
+	form.AddButton("Cancel", func() {
+		ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+		ui.App.SetFocus(ui.EdtMain)
+	})
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc:
+			ui.PgsApp.SwitchToPage(ui.GetCurrentScreen())
+			ui.App.SetFocus(edit.CurrentWidget)
+			return nil
+		}
+		return event
+	})
+
+	form.SetButtonsAlign(tview.AlignCenter)
+	form.SetButtonBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
+	form.SetButtonTextColor(tview.Styles.PrimaryTextColor)
+	form.SetBackgroundColor(tview.Styles.ContrastBackgroundColor).SetBorderPadding(0, 0, 0, 0)
+	form.SetBorder(true).
+		SetBackgroundColor(tview.Styles.ContrastBackgroundColor).
+		SetBorderPadding(1, 1, 1, 1)
+
+	ui.PgsApp.AddPage("myForm",
+		tview.NewFlex().
+			AddItem(nil, 0, 1, false).
+			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+				AddItem(nil, 0, 1, false).
+				AddItem(form, 9, 1, true).
+				AddItem(nil, 0, 1, false), 49, 1, true).
+			AddItem(nil, 0, 1, false),
+		true, false)
+	ui.PgsApp.ShowPage("myForm")
 }

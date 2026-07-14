@@ -74,6 +74,8 @@ type SConfigGeneral struct {
 	ColorAccent      string
 	InteractiveShell bool
 	OutErrPrefix     bool
+	OrgName          string
+	OrgExtension     string
 }
 
 type SConfigPrivate struct {

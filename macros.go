@@ -58,6 +58,7 @@ func SaveMacros() {
 		fmt.Fprintln(wMac, "# %D : Full directory of current file")
 		fmt.Fprintln(wMac, "# %P : Parent directory of current file")
 		fmt.Fprintln(wMac, "# %W : Full directory of current workspace")
+		fmt.Fprintln(wMac, "# %w : Base name of current workspace")
 		fmt.Fprintln(wMac, "# %F : Full file name with directory and extension of current file")
 		fmt.Fprintln(wMac, "# %f : File name without path and with extension of current file")
 		fmt.Fprintln(wMac, "# %e : File name without path nor extension of current file")
@@ -69,6 +70,8 @@ func SaveMacros() {
 		fmt.Fprintln(wMac, "# %GU : GitHub user from config file")
 		fmt.Fprintln(wMac, "# %GK : GitHub key from config file")
 		fmt.Fprintln(wMac, "# %GE : GitHub email from config file")
+		fmt.Fprintln(wMac, "# %ON : Organization name from config file")
+		fmt.Fprintln(wMac, "# %OE : Organization extension from config file")
 		fmt.Fprintln(wMac, "################################################################################")
 		fmt.Fprintln(wMac, "")
 		for k, v := range Macros {
@@ -200,6 +203,7 @@ func replaceVariablesInMacro(k string) string {
 	// %D : Full directory of current file
 	// %P : Parent directory of current file
 	// %W : Full directory of current workspace
+	// %w : Base name of current workspace
 	// %F : Full file name with directory and extension of current file
 	// %f : File name without path and with extension of current file
 	// %e : File name without path nor extension of current file
@@ -211,6 +215,8 @@ func replaceVariablesInMacro(k string) string {
 	// %GU : GitHub user from config file
 	// %GK : GitHub key from config file
 	// %GE : GitHub email from config file
+	// %ON : Organization name from config file
+	// %OE : Organization extension from config file
 
 	out := Macros[k]
 	userDir, _ := os.UserHomeDir()
@@ -218,6 +224,7 @@ func replaceVariablesInMacro(k string) string {
 		"%D", utils.EscapeSpaces(filepath.Dir(edit.CurrentView.FName)),
 		"%P", utils.EscapeSpaces(filepath.Base(filepath.Dir(edit.CurrentView.FName))),
 		"%W", utils.EscapeSpaces(conf.ConfigGeneral.Workspace),
+		"%w", utils.EscapeSpaces(filepath.Base(conf.ConfigGeneral.Workspace)),
 		"%F", utils.EscapeSpaces(edit.CurrentView.FName),
 		"%f", utils.EscapeSpaces(filepath.Base(edit.CurrentView.FName)),
 		"%e", utils.EscapeSpaces(filepath.Base(strings.TrimSuffix(filepath.Base(edit.CurrentView.FName), filepath.Ext(edit.CurrentView.FName)))),
@@ -229,6 +236,8 @@ func replaceVariablesInMacro(k string) string {
 		"%GU", conf.ConfigGeneral.GitUser,
 		"%GK", conf.ConfigGeneral.GitKey,
 		"%GE", conf.ConfigGeneral.GitEmail,
+		"%ON", conf.ConfigGeneral.OrgName,
+		"%OE", conf.ConfigGeneral.OrgExtension,
 	)
 	out = r.Replace(out)
 	return out
