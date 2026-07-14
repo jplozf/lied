@@ -1834,8 +1834,8 @@ func ShowManual() {
 func DoOrgConfigure(f any) {
 	form := tview.NewForm()
 	form.SetTitle("Organization Settings")
-	form.AddInputField("Name", conf.ConfigGeneral.OrgName, 40, nil, nil)
-	form.AddInputField("Extension", conf.ConfigGeneral.OrgExtension, 40, nil, nil)
+	form.AddInputField("Name", conf.ConfigGeneral.OrgName, 35, nil, nil)
+	form.AddInputField("Extension", conf.ConfigGeneral.OrgExtension, 35, nil, nil)
 	form.AddButton("OK", func() {
 		conf.ConfigGeneral.OrgName = strings.ToLower(form.GetFormItem(0).(*tview.InputField).GetText())
 		conf.ConfigGeneral.OrgExtension = strings.ToLower(form.GetFormItem(1).(*tview.InputField).GetText())
