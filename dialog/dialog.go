@@ -58,24 +58,25 @@ type DlgRC struct {
 
 type Dialog struct {
 	*tview.Form
-	title       string
-	message     string
-	done        func(rc DlgButton, idx int)
-	buttons     []*tview.Button
-	Value       string
-	Values      []string
-	parent      string
-	focus       tview.Primitive
-	width       int
-	height      int
-	idx         int
-	dtype       DlgInput
-	UIMsg       *tview.TextView
-	UIList      *tview.DropDown
-	uiInput     tview.InputField
-	IValues     int
-	Path        string
-	onlyFolders bool
+	title        string
+	message      string
+	done         func(rc DlgButton, idx int)
+	buttons      []*tview.Button
+	Value        string
+	Values       []string
+	parent       string
+	focus        tview.Primitive
+	restoreFocus tview.Primitive
+	width        int
+	height       int
+	idx          int
+	dtype        DlgInput
+	UIMsg        *tview.TextView
+	UIList       *tview.DropDown
+	uiInput      tview.InputField
+	IValues      int
+	Path         string
+	onlyFolders  bool
 }
 
 // ****************************************************************************
@@ -526,18 +527,22 @@ func (m *Dialog) setUI() {
 // ****************************************************************************
 func (m *Dialog) Popup() tview.Primitive {
 	m.setUI()
+	m.restoreFocus = ui.App.GetFocus()
+	if m.restoreFocus == nil {
+		m.restoreFocus = m.focus
+	}
 	// Focus is set in setPath after options are loaded
 
 	m.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			ui.PgsApp.SwitchToPage(m.parent)
-			ui.App.SetFocus(m.focus)
+			m.restoreFocusTarget()
 			return nil
 		case tcell.KeyEnter:
 			if m.dtype == INPUT_CLI {
 				ui.PgsApp.SwitchToPage(m.parent)
-				ui.App.SetFocus(m.focus)
+				m.restoreFocusTarget()
 				m.doOK()
 				return nil
 			} else {
@@ -587,7 +592,7 @@ func (m *Dialog) Popup() tview.Primitive {
 // ****************************************************************************
 func (m *Dialog) doYes() {
 	ui.PgsApp.SwitchToPage(m.parent)
-	ui.App.SetFocus(m.focus)
+	m.restoreFocusTarget()
 	if m.done != nil {
 		m.done(BUTTON_YES, m.idx)
 	}
@@ -598,7 +603,7 @@ func (m *Dialog) doYes() {
 // ****************************************************************************
 func (m *Dialog) doNo() {
 	ui.PgsApp.SwitchToPage(m.parent)
-	ui.App.SetFocus(m.focus)
+	m.restoreFocusTarget()
 	if m.done != nil {
 		m.done(BUTTON_NO, m.idx)
 	}
@@ -609,7 +614,7 @@ func (m *Dialog) doNo() {
 // ****************************************************************************
 func (m *Dialog) doCancel() {
 	ui.PgsApp.SwitchToPage(m.parent)
-	ui.App.SetFocus(m.focus)
+	m.restoreFocusTarget()
 	if m.done != nil {
 		m.done(BUTTON_CANCEL, m.idx)
 	}
@@ -620,7 +625,7 @@ func (m *Dialog) doCancel() {
 // ****************************************************************************
 func (m *Dialog) doOK() {
 	ui.PgsApp.SwitchToPage(m.parent)
-	ui.App.SetFocus(m.focus)
+	m.restoreFocusTarget()
 	switch m.dtype {
 	case INPUT_TEXT:
 		m.Value = m.GetFormItem(1).(*tview.InputField).GetText()
@@ -647,9 +652,23 @@ func (m *Dialog) doOK() {
 // ****************************************************************************
 // doDelete()
 // ****************************************************************************
+func (m *Dialog) restoreFocusTarget() {
+	if target := ui.PopupRestoreTarget(); target != nil {
+		ui.App.SetFocus(target)
+		return
+	}
+	if m.restoreFocus != nil {
+		ui.App.SetFocus(m.restoreFocus)
+		return
+	}
+	if m.focus != nil {
+		ui.App.SetFocus(m.focus)
+	}
+}
+
 func (m *Dialog) doDelete() {
 	ui.PgsApp.SwitchToPage(m.parent)
-	ui.App.SetFocus(m.focus)
+	m.restoreFocusTarget()
 	switch m.dtype {
 	case INPUT_TEXT:
 		m.Value = m.GetFormItem(1).(*tview.InputField).GetText()

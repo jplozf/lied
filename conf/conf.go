@@ -44,7 +44,7 @@ const (
 	FILE_MACROS             = "macros"
 	FILE_MRU                = "mru"
 	FOLDER_TEMPLATES        = "templates"
-	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F6=Previous F7=Next F8=Settings F9=Workspace F10=Menu F12=Exit"
+	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F6=Previous F7=Next F8=Settings F9=Context F10=Menu F12=Exit"
 	CKEY_LABELS             = "Ctrl+E=Explorer Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros Alt+Q=Shell"
 	DEFAULT_COLOR_ACCENT    = "#556B2F"
 	FILE_MAX_PREVIEW        = 1024

@@ -175,6 +175,26 @@ func (m Mode) String() string {
 // setUI()
 // setUI defines the user interface's fields
 // ****************************************************************************
+func PopupParentPage() string {
+	if PgsApp != nil {
+		frontPage, _ := PgsApp.GetFrontPage()
+		if frontPage == "fileManager" {
+			return "fileManager"
+		}
+	}
+	return GetCurrentScreen()
+}
+
+func PopupRestoreTarget() tview.Primitive {
+	if PgsApp != nil {
+		frontPage, _ := PgsApp.GetFrontPage()
+		if frontPage == "fileManager" && TblFiles != nil {
+			return TblFiles
+		}
+	}
+	return nil
+}
+
 func SetUI(fQuit Fn, hostname string) {
 	PgsApp = tview.NewPages()
 	tview.Styles.ContrastBackgroundColor = tcell.Color100

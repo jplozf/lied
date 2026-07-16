@@ -102,7 +102,7 @@ These options are as follows :
 
 ⯈ S E T T I N G S   M E N U   (F8)
 
-⯈ W O R K S P A C E   M E N U   (F9)
+⯈ C O N T E X T   M E N U   (F9)
 
 ⯈ M A I N   M E N U   (F10)
 
@@ -112,8 +112,12 @@ We already saw that the main panels are in order :
 ● The Editor panel :
 
 This is the main panel where you view the text file currently being edited. The source code language is automatically detected based on the file extension, and the syntax highlighting is adjusted accordingly. Relevant information regarding the file type—such as encoding, detected language, and line-ending format—is displayed in the top-right corner of this panel.
+
 For a binary file, this panel switches to hexadecimal view; the display then features the standard three-column layout, with addresses starting at 0 on the left, hexadecimal values ​​in the center, and the ASCII representation on the right. Currently, the hexadecimal view is read-only , no modifications are allowed.
+
 When opening an SQLite3 database file, this panel splits into two sections : an input field allows you to enter SQL code, which is then executed by pressing the F5 key or the Alt + Enter key combination. The query result is then displayed above, in the second part of the panel.
+
+There is another view available which is the Explorer view; This view is reachable through the Main menu F10 and then selecting the option Explorer. In this view, the layout resembles a standard file explorer, featuring a list of files and folders in the main area, along with relevant information about the selected item, a preview, and a summary of the current selection for copy, cut, and paste operations. The options available in the Context menu F9 differ in this view and will be detailed later in this document.
 
 ● The Open Files panel :
 
@@ -196,7 +200,7 @@ You can create as many macros as you want, and they will be available in the Mac
 * By default, this folder is populated by embedded templates.
 * You can add or remove templates as you wish. 
 * These templates can accept the same placeholders as macros.
-* To create a file from a template, open the Workspace menu by pressing the F9 key, and then select New file.
+* To create a file from a template, open the Context menu by pressing the F9 key, and then select New file.
 
 ⯈ S P E C I A L   C O M M A N D S
 These special commands are available when entering command in the Shell input box by pressing the F4 key.

@@ -723,7 +723,7 @@ func main() {
 // ShowMainMenu()
 // ****************************************************************************
 func ShowMainMenu() {
-	MnuMacros = MnuMacros.New(" "+conf.APP_NAME+" ", ui.GetCurrentScreen(), edit.CurrentWidget)
+	MnuMacros = MnuMacros.New(" "+conf.APP_NAME+" ", ui.PopupParentPage(), edit.CurrentWidget)
 	// Dynamic options (files currently open)
 	for i, e := range edit.OpenViews {
 		chk := false
@@ -763,7 +763,7 @@ func ShowMainMenu() {
 // ShowConfigMenu()
 // ****************************************************************************
 func ShowConfigMenu() {
-	MnuConfig = MnuConfig.New(" Settings ", ui.GetCurrentScreen(), edit.CurrentWidget)
+	MnuConfig = MnuConfig.New(" Settings ", ui.PopupParentPage(), edit.CurrentWidget)
 	// Menu Options
 	MnuConfig.AddItem("mnuCfgOrgSettings", "Organization", DoOrgConfigure, nil, true, false)
 	MnuConfig.AddItem("mnuCfgTheme", "Theme", InputConfigTheme, nil, true, false)
@@ -785,7 +785,7 @@ func ShowConfigMenu() {
 // ****************************************************************************
 func ShowWorkspaceMenu() {
 	ui.SetStatus(fmt.Sprintf("Current Workspace is %s", conf.ConfigGeneral.Workspace))
-	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.GetCurrentScreen(), edit.CurrentWidget)
+	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.PopupParentPage(), edit.CurrentWidget)
 	// Menu Options
 	MnuWorkspace.AddItem("mnuOpen", "Open Workspace", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)             // OK
@@ -829,7 +829,7 @@ func ShowLicensesMenu(f any) {
 	entries, err := conf.LicensesFS.ReadDir("licenses")
 	ui.SetStatus("Reading licences")
 	if err == nil {
-		MnuLicenses = MnuLicenses.New(" Licenses ", ui.GetCurrentScreen(), edit.CurrentWidget)
+		MnuLicenses = MnuLicenses.New(" Licenses ", ui.PopupParentPage(), edit.CurrentWidget)
 		for _, entry := range entries {
 			if !entry.IsDir() { // Only list files, not subdirectories
 				lic := entry.Name()
@@ -1113,7 +1113,7 @@ func ShowQuitDialog(p any) {
 // InputConfigTheme()
 // ****************************************************************************
 func InputConfigTheme(f any) {
-	MnuInputTheme = MnuInputTheme.New(" Themes ", ui.GetCurrentScreen(), edit.CurrentWidget)
+	MnuInputTheme = MnuInputTheme.New(" Themes ", ui.PopupParentPage(), edit.CurrentWidget)
 	arrThemes := []string{"atom-dark-tc",
 		"bubblegum",
 		"cmc-16",
@@ -1553,13 +1553,38 @@ func SwitchPrefixShell(dummy any) {
 func doDialogShell(f any) {
 	sh := ""
 	DlgInputShell = DlgInputShell.Command("Shell", // Title
-		"CWD:"+conf.ConfigGeneral.Workspace,
+		"CWD:"+shellWorkingDirectory(),
 		sh,
 		runShell,
 		0,
 		ui.GetCurrentScreen(), edit.CurrentWidget, ACmd) // Focus return
 	ui.PgsApp.AddPage("dlgInputShell", DlgInputShell.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgInputShell")
+}
+
+// ****************************************************************************
+// shellWorkingDirectory()
+// ****************************************************************************
+func shellWorkingDirectory() string {
+	if edit.CurrentView.FName != "" {
+		if info, err := os.Stat(edit.CurrentView.FName); err == nil {
+			if info.IsDir() {
+				return edit.CurrentView.FName
+			}
+			if dir := filepath.Dir(edit.CurrentView.FName); dir != "." && dir != "" {
+				return dir
+			}
+		} else if dir := filepath.Dir(edit.CurrentView.FName); dir != "." && dir != "" {
+			return dir
+		}
+	}
+	if conf.ConfigGeneral.Workspace != "" {
+		return conf.ConfigGeneral.Workspace
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
 }
 
 // ****************************************************************************
@@ -1778,6 +1803,7 @@ func shellEscape() {
 		}
 
 		cmd := exec.Command(shell)
+		cmd.Dir = shellWorkingDirectory()
 		cmd.Stdin = os.Stdin
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

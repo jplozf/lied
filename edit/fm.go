@@ -1054,7 +1054,10 @@ func ProceedFileAction() {
 			ui.TxtFileInfo.SetText("VERY BIG FILE, can't display a preview.")
 		}
 	} else { //  or type(readlink)==folder
-		CurrentView.FName = filepath.Join(CurrentView.FName, ui.TblFiles.GetCell(idx, 2).Text)
+		oldPath := CurrentView.FName
+		newPath := filepath.Join(oldPath, ui.TblFiles.GetCell(idx, 2).Text)
+		syncExplorerViewPath(oldPath, newPath)
+		CurrentView.FName = newPath
 		ui.FrmFileInfo.Clear()
 		nFiles, nFolders, err := utils.NumberOfFilesAndFolders(CurrentView.FName)
 		if err != nil {

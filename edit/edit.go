@@ -635,6 +635,41 @@ func UpdateGITInfos(f ViewScreen) ViewScreen {
 }
 
 // ****************************************************************************
+// focusPrimitiveForMode()
+// ****************************************************************************
+func focusPrimitiveForMode(mode Modes, editor tview.Primitive, fileManager tview.Primitive, sql tview.Primitive, hex tview.Primitive) tview.Primitive {
+	switch mode {
+	case SQLite3:
+		return sql
+	case Explorer:
+		return fileManager
+	case Binary:
+		return hex
+	default:
+		return editor
+	}
+}
+
+// ****************************************************************************
+// syncExplorerViewPath()
+// ****************************************************************************
+func syncExplorerViewPath(oldPath, newPath string) bool {
+	for i := range OpenViews {
+		if OpenViews[i].FName == oldPath {
+			OpenViews[i].FName = newPath
+			OpenViews[i].Mode = Explorer
+			break
+		}
+	}
+	if CurrentView.FName == oldPath {
+		CurrentView.FName = newPath
+		CurrentView.Mode = Explorer
+		return true
+	}
+	return false
+}
+
+// ****************************************************************************
 // SwitchOpenView()
 // ****************************************************************************
 func SwitchOpenView(fName string) {
@@ -658,19 +693,16 @@ func SwitchOpenView(fName string) {
 				ui.PgsApp.SwitchToPage("edit")
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				showTreeDB()
-				ui.App.SetFocus(ui.TxtPromptSQL)
 			} else {
 				if CurrentView.Mode == Explorer {
 					CurrentWidget = ui.TblFiles
 					ui.PgsApp.SwitchToPage("fileManager")
-					ui.App.SetFocus(ui.TblFiles)
 				} else {
 					if CurrentView.Mode == Text {
 						CurrentWidget = ui.EdtMain
 						ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 						ui.PgsApp.SwitchToPage("edit")
 						ui.PgsEditorContent.SwitchToPage("textEditor")
-						ui.App.SetFocus(CurrentWidget)
 
 						// Configure FrmFind for text files
 						ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
@@ -686,13 +718,16 @@ func SwitchOpenView(fName string) {
 						displayBinaryContent()
 						ui.PgsApp.SwitchToPage("edit")
 						ui.PgsEditorContent.SwitchToPage("hexViewer")
-						ui.App.SetFocus(CurrentWidget)
 						ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
 
 						// Configure FrmFind for binary files
 						ui.ConfigureFindFormForBinary(true)
 					}
 				}
+			}
+
+			if CurrentWidget != nil {
+				ui.App.SetFocus(CurrentWidget)
 			}
 
 			// FocusOnPath(fName)

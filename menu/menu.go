@@ -37,12 +37,13 @@ type MenuItem struct {
 
 type Menu struct {
 	*tview.Table
-	title  string
-	items  []MenuItem
-	parent string
-	focus  tview.Primitive
-	width  int
-	height int
+	title        string
+	items        []MenuItem
+	parent       string
+	focus        tview.Primitive
+	restoreFocus tview.Primitive
+	width        int
+	height       int
 }
 
 // ****************************************************************************
@@ -199,6 +200,10 @@ func (m *Menu) refresh() {
 // ****************************************************************************
 func (m *Menu) Popup() tview.Primitive {
 	m.refresh()
+	m.restoreFocus = ui.App.GetFocus()
+	if m.restoreFocus == nil {
+		m.restoreFocus = m.focus
+	}
 	m.Table.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		ui.SetStatus(fmt.Sprintf("Parent : %s", m.parent))
 		switch event.Key() {
@@ -206,13 +211,13 @@ func (m *Menu) Popup() tview.Primitive {
 			idx, _ := m.Table.GetSelection()
 			if m.items[idx].Enabled {
 				ui.PgsApp.SwitchToPage(m.parent)
-				ui.App.SetFocus(m.focus)
+				m.restoreFocusTarget()
 				m.items[idx].Done(m.items[idx].Param)
 			}
 			return nil
 		case tcell.KeyEsc:
 			ui.PgsApp.SwitchToPage(m.parent)
-			ui.App.SetFocus(m.focus)
+			m.restoreFocusTarget()
 			ui.SetStatus("Escape from menu")
 			return nil
 		}
@@ -226,4 +231,18 @@ func (m *Menu) Popup() tview.Primitive {
 			AddItem(m, m.height, 1, true).
 			AddItem(nil, 0, 1, false), m.width, 1, true).
 		AddItem(nil, 0, 1, false)
+}
+
+func (m *Menu) restoreFocusTarget() {
+	if target := ui.PopupRestoreTarget(); target != nil {
+		ui.App.SetFocus(target)
+		return
+	}
+	if m.restoreFocus != nil {
+		ui.App.SetFocus(m.restoreFocus)
+		return
+	}
+	if m.focus != nil {
+		ui.App.SetFocus(m.focus)
+	}
 }
