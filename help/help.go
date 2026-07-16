@@ -217,6 +217,9 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 !prev : Switch to the previous open file (same as F6)
 !clos : Closes the current document (same as CTRL + T)
 !save : Saves the current document being edited (same as CTRL + S)
+!expl : Open the Explorer / file manager for the current directory
+!edit : Open selected file from Explorer, or switch current file to text editor
+!serv : Open the Service Manager plugin (same as F11)
 !conf : Opens the Lied configuration file for editing
 !macr : Opens the macros file for editing
 !help : Displays the Help panel (same as F1)

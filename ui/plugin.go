@@ -15,6 +15,9 @@ package ui
 // IMPORTS
 // ****************************************************************************
 import (
+	"fmt"
+	"strings"
+
 	"github.com/rivo/tview"
 )
 
@@ -71,6 +74,21 @@ type ViewPlugin interface {
 
 	// KeyHints returns the two-line key-hint text shown in the LblKeys bar.
 	KeyHints() string
+
+	// InternalCommand returns the !command that launches this plugin (e.g.
+	// "!serv"). Return an empty string when the plugin is not command-launchable.
+	InternalCommand() string
+
+	// CommandOpensPluginView reports whether the internal command should open
+	// the plugin through edit.OpenPluginView instead of ExecuteInternalCommand.
+	CommandOpensPluginView() bool
+
+	// ExecuteInternalCommand runs the action associated with InternalCommand.
+	ExecuteInternalCommand() error
+
+	// ShowContextMenu displays the plugin-specific context menu.
+	// Return true when handled, false to let caller show fallback menu.
+	ShowContextMenu(defaultMenu func()) bool
 }
 
 // ****************************************************************************
@@ -78,10 +96,15 @@ type ViewPlugin interface {
 // ****************************************************************************
 
 var pluginRegistry = make(map[string]ViewPlugin)
+var pluginCommandRegistry = make(map[string]ViewPlugin)
 
 // RegisterPlugin stores a plugin in the global registry, keyed by plugin.ID().
 func RegisterPlugin(p ViewPlugin) {
 	pluginRegistry[p.ID()] = p
+	internalCommand := strings.TrimSpace(strings.ToLower(p.InternalCommand()))
+	if internalCommand != "" {
+		pluginCommandRegistry[internalCommand] = p
+	}
 }
 
 // GetPlugin retrieves a plugin by its ID.  The second return value is false
@@ -98,4 +121,16 @@ func AllPlugins() []ViewPlugin {
 		result = append(result, p)
 	}
 	return result
+}
+
+// GetPluginByInternalCommand retrieves a plugin by its !command.
+func GetPluginByInternalCommand(command string) (ViewPlugin, bool) {
+	p, ok := pluginCommandRegistry[strings.ToLower(strings.TrimSpace(command))]
+	return p, ok
+}
+
+// FormatInternalCommandError returns a consistent error message for command
+// execution failures.
+func FormatInternalCommandError(p ViewPlugin, err error) string {
+	return fmt.Sprintf("%s: %v", p.Title(), err)
 }

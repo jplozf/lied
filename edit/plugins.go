@@ -21,6 +21,7 @@ package edit
 // IMPORTS
 // ****************************************************************************
 import (
+	"errors"
 	"fmt"
 	"lied/conf"
 	"lied/ui"
@@ -133,6 +134,17 @@ func (p *TextModePlugin) KeyHints() string {
 	return conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS
 }
 
+func (p *TextModePlugin) InternalCommand() string       { return "" }
+func (p *TextModePlugin) CommandOpensPluginView() bool  { return false }
+func (p *TextModePlugin) ExecuteInternalCommand() error { return nil }
+func (p *TextModePlugin) ShowContextMenu(defaultMenu func()) bool {
+	if defaultMenu != nil {
+		defaultMenu()
+		return true
+	}
+	return false
+}
+
 // ****************************************************************************
 // hexModePlugin  (singleton – binary files are always read-only)
 // ****************************************************************************
@@ -142,9 +154,9 @@ type hexModePlugin struct{}
 // hexPlugin is the package-level singleton for all binary-file views.
 var hexPlugin = &hexModePlugin{}
 
-func (p *hexModePlugin) ID() string    { return "binary" }
-func (p *hexModePlugin) Title() string { return filepath.Base(CurrentView.FName) }
-func (p *hexModePlugin) Icon() string  { return conf.ICON_BINARY }
+func (p *hexModePlugin) ID() string                   { return "binary" }
+func (p *hexModePlugin) Title() string                { return filepath.Base(CurrentView.FName) }
+func (p *hexModePlugin) Icon() string                 { return conf.ICON_BINARY }
 func (p *hexModePlugin) FocusWidget() tview.Primitive { return ui.HexView }
 
 // Activate switches to the hex-viewer content page and refreshes the display.
@@ -180,6 +192,17 @@ func (p *hexModePlugin) KeyHints() string {
 	return conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS
 }
 
+func (p *hexModePlugin) InternalCommand() string       { return "" }
+func (p *hexModePlugin) CommandOpensPluginView() bool  { return false }
+func (p *hexModePlugin) ExecuteInternalCommand() error { return nil }
+func (p *hexModePlugin) ShowContextMenu(defaultMenu func()) bool {
+	if defaultMenu != nil {
+		defaultMenu()
+		return true
+	}
+	return false
+}
+
 // ****************************************************************************
 // sqlModePlugin  (singleton)
 // ****************************************************************************
@@ -189,9 +212,9 @@ type sqlModePlugin struct{}
 // sqlPlugin is the package-level singleton for all SQLite3 views.
 var sqlPlugin = &sqlModePlugin{}
 
-func (p *sqlModePlugin) ID() string    { return "sqlite3" }
-func (p *sqlModePlugin) Title() string { return filepath.Base(CurrentView.FName) }
-func (p *sqlModePlugin) Icon() string  { return conf.ICON_DATABASE }
+func (p *sqlModePlugin) ID() string                   { return "sqlite3" }
+func (p *sqlModePlugin) Title() string                { return filepath.Base(CurrentView.FName) }
+func (p *sqlModePlugin) Icon() string                 { return conf.ICON_DATABASE }
 func (p *sqlModePlugin) FocusWidget() tview.Primitive { return ui.TxtPromptSQL }
 
 // Activate switches to the SQL-viewer page and refreshes the schema tree.
@@ -226,6 +249,17 @@ func (p *sqlModePlugin) KeyHints() string {
 	return conf.FKEY_LABELS + "\nCtrl+O=Open Ctrl+S=Save"
 }
 
+func (p *sqlModePlugin) InternalCommand() string       { return "" }
+func (p *sqlModePlugin) CommandOpensPluginView() bool  { return false }
+func (p *sqlModePlugin) ExecuteInternalCommand() error { return nil }
+func (p *sqlModePlugin) ShowContextMenu(defaultMenu func()) bool {
+	if defaultMenu != nil {
+		defaultMenu()
+		return true
+	}
+	return false
+}
+
 // ****************************************************************************
 // explorerModePlugin  (singleton)
 // ****************************************************************************
@@ -235,9 +269,9 @@ type explorerModePlugin struct{}
 // explorerPlugin is the package-level singleton for all Explorer (directory) views.
 var explorerPlugin = &explorerModePlugin{}
 
-func (p *explorerModePlugin) ID() string    { return "explorer" }
-func (p *explorerModePlugin) Title() string { return filepath.Base(CurrentView.FName) }
-func (p *explorerModePlugin) Icon() string  { return conf.ICON_EXPLORER }
+func (p *explorerModePlugin) ID() string                   { return "explorer" }
+func (p *explorerModePlugin) Title() string                { return filepath.Base(CurrentView.FName) }
+func (p *explorerModePlugin) Icon() string                 { return conf.ICON_EXPLORER }
 func (p *explorerModePlugin) FocusWidget() tview.Primitive { return ui.TblFiles }
 
 // Activate switches to the file-manager page.
@@ -264,4 +298,81 @@ func (p *explorerModePlugin) StatusFields() ui.ViewStatus {
 
 func (p *explorerModePlugin) KeyHints() string {
 	return conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS
+}
+
+func (p *explorerModePlugin) InternalCommand() string      { return "!expl" }
+func (p *explorerModePlugin) CommandOpensPluginView() bool { return false }
+
+func (p *explorerModePlugin) ExecuteInternalCommand() error {
+	if CurrentView.FName == "" {
+		OpenView(conf.ConfigGeneral.Workspace, false)
+		return nil
+	}
+	if utils.IsDir(CurrentView.FName) {
+		OpenView(CurrentView.FName, false)
+		return nil
+	}
+	OpenView(filepath.Dir(CurrentView.FName), false)
+	return nil
+}
+
+func (p *explorerModePlugin) ShowContextMenu(defaultMenu func()) bool {
+	SetFilesMenu()
+	ShowFilesMenu()
+	return true
+}
+
+// editorCommandPlugin provides !edit as a plugin-registered internal command.
+// It is command-launchable only and does not create its own plugin view.
+type editorCommandPlugin struct{}
+
+func (p *editorCommandPlugin) ID() string                   { return "editor" }
+func (p *editorCommandPlugin) Title() string                { return "Editor" }
+func (p *editorCommandPlugin) Icon() string                 { return " " }
+func (p *editorCommandPlugin) FocusWidget() tview.Primitive { return ui.EdtMain }
+func (p *editorCommandPlugin) Activate()                    {}
+func (p *editorCommandPlugin) Open(_ any) error             { return nil }
+func (p *editorCommandPlugin) Close() error                 { return nil }
+func (p *editorCommandPlugin) IsDirty() bool                { return false }
+func (p *editorCommandPlugin) StatusFields() ui.ViewStatus  { return ui.ViewStatus{} }
+func (p *editorCommandPlugin) KeyHints() string             { return conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS }
+func (p *editorCommandPlugin) InternalCommand() string      { return "!edit" }
+func (p *editorCommandPlugin) CommandOpensPluginView() bool { return false }
+
+func (p *editorCommandPlugin) ExecuteInternalCommand() error {
+	if CurrentView.FName == "" {
+		return errors.New("no file selected to edit")
+	}
+
+	if CurrentView.Mode == Explorer {
+		idx, _ := ui.TblFiles.GetSelection()
+		if idx <= 0 {
+			return errors.New("select a file in explorer first")
+		}
+		DoEdit(nil)
+		return nil
+	}
+
+	if utils.IsDir(CurrentView.FName) {
+		return errors.New("current view is a directory, not a text file")
+	}
+
+	SwitchToEditor(CurrentView.FName)
+	return nil
+}
+
+func (p *editorCommandPlugin) ShowContextMenu(defaultMenu func()) bool {
+	if defaultMenu != nil {
+		defaultMenu()
+		return true
+	}
+	return false
+}
+
+var editorPlugin = &editorCommandPlugin{}
+
+// RegisterInternalCommandPlugins registers command-driven built-ins.
+func RegisterInternalCommandPlugins() {
+	ui.RegisterPlugin(explorerPlugin)
+	ui.RegisterPlugin(editorPlugin)
 }

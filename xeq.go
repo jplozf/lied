@@ -60,6 +60,16 @@ func Xeq(c string) {
 			// No, continue...
 			xCmd = xCmd[:5]
 			xCmd = strings.TrimSpace(xCmd)
+			if p, ok := ui.GetPluginByInternalCommand(xCmd); ok {
+				if p.CommandOpensPluginView() {
+					edit.OpenPluginView(p)
+				} else {
+					if err := p.ExecuteInternalCommand(); err != nil {
+						ui.SetStatus(ui.FormatInternalCommandError(p, err))
+					}
+				}
+				return
+			}
 			switch xCmd {
 			case "!quit", "!exit", "!bye":
 				ui.PgsApp.SwitchToPage("dlgQuit")

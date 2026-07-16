@@ -121,6 +121,7 @@ func init() {
 	// Register built-in plugins.  NewServiceManagerPlugin() also adds the
 	// plugin content page to ui.PgsEditorContent so it is available inside the
 	// standard editor frame without a full-page layout of its own.
+	edit.RegisterInternalCommandPlugins()
 	svcMgrPlugin = services.NewServiceManagerPlugin()
 	ui.RegisterPlugin(svcMgrPlugin)
 
@@ -868,6 +869,12 @@ func ShowWorkspaceMenu() {
 // ShowContextMenu()
 // ****************************************************************************
 func ShowContextMenu() {
+	if edit.CurrentView.Plugin != nil {
+		if edit.CurrentView.Plugin.ShowContextMenu(ShowWorkspaceMenu) {
+			return
+		}
+	}
+
 	switch edit.CurrentView.Mode {
 	case edit.Text:
 		ShowWorkspaceMenu()
@@ -881,8 +888,7 @@ func ShowContextMenu() {
 		edit.SetFilesMenu()
 		edit.ShowFilesMenu()
 	case edit.PluginView:
-		// Plugin views don't have file workspace operations.
-		// Show a minimal menu with just navigation / quit.
+		// Fallback for plugin views that don't implement a custom context menu.
 		ShowWorkspaceMenu()
 	}
 }

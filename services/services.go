@@ -20,6 +20,7 @@ package services
 // ****************************************************************************
 import (
 	"fmt"
+	"lied/menu"
 	"lied/ui"
 	"os/exec"
 	"strings"
@@ -133,6 +134,59 @@ func (p *ServiceManagerPlugin) KeyHints() string {
 		"[s] Start  [S] Stop  [r] Restart  [Enter] Journal  [F5] Refresh  [Ctrl+T] Close"
 }
 
+func (p *ServiceManagerPlugin) InternalCommand() string { return "!serv" }
+
+func (p *ServiceManagerPlugin) CommandOpensPluginView() bool { return true }
+
+func (p *ServiceManagerPlugin) ExecuteInternalCommand() error {
+	// Command is handled by opening plugin view in dispatcher.
+	return nil
+}
+
+func (p *ServiceManagerPlugin) ShowContextMenu(defaultMenu func()) bool {
+	m := (&menu.Menu{}).New(" Service Manager ", ui.PopupParentPage(), p.FocusWidget())
+	unit := p.SelectedUnit()
+	hasUnit := unit != ""
+
+	m.AddItem("mnuSvcRefresh", "Refresh services", func(any) {
+		p.Refresh()
+	}, nil, true, false)
+	m.AddSeparator()
+	m.AddItem("mnuSvcJournal", "Show journal", func(any) {
+		u := p.SelectedUnit()
+		if u != "" {
+			p.ShowJournal(u)
+		}
+	}, nil, hasUnit, false)
+	m.AddItem("mnuSvcStart", "Start service", func(any) {
+		p.runSystemctl("start")
+	}, nil, hasUnit, false)
+	m.AddItem("mnuSvcStop", "Stop service", func(any) {
+		p.runSystemctl("stop")
+	}, nil, hasUnit, false)
+	m.AddItem("mnuSvcRestart", "Restart service", func(any) {
+		p.runSystemctl("restart")
+	}, nil, hasUnit, false)
+
+	ui.PgsApp.AddPage("dlgServiceManagerMenu", m.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgServiceManagerMenu")
+	return true
+}
+
+func (p *ServiceManagerPlugin) runSystemctl(action string) {
+	unit := p.SelectedUnit()
+	if unit == "" {
+		ui.SetStatus("No service selected")
+		return
+	}
+	if err := exec.Command("systemctl", action, unit).Run(); err != nil {
+		ui.SetStatus(fmt.Sprintf("systemctl %s %s failed: %v", action, unit, err))
+		return
+	}
+	p.Refresh()
+	ui.SetStatus(fmt.Sprintf("Service %s: %s", unit, action))
+}
+
 // ****************************************************************************
 // Public helpers used by lied.go keyboard handlers
 // ****************************************************************************
@@ -172,11 +226,11 @@ func (p *ServiceManagerPlugin) Refresh() {
 		if len(fields) < 4 {
 			continue
 		}
-		unit   := fields[0]
-		load   := fields[1]
+		unit := fields[0]
+		load := fields[1]
 		active := fields[2]
-		sub    := fields[3]
-		desc   := ""
+		sub := fields[3]
+		desc := ""
 		if len(fields) > 4 {
 			desc = strings.Join(fields[4:], " ")
 		}
