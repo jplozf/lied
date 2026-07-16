@@ -54,6 +54,9 @@ const (
 	Shell
 	SQLite3
 	Explorer
+	// PluginView is used for views backed by a ui.ViewPlugin (e.g. Service Manager).
+	// The associated ViewScreen.Plugin field holds the concrete plugin instance.
+	PluginView
 )
 
 type ViewScreen struct {
@@ -73,6 +76,9 @@ type ViewScreen struct {
 	ContentBytes        []byte
 	HexContentDirty     bool
 	Database            *sql.DB
+	// Plugin holds the ViewPlugin implementation when Mode == PluginView.
+	// It is nil for all file-based modes (Text, Binary, SQLite3, Explorer).
+	Plugin ui.ViewPlugin
 }
 
 type found struct {
@@ -429,6 +435,44 @@ func NewFileOrLastFile(dir string) {
 }
 
 // ****************************************************************************
+// OpenPluginView()
+// OpenPluginView opens a plugin-backed view.  If the plugin is already in the
+// open-views list the existing entry is switched to; otherwise a new ViewScreen
+// with Mode == PluginView is created and appended.
+// ****************************************************************************
+func OpenPluginView(plugin ui.ViewPlugin) {
+	syntheticID := plugin.ID() + "://" + plugin.ID()
+
+	// Already open? Switch to it.
+	if isViewAlreadyOpen(syntheticID) {
+		SwitchOpenView(syntheticID)
+		return
+	}
+
+	var vs ViewScreen
+	vs.FName = syntheticID
+	vs.Mode = PluginView
+	vs.Plugin = plugin
+	vs.ReadWrite = false
+	vs.Follow = false
+
+	if err := plugin.Open(nil); err != nil {
+		ui.SetStatus(fmt.Sprintf("Error opening %s: %v", plugin.Title(), err))
+		return
+	}
+
+	OpenViews = append(OpenViews, vs)
+	CurrentView = vs
+	CurrentWidget = plugin.FocusWidget()
+
+	plugin.Activate()
+	ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+	ui.SetStatus(fmt.Sprintf("Opened %s", plugin.Title()))
+
+	go focusOpenFile(syntheticID)
+}
+
+// ****************************************************************************
 // UpdateStatus()
 // ****************************************************************************
 func UpdateStatus() {
@@ -492,7 +536,14 @@ func UpdateStatus() {
 					f = UpdateGITInfos(f)
 					OpenViews[i] = f
 				}
-				if f.Mode == SQLite3 {
+				if f.Mode == PluginView && f.Plugin != nil {
+					// Plugin-backed views: use the plugin's own icon / dirty flag.
+					icon := f.Plugin.Icon()
+					if f.Plugin.IsDirty() {
+						icon = conf.ICON_MODIFIED
+					}
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(icon))
+				} else if f.Mode == SQLite3 {
 					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
 				} else {
 					if f.Mode == Explorer {
@@ -510,7 +561,18 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
 
-			if CurrentView.Mode == SQLite3 {
+			if CurrentView.Mode == PluginView && CurrentView.Plugin != nil {
+				// DISPLAY PLUGIN STATUS
+				if count%20 == 0 {
+					fields := CurrentView.Plugin.StatusFields()
+					ui.LblReadWrite.SetText(fields.ReadWrite)
+					ui.LblCursor.SetText(fields.Cursor)
+					ui.LblDirty.SetText(fields.Dirty)
+					ui.LblPercent.SetText(fields.Percent)
+					ui.LblSize.SetText(fields.Size)
+					ui.LblScreen.SetText(fields.Encoding)
+				}
+			} else if CurrentView.Mode == SQLite3 {
 				// DISPLAY DATABASE STATUS
 				if count%20 == 0 {
 					ui.DisplayExifInfo(CurrentView.FName)
@@ -685,10 +747,16 @@ func SwitchOpenView(fName string) {
 			CurrentView.Follow = e.Follow
 			CurrentView.Mode = e.Mode
 			CurrentView.Database = e.Database
+			CurrentView.Plugin = e.Plugin
 			if utils.IsDir(CurrentView.FName) {
 				CurrentView.Mode = Explorer
 			}
-			if CurrentView.Mode == SQLite3 {
+			if CurrentView.Mode == PluginView && CurrentView.Plugin != nil {
+				// Plugin-backed view: delegate all page/focus switching to the plugin.
+				CurrentWidget = CurrentView.Plugin.FocusWidget()
+				CurrentView.Plugin.Activate()
+				ui.LblKeys.SetText(CurrentView.Plugin.KeyHints())
+			} else if CurrentView.Mode == SQLite3 {
 				CurrentWidget = ui.TxtPromptSQL
 				ui.PgsApp.SwitchToPage("edit")
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
@@ -817,7 +885,12 @@ func focusOpenFile(fName string) {
 func GetGlobalDirtyFlag() bool {
 	rc := false
 	for _, f := range OpenViews {
-		if f.FemtoBuffer.Modified() {
+		if f.Mode == PluginView {
+			if f.Plugin != nil && f.Plugin.IsDirty() {
+				rc = true
+				break
+			}
+		} else if f.FemtoBuffer != nil && f.FemtoBuffer.Modified() {
 			rc = true
 			break
 		}
@@ -957,7 +1030,8 @@ func CheckOpenFilesForSaving() {
 func startQuitSaveFlow() {
 	for ; quitFlowIndex < len(OpenViews); quitFlowIndex++ {
 		f := OpenViews[quitFlowIndex]
-		if f.Mode != SQLite3 && f.Mode != Explorer {
+		// Plugin views and non-text file modes never need saving.
+		if f.Mode != SQLite3 && f.Mode != Explorer && f.Mode != PluginView {
 			if f.FemtoBuffer.Modified() {
 				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
@@ -966,7 +1040,7 @@ func startQuitSaveFlow() {
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Mode != SQLite3 && f.Mode != Explorer {
+			if f.Mode != SQLite3 && f.Mode != Explorer && f.Mode != PluginView {
 				if f.FemtoBuffer.Len() == 0 {
 					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
 					err := os.Remove(f.FName)
@@ -1007,7 +1081,21 @@ func CloseCurrentFile() {
 	if n >= 0 {
 		onlyOnce = false
 		ui.SetStatus("Closing file " + CurrentView.FName)
-		if CurrentView.Mode == Text {
+		if CurrentView.Mode == PluginView {
+			// Plugin views: delegate teardown to the plugin, then remove from list.
+			if CurrentView.Plugin != nil {
+				CurrentView.Plugin.Close()
+			}
+			copy(OpenViews[n:], OpenViews[n+1:])
+			OpenViews = OpenViews[:len(OpenViews)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+			if n > 0 {
+				CurrentView = OpenViews[n-1]
+				SwitchOpenView(CurrentView.FName)
+			} else {
+				NewFile(conf.ConfigGeneral.Workspace)
+			}
+		} else if CurrentView.Mode == Text {
 			if CurrentView.FemtoBuffer.IsModified {
 				proposeToSaveFile(n, FLOW_CLOSE)
 			} else {
