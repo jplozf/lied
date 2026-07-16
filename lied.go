@@ -206,16 +206,11 @@ func main() {
 					promptVisible = false
 					ui.MidColumn.RemoveItem(ui.TxtPrompt)
 					edit.CloseThisFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT))
-					switch edit.CurrentView.Mode {
-					case edit.SQLite3:
-						ui.App.SetFocus(ui.TxtPromptSQL)
-					case edit.Binary:
-						ui.App.SetFocus(ui.HexView)
-					case edit.Text:
-						ui.App.SetFocus(ui.EdtMain)
-					case edit.Explorer:
-						ui.PgsApp.SwitchToPage("fileManager")
-						ui.App.SetFocus(ui.TrvExplorer)
+					if edit.CurrentView.Plugin != nil {
+						w := edit.CurrentView.Plugin.FocusWidget()
+						if w != nil {
+							ui.App.SetFocus(w)
+						}
 					}
 				}
 			} else {
@@ -386,13 +381,9 @@ func main() {
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenView(fName)
 			edit.SetFocusOnPath(fName)
-			if edit.CurrentView.Mode == edit.SQLite3 {
-				ui.App.SetFocus(ui.TxtPromptSQL)
-			} else {
-				if edit.CurrentView.Mode == edit.Binary {
-					ui.App.SetFocus(ui.HexView)
-				} else {
-					ui.App.SetFocus(ui.EdtMain)
+			if edit.CurrentView.Plugin != nil {
+				if w := edit.CurrentView.Plugin.FocusWidget(); w != nil {
+					ui.App.SetFocus(w)
 				}
 			}
 			return nil
@@ -1938,6 +1929,7 @@ func ShowManual() {
 		FemtoView:   femto.NewView(helpBuf),
 		ReadWrite:   false,
 	}
+	helpView.Plugin = edit.NewTextModePlugin(helpBuf)
 
 	/*
 		efiles = append(efiles, helpFile)
