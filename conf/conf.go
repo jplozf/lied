@@ -33,6 +33,7 @@ const (
 	ICON_MODIFIED           = "●"
 	ICON_DATABASE           = "⛁"
 	ICON_EXPLORER           = "🗁"
+	ICON_BINARY             = "⊟"
 	NEW_FILE_TEMPLATE       = "noname_"
 	NEW_DATABASE_TEMPLATE   = "db_"
 	FILE_LOG                = "lied.log"

@@ -34,6 +34,7 @@ import (
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
+	"lied/services"
 	"lied/sysinfo"
 	"lied/ui"
 	"lied/utils"
@@ -88,6 +89,9 @@ var (
 	activeCmd           *cmd.Cmd
 	promptVisible       bool
 	LocalClipboard      string
+	// svcMgrPlugin is the Service Manager plugin instance, created in init() and
+	// wired up in main().
+	svcMgrPlugin *services.ServiceManagerPlugin
 )
 
 // ****************************************************************************
@@ -113,6 +117,12 @@ func init() {
 	ui.PgsApp.AddPage("edit", ui.FlxEditor, true, true)
 	ui.PgsApp.AddPage("fileManager", ui.FlxFileManager, true, false)
 	ui.PgsApp.AddPage("dlgQuit", ui.DlgQuit, false, false)
+
+	// Register built-in plugins.  NewServiceManagerPlugin() also adds the
+	// plugin content page to ui.PgsEditorContent so it is available inside the
+	// standard editor frame without a full-page layout of its own.
+	svcMgrPlugin = services.NewServiceManagerPlugin()
+	ui.RegisterPlugin(svcMgrPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -184,6 +194,9 @@ func main() {
 			ShowMainMenu()
 		case tcell.KeyF3:
 			ShowGitMenu()
+		case tcell.KeyF11:
+			// Open the Service Manager plugin view.
+			edit.OpenPluginView(svcMgrPlugin)
 		case tcell.KeyF4:
 			if conf.ConfigGeneral.InteractiveShell {
 				if !promptVisible {
@@ -193,16 +206,11 @@ func main() {
 					promptVisible = false
 					ui.MidColumn.RemoveItem(ui.TxtPrompt)
 					edit.CloseThisFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT))
-					switch edit.CurrentView.Mode {
-					case edit.SQLite3:
-						ui.App.SetFocus(ui.TxtPromptSQL)
-					case edit.Binary:
-						ui.App.SetFocus(ui.HexView)
-					case edit.Text:
-						ui.App.SetFocus(ui.EdtMain)
-					case edit.Explorer:
-						ui.PgsApp.SwitchToPage("fileManager")
-						ui.App.SetFocus(ui.TrvExplorer)
+					if edit.CurrentView.Plugin != nil {
+						w := edit.CurrentView.Plugin.FocusWidget()
+						if w != nil {
+							ui.App.SetFocus(w)
+						}
 					}
 				}
 			} else {
@@ -373,13 +381,9 @@ func main() {
 			fName := ui.TblOpenFiles.GetCell(idx, 3).Text
 			edit.SwitchOpenView(fName)
 			edit.SetFocusOnPath(fName)
-			if edit.CurrentView.Mode == edit.SQLite3 {
-				ui.App.SetFocus(ui.TxtPromptSQL)
-			} else {
-				if edit.CurrentView.Mode == edit.Binary {
-					ui.App.SetFocus(ui.HexView)
-				} else {
-					ui.App.SetFocus(ui.EdtMain)
+			if edit.CurrentView.Plugin != nil {
+				if w := edit.CurrentView.Plugin.FocusWidget(); w != nil {
+					ui.App.SetFocus(w)
 				}
 			}
 			return nil
@@ -675,6 +679,53 @@ func main() {
 	initializeTemplatesFolder()
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 
+	// Service Manager plugin keyboard handler.
+	// s=start, S=stop, r=restart, R/F5=refresh, Enter=show journal, Ctrl+T=close.
+	svcMgrPlugin.TblServices.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		unit := svcMgrPlugin.SelectedUnit()
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		case tcell.KeyF5:
+			svcMgrPlugin.Refresh()
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyEnter:
+			if unit != "" {
+				svcMgrPlugin.ShowJournal(unit)
+			}
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 's':
+				if unit != "" {
+					exec.Command("systemctl", "start", unit).Run() //nolint:errcheck
+					svcMgrPlugin.Refresh()
+				}
+				return nil
+			case 'S':
+				if unit != "" {
+					exec.Command("systemctl", "stop", unit).Run() //nolint:errcheck
+					svcMgrPlugin.Refresh()
+				}
+				return nil
+			case 'r':
+				if unit != "" {
+					exec.Command("systemctl", "restart", unit).Run() //nolint:errcheck
+					svcMgrPlugin.Refresh()
+				}
+				return nil
+			case 'R':
+				svcMgrPlugin.Refresh()
+				return nil
+			}
+		}
+		return event
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -730,9 +781,19 @@ func ShowMainMenu() {
 		if e.FName == edit.CurrentView.FName {
 			chk = true
 		}
-		sha, _ := utils.GetSha256(e.FName)
-		MnuMacros.AddItem(sha,
-			fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName)),
+		// Plugin views have synthetic FNames that don't exist on disk, so we use
+		// the plugin ID as the menu item key and title instead of a file hash.
+		var itemKey, itemLabel string
+		if e.Mode == edit.PluginView && e.Plugin != nil {
+			itemKey = e.Plugin.ID()
+			itemLabel = fmt.Sprintf("%2d) %s %s", i+1, e.Plugin.Icon(), e.Plugin.Title())
+		} else {
+			sha, _ := utils.GetSha256(e.FName)
+			itemKey = sha
+			itemLabel = fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName))
+		}
+		MnuMacros.AddItem(itemKey,
+			itemLabel,
 			edit.SwitchAnyFile,
 			e.FName,
 			true,
@@ -752,6 +813,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuGitAdd", "Git add…", DoGitAdd, edit.CurrentView.FName, !IsFileGitTracked(edit.CurrentView.FName), false)
 	MnuMacros.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -818,6 +880,10 @@ func ShowContextMenu() {
 	case edit.Explorer:
 		edit.SetFilesMenu()
 		edit.ShowFilesMenu()
+	case edit.PluginView:
+		// Plugin views don't have file workspace operations.
+		// Show a minimal menu with just navigation / quit.
+		ShowWorkspaceMenu()
 	}
 }
 
@@ -1016,6 +1082,10 @@ func saveSettings() {
 		defer fMRU.Close()
 		wMRU := bufio.NewWriter(fMRU)
 		for _, oFile := range edit.OpenViews {
+			// Plugin views use synthetic paths — skip them; only persist real files.
+			if oFile.Mode == edit.PluginView {
+				continue
+			}
 			// We record only existing files
 			if utils.IsFileExist(oFile.FName) {
 				rw := "0,"
@@ -1077,8 +1147,14 @@ func saveSettings() {
 	sec.NewKey("CleanUpOnExit", utils.If(conf.ConfigGeneral.CleanUpOnExit, "True", "False"))
 	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
 	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
-	sec.NewKey("CurrentFile", edit.CurrentView.FName)
-	if edit.CurrentView.Mode != edit.SQLite3 && edit.CurrentView.Mode != edit.Explorer && edit.CurrentView.FemtoBuffer != nil {
+	// Don't persist plugin-view synthetic paths as the current file — fall back
+	// to an empty string so the next session starts fresh.
+	currentFile := edit.CurrentView.FName
+	if edit.CurrentView.Mode == edit.PluginView {
+		currentFile = ""
+	}
+	sec.NewKey("CurrentFile", currentFile)
+	if edit.CurrentView.Mode != edit.SQLite3 && edit.CurrentView.Mode != edit.Explorer && edit.CurrentView.Mode != edit.PluginView && edit.CurrentView.FemtoBuffer != nil {
 		sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.X))
 		sec.NewKey("CurrentY", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.Y))
 	} else {
@@ -1107,6 +1183,15 @@ func ShowQuitDialog(p any) {
 	} else {
 		appQuit()
 	}
+}
+
+// ****************************************************************************
+// openServiceManager()
+// openServiceManager is the menu.Fn-compatible wrapper that opens the Service
+// Manager plugin view from the main menu.
+// ****************************************************************************
+func openServiceManager(_ any) {
+	edit.OpenPluginView(svcMgrPlugin)
 }
 
 // ****************************************************************************
@@ -1844,6 +1929,7 @@ func ShowManual() {
 		FemtoView:   femto.NewView(helpBuf),
 		ReadWrite:   false,
 	}
+	helpView.Plugin = edit.NewTextModePlugin(helpBuf)
 
 	/*
 		efiles = append(efiles, helpFile)

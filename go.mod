@@ -14,7 +14,7 @@ require (
 )
 
 require (
-	github.com/atotto/clipboard v0.1.4 // indirect
+	github.com/atotto/clipboard v0.1.4
 	github.com/elastic/go-sysinfo v1.15.3
 	github.com/elastic/go-windows v1.0.2 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect

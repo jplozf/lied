@@ -54,6 +54,9 @@ const (
 	Shell
 	SQLite3
 	Explorer
+	// PluginView is used for views backed by a ui.ViewPlugin (e.g. Service Manager).
+	// The associated ViewScreen.Plugin field holds the concrete plugin instance.
+	PluginView
 )
 
 type ViewScreen struct {
@@ -73,6 +76,9 @@ type ViewScreen struct {
 	ContentBytes        []byte
 	HexContentDirty     bool
 	Database            *sql.DB
+	// Plugin holds the ViewPlugin implementation when Mode == PluginView.
+	// It is nil for all file-based modes (Text, Binary, SQLite3, Explorer).
+	Plugin ui.ViewPlugin
 }
 
 type found struct {
@@ -147,18 +153,8 @@ func SwitchToEditor(fName string) {
 	// ShowTreeDir(filepath.Dir(fName))
 	// ShowTreeDir("/")
 	OpenView(fName, true)
-	if CurrentView.Mode == SQLite3 {
-		ui.App.SetFocus(ui.FlxSQLite)
-	} else {
-		if CurrentView.Mode == Explorer {
-			ui.App.SetFocus(ui.TblFiles)
-		} else {
-			if CurrentView.Mode == Binary {
-				ui.App.SetFocus(ui.HexView)
-			} else {
-				ui.App.SetFocus(ui.EdtMain)
-			}
-		}
+	if CurrentView.Plugin != nil {
+		ui.App.SetFocus(CurrentView.Plugin.FocusWidget())
 	}
 }
 
@@ -196,6 +192,7 @@ func OpenView(fName string, rw bool) {
 				CurrentView.Mode = Explorer
 				CurrentView.ReadWrite = false
 				CurrentView.Follow = false
+				CurrentView.Plugin = explorerPlugin
 				OpenViews = append(OpenViews, CurrentView)
 				//
 				go UpdateStatus()
@@ -222,6 +219,7 @@ func OpenView(fName string, rw bool) {
 				CurrentView.Encoding = "SQLite3"
 				// var errDB error
 				CurrentView.Database, _ = sql.Open("sqlite3", CurrentView.FName)
+				CurrentView.Plugin = sqlPlugin
 				OpenViews = append(OpenViews, CurrentView)
 				// defer CloseDB(CurrentFile.Database)
 				go UpdateStatus()
@@ -252,6 +250,7 @@ func OpenView(fName string, rw bool) {
 				CurrentView.Encoding = "Binary"
 				CurrentView.ContentBytes = content
 				CurrentView.HexContentDirty = true // Mark for refresh
+				CurrentView.Plugin = hexPlugin
 				OpenViews = append(OpenViews, CurrentView)
 				go UpdateStatus()
 				go focusOpenFile(fName)
@@ -299,6 +298,7 @@ func OpenView(fName string, rw bool) {
 				ui.EdtMain.SetTitleAlign(tview.AlignRight)
 				ui.LblScreen.SetText(CurrentView.Encoding)
 				CurrentView = UpdateGITInfos(CurrentView)
+				CurrentView.Plugin = NewTextModePlugin(CurrentView.FemtoBuffer)
 				OpenViews = append(OpenViews, CurrentView)
 				go UpdateStatus()
 				go focusOpenFile(fName)
@@ -429,6 +429,44 @@ func NewFileOrLastFile(dir string) {
 }
 
 // ****************************************************************************
+// OpenPluginView()
+// OpenPluginView opens a plugin-backed view.  If the plugin is already in the
+// open-views list the existing entry is switched to; otherwise a new ViewScreen
+// with Mode == PluginView is created and appended.
+// ****************************************************************************
+func OpenPluginView(plugin ui.ViewPlugin) {
+	syntheticID := plugin.ID() + "://" + plugin.ID()
+
+	// Already open? Switch to it.
+	if isViewAlreadyOpen(syntheticID) {
+		SwitchOpenView(syntheticID)
+		return
+	}
+
+	var vs ViewScreen
+	vs.FName = syntheticID
+	vs.Mode = PluginView
+	vs.Plugin = plugin
+	vs.ReadWrite = false
+	vs.Follow = false
+
+	if err := plugin.Open(nil); err != nil {
+		ui.SetStatus(fmt.Sprintf("Error opening %s: %v", plugin.Title(), err))
+		return
+	}
+
+	OpenViews = append(OpenViews, vs)
+	CurrentView = vs
+	CurrentWidget = plugin.FocusWidget()
+
+	plugin.Activate()
+	ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+	ui.SetStatus(fmt.Sprintf("Opened %s", plugin.Title()))
+
+	go focusOpenFile(syntheticID)
+}
+
+// ****************************************************************************
 // UpdateStatus()
 // ****************************************************************************
 func UpdateStatus() {
@@ -456,32 +494,21 @@ func UpdateStatus() {
 			}
 			ui.TxtCurrentEditName.SetText(dirPath + "[yellow]" + filepath.Base(relativePath))
 
-			if CurrentView.Mode != SQLite3 && CurrentView.Mode != Explorer {
-				if CurrentView.FemtoBuffer.Modified() {
-					// status = conf.ICON_MODIFIED
-					ui.LblDirty.SetText("MODIFIED")
-				} else {
-					// status = " "
-					ui.LblDirty.SetText("")
-				}
-			}
-			CurrentView = UpdateGITInfos(CurrentView)
-			ui.LblGITBranch.SetText("⎇  " + CurrentView.GitBranch)
-			ui.LblCommit.SetText("⟟ " + CurrentView.GitCommit)
-			ui.LblGITStatus.SetText("🗨  " + CurrentView.GitStatus)
-
-			if CurrentView.Mode != SQLite3 && CurrentView.Mode != Explorer {
+			if CurrentView.Mode == Text && CurrentView.FemtoBuffer != nil {
+				// Refresh title and handle Follow (tail) mode.
 				ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentView.Encoding, CurrentView.FemtoBuffer.Settings["filetype"].(string), CurrentView.FemtoBuffer.Settings["fileformat"].(string)))
 				if CurrentView.Follow {
 					_, _, _, lines := ui.EdtMain.GetInnerRect()
-					ui.LblReadWrite.SetText("FL")
 					c := exec.Command("tail", "-n", strconv.Itoa(lines-1), CurrentView.FName)
 					output, _ := c.Output()
 					CurrentView.FemtoBuffer = femto.NewBufferFromString(string(output), CurrentView.FName)
 					CurrentView.FemtoBuffer.Cursor.Y = CurrentView.FemtoBuffer.End().Y
+					// Keep the per-entry plugin's buffer pointer in sync.
+					if p, ok := CurrentView.Plugin.(*TextModePlugin); ok {
+						p.buf = CurrentView.FemtoBuffer
+					}
 					ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 				}
-				ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentView.FemtoBuffer.Len())))
 			}
 
 			ui.TblOpenFiles.Clear()
@@ -492,100 +519,55 @@ func UpdateStatus() {
 					f = UpdateGITInfos(f)
 					OpenViews[i] = f
 				}
-				if f.Mode == SQLite3 {
-					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_DATABASE+f.GitFileStatus))
-				} else {
-					if f.Mode == Explorer {
-						ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_EXPLORER+f.GitFileStatus))
-					} else {
-						if f.FemtoBuffer.Modified() {
-							ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(conf.ICON_MODIFIED+f.GitFileStatus))
-						} else {
-							ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
-						}
+				// All modes now have a plugin; use it for icon and dirty flag.
+				if f.Plugin != nil {
+					icon := f.Plugin.Icon()
+					if f.Plugin.IsDirty() {
+						icon = conf.ICON_MODIFIED
 					}
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(icon+f.GitFileStatus))
+				} else {
+					// Fallback for views created without a plugin (should not happen).
+					ui.TblOpenFiles.SetCell(i, 0, tview.NewTableCell(" "+f.GitFileStatus))
 				}
 				ui.TblOpenFiles.SetCell(i, 1, tview.NewTableCell(filepath.Base(f.FName)))
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
 
-			if CurrentView.Mode == SQLite3 {
-				// DISPLAY DATABASE STATUS
-				if count%20 == 0 {
+			// Uniform status-bar update: every plugin provides the label values.
+			if CurrentView.Plugin != nil {
+				fields := CurrentView.Plugin.StatusFields()
+				ui.LblReadWrite.SetText(fields.ReadWrite)
+				ui.LblCursor.SetText(fields.Cursor)
+				ui.LblDirty.SetText(fields.Dirty)
+				ui.LblPercent.SetText(fields.Percent)
+				ui.LblSize.SetText(fields.Size)
+				ui.LblScreen.SetText(fields.Encoding)
+			}
+
+			// Heavy per-mode operations executed only every 20 ticks.
+			if count%20 == 0 {
+				if CurrentView.Mode == Text && CurrentView.FemtoBuffer != nil {
+					// Populate TblOutline with the function/symbol list.
+					ui.TblOutline.Clear()
+					var funcs = GetFuncs(CurrentView.FemtoBuffer.String(), CurrentView.FemtoBuffer.Settings["filetype"].(string))
+					sort.Slice(funcs, func(i, j int) bool {
+						a := funcs[i]
+						b := funcs[j]
+						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+					})
+					for i, f := range funcs {
+						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+					}
+					if !onlyOnce {
+						ui.TblOutline.ScrollToBeginning()
+						onlyOnce = true
+					}
+				} else if CurrentView.Mode == SQLite3 {
+					// Show file metadata in the outline panel for databases.
 					ui.DisplayExifInfo(CurrentView.FName)
-					fi, _ := os.Stat(CurrentView.FName)
-					ui.LblSize.SetText(utils.HumanFileSize(float64(fi.Size())))
-					ui.LblCursor.SetText("SQLite3")
-					ui.LblReadWrite.SetText("RW")
-					ui.LblPercent.SetText("")
-					ui.LblDirty.SetText("")
-				}
-			} else {
-				if CurrentView.Mode == Explorer {
-					// DISPLAY EXPLORER STATUS
-					if count%20 == 0 {
-						ui.LblSize.SetText("")
-						ui.LblCursor.SetText("Explorer")
-						ui.LblReadWrite.SetText("--")
-						ui.LblPercent.SetText("")
-						ui.LblDirty.SetText("")
-					}
-				} else {
-					if CurrentView.Mode == Binary {
-						ui.LblSize.SetText(utils.HumanFileSize(float64(len(CurrentView.ContentBytes))))
-						ui.EdtMain.SetTitle(fmt.Sprintf("[ %s ]", CurrentView.Encoding))
-						ui.LblScreen.SetText(CurrentView.Encoding)
-						ui.LblReadWrite.SetText("RO")
-						ui.LblDirty.SetText("")
-					} else {
-						x := CurrentView.FemtoBuffer.Cursor.X + 1
-						y := CurrentView.FemtoBuffer.Cursor.Y + 1
-						ui.LblCursor.SetText(fmt.Sprintf("Ln %d, Col %d", y, x))
-						ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentView.FemtoBuffer.Cursor.Y)/float32(CurrentView.FemtoBuffer.NumLines))*100.0)))
-						if CurrentView.ReadWrite {
-							ui.LblReadWrite.SetText("RW")
-						} else {
-							ui.LblReadWrite.SetText("RO")
-						}
-
-						// Get funcs for current file and populate the TblOutline
-						if count%20 == 0 {
-							ui.TblOutline.Clear()
-							var funcs = GetFuncs(CurrentView.FemtoBuffer.String(), CurrentView.FemtoBuffer.Settings["filetype"].(string))
-							sort.Slice(funcs, func(i, j int) bool {
-								a := funcs[i]
-								b := funcs[j]
-								return strings.ToUpper(a.name) < strings.ToUpper(b.name)
-							})
-
-							// ui.TblOutline.SetCell(0, 0, tview.NewTableCell("Line").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-							// ui.TblOutline.SetCell(0, 1, tview.NewTableCell("Function").SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
-							for i, f := range funcs {
-								ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
-								ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
-							}
-							if !onlyOnce {
-								ui.TblOutline.ScrollToBeginning()
-								onlyOnce = true
-							}
-						}
-						// Original text file status updates
-						if CurrentView.FemtoBuffer.Modified() {
-							ui.LblDirty.SetText("MODIFIED")
-						} else {
-							ui.LblDirty.SetText("")
-						}
-						ui.EdtMain.SetTitle(fmt.Sprintf("[ %s %s %s ]", CurrentView.Encoding, CurrentView.FemtoBuffer.Settings["filetype"].(string), CurrentView.FemtoBuffer.Settings["fileformat"].(string)))
-						ui.LblScreen.SetText(CurrentView.Encoding)
-						if CurrentView.ReadWrite {
-							ui.LblReadWrite.SetText("RW")
-						} else {
-							ui.LblReadWrite.SetText("RO")
-						}
-						ui.LblSize.SetText(utils.HumanFileSize(float64(CurrentView.FemtoBuffer.Len())))
-						ui.LblPercent.SetText(fmt.Sprintf("%d%%", int((float32(CurrentView.FemtoBuffer.Cursor.Y)/float32(CurrentView.FemtoBuffer.NumLines))*100.0)))
-					}
 				}
 			}
 
@@ -635,22 +617,6 @@ func UpdateGITInfos(f ViewScreen) ViewScreen {
 }
 
 // ****************************************************************************
-// focusPrimitiveForMode()
-// ****************************************************************************
-func focusPrimitiveForMode(mode Modes, editor tview.Primitive, fileManager tview.Primitive, sql tview.Primitive, hex tview.Primitive) tview.Primitive {
-	switch mode {
-	case SQLite3:
-		return sql
-	case Explorer:
-		return fileManager
-	case Binary:
-		return hex
-	default:
-		return editor
-	}
-}
-
-// ****************************************************************************
 // syncExplorerViewPath()
 // ****************************************************************************
 func syncExplorerViewPath(oldPath, newPath string) bool {
@@ -685,45 +651,22 @@ func SwitchOpenView(fName string) {
 			CurrentView.Follow = e.Follow
 			CurrentView.Mode = e.Mode
 			CurrentView.Database = e.Database
+			CurrentView.Plugin = e.Plugin
 			if utils.IsDir(CurrentView.FName) {
 				CurrentView.Mode = Explorer
 			}
-			if CurrentView.Mode == SQLite3 {
-				CurrentWidget = ui.TxtPromptSQL
-				ui.PgsApp.SwitchToPage("edit")
-				ui.PgsEditorContent.SwitchToPage("sqlViewer")
-				showTreeDB()
+			// Uniform dispatch: every mode now has a plugin that owns its
+			// page/focus switching, key hints and focus widget.
+			if CurrentView.Plugin != nil {
+				CurrentWidget = CurrentView.Plugin.FocusWidget()
+				CurrentView.Plugin.Activate()
+				ui.LblKeys.SetText(CurrentView.Plugin.KeyHints())
 			} else {
-				if CurrentView.Mode == Explorer {
-					CurrentWidget = ui.TblFiles
-					ui.PgsApp.SwitchToPage("fileManager")
-				} else {
-					if CurrentView.Mode == Text {
-						CurrentWidget = ui.EdtMain
-						ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
-						ui.PgsApp.SwitchToPage("edit")
-						ui.PgsEditorContent.SwitchToPage("textEditor")
-
-						// Configure FrmFind for text files
-						ui.TxtReplace.SetDisabled(!ui.ChkToggleReplace.IsChecked())
-						ui.ChkToggleReplace.SetDisabled(false)
-						ui.FrmFind.GetButton(2).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // Replace button
-						ui.FrmFind.GetButton(3).SetDisabled(!ui.ChkToggleReplace.IsChecked()) // All button
-						ui.DpdSearchType.SetDisabled(true)
-						ui.DpdSearchType.SetCurrentOption(0) // Default to ASCII
-						ui.ChkCase.SetDisabled(false)
-					} else {
-						CurrentWidget = ui.HexView
-						CurrentView.HexContentDirty = true // Mark for refresh
-						displayBinaryContent()
-						ui.PgsApp.SwitchToPage("edit")
-						ui.PgsEditorContent.SwitchToPage("hexViewer")
-						ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
-
-						// Configure FrmFind for binary files
-						ui.ConfigureFindFormForBinary(true)
-					}
-				}
+				// Fallback for views that were created without a plugin (should
+				// not happen for properly initialised ViewScreens).
+				CurrentWidget = ui.EdtMain
+				ui.PgsApp.SwitchToPage("edit")
+				ui.PgsEditorContent.SwitchToPage("textEditor")
 			}
 
 			if CurrentWidget != nil {
@@ -817,7 +760,12 @@ func focusOpenFile(fName string) {
 func GetGlobalDirtyFlag() bool {
 	rc := false
 	for _, f := range OpenViews {
-		if f.FemtoBuffer.Modified() {
+		if f.Mode == PluginView {
+			if f.Plugin != nil && f.Plugin.IsDirty() {
+				rc = true
+				break
+			}
+		} else if f.FemtoBuffer != nil && f.FemtoBuffer.Modified() {
 			rc = true
 			break
 		}
@@ -957,7 +905,8 @@ func CheckOpenFilesForSaving() {
 func startQuitSaveFlow() {
 	for ; quitFlowIndex < len(OpenViews); quitFlowIndex++ {
 		f := OpenViews[quitFlowIndex]
-		if f.Mode != SQLite3 && f.Mode != Explorer {
+		// Plugin views and non-text file modes never need saving.
+		if f.Mode != SQLite3 && f.Mode != Explorer && f.Mode != PluginView {
 			if f.FemtoBuffer.Modified() {
 				ui.SetStatus(fmt.Sprintf("File %s is modified", f.FName))
 				proposeToSaveFile(quitFlowIndex, FLOW_QUIT)
@@ -966,7 +915,7 @@ func startQuitSaveFlow() {
 		}
 		// Delete empty files
 		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Mode != SQLite3 && f.Mode != Explorer {
+			if f.Mode != SQLite3 && f.Mode != Explorer && f.Mode != PluginView {
 				if f.FemtoBuffer.Len() == 0 {
 					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
 					err := os.Remove(f.FName)
@@ -1007,7 +956,21 @@ func CloseCurrentFile() {
 	if n >= 0 {
 		onlyOnce = false
 		ui.SetStatus("Closing file " + CurrentView.FName)
-		if CurrentView.Mode == Text {
+		if CurrentView.Mode == PluginView {
+			// Plugin views: delegate teardown to the plugin, then remove from list.
+			if CurrentView.Plugin != nil {
+				CurrentView.Plugin.Close()
+			}
+			copy(OpenViews[n:], OpenViews[n+1:])
+			OpenViews = OpenViews[:len(OpenViews)-1]
+			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+			if n > 0 {
+				CurrentView = OpenViews[n-1]
+				SwitchOpenView(CurrentView.FName)
+			} else {
+				NewFile(conf.ConfigGeneral.Workspace)
+			}
+		} else if CurrentView.Mode == Text {
 			if CurrentView.FemtoBuffer.IsModified {
 				proposeToSaveFile(n, FLOW_CLOSE)
 			} else {
@@ -1104,6 +1067,9 @@ func SwitchFollow(f any) {
 		} else {
 			CurrentView.FemtoBuffer = femto.NewBufferFromString(string(content), CurrentView.FName)
 			CurrentView.FemtoBuffer.Cursor.Y = CurrentView.FemtoBuffer.End().Y
+			if p, ok := CurrentView.Plugin.(*TextModePlugin); ok {
+				p.buf = CurrentView.FemtoBuffer
+			}
 			ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 		}
 	}
@@ -1758,10 +1724,17 @@ func ReplaceAll() {
 		cursor := CurrentView.FemtoBuffer.Cursor // Sauvegarder la position du curseur
 		CurrentView.FemtoBuffer = femto.NewBufferFromString(newBufferContent, CurrentView.FName)
 		CurrentView.FemtoBuffer.IsModified = true
+		// Keep the per-entry plugin's buffer pointer in sync.
+		if p, ok := CurrentView.Plugin.(*TextModePlugin); ok {
+			p.buf = CurrentView.FemtoBuffer
+		}
 
 		for i, e := range OpenViews {
 			if e.FName == CurrentView.FName {
 				OpenViews[i].FemtoBuffer = CurrentView.FemtoBuffer
+				if p, ok := OpenViews[i].Plugin.(*TextModePlugin); ok {
+					p.buf = OpenViews[i].FemtoBuffer
+				}
 				break
 			}
 		}
