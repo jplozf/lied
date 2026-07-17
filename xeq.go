@@ -121,7 +121,7 @@ func Xeq(c string) {
 			}
 			xCmd := cmd.NewCmdOptions(cmdOptions, sCmd[0], sCmd[1:]...)
 			activeCmd = xCmd // Assign to the shared variable
-			xCmd.Dir = conf.ConfigGeneral.Workspace
+			xCmd.Dir = shellWorkingDirectory()
 
 			// 2. Open the log file once (use O_APPEND)
 			fOut, err := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

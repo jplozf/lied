@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
-	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -1748,25 +1747,7 @@ func doDialogShell(f any) {
 // shellWorkingDirectory()
 // ****************************************************************************
 func shellWorkingDirectory() string {
-	if edit.CurrentView.FName != "" {
-		if info, err := os.Stat(edit.CurrentView.FName); err == nil {
-			if info.IsDir() {
-				return edit.CurrentView.FName
-			}
-			if dir := filepath.Dir(edit.CurrentView.FName); dir != "." && dir != "" {
-				return dir
-			}
-		} else if dir := filepath.Dir(edit.CurrentView.FName); dir != "." && dir != "" {
-			return dir
-		}
-	}
-	if conf.ConfigGeneral.Workspace != "" {
-		return conf.ConfigGeneral.Workspace
-	}
-	if wd, err := os.Getwd(); err == nil {
-		return wd
-	}
-	return "."
+	return edit.PreferredWorkingDirectory()
 }
 
 // ****************************************************************************
@@ -1861,7 +1842,8 @@ func DoExplorer(f any) {
 		edit.ShowFiles()
 		ui.App.SetFocus(ui.TblFiles)
 	*/
-	edit.OpenView(path.Dir(f.(string)), false)
+	_ = f
+	edit.OpenView(edit.PreferredWorkingDirectory(), false)
 }
 
 // ****************************************************************************

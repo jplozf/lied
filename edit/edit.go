@@ -129,7 +129,12 @@ var (
 	// AJOUTÉ : La dernière commande de recherche lancée
 	lastSearchString string
 	lastSearchCase   bool
+	trackedNoname    map[string]struct{}
 )
+
+func init() {
+	trackedNoname = make(map[string]struct{})
+}
 
 // ****************************************************************************
 // SwitchToEditor()
@@ -169,6 +174,86 @@ func SetTheme(theme string) {
 			ui.EdtMain.SetColorscheme(colorscheme)
 		}
 	}
+}
+
+func directoryFromPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if info, err := os.Stat(path); err == nil {
+		if info.IsDir() {
+			return path
+		}
+		d := filepath.Dir(path)
+		if d != "." && d != "" {
+			return d
+		}
+		return ""
+	}
+	d := filepath.Dir(path)
+	if d != "." && d != "" {
+		return d
+	}
+	return ""
+}
+
+func isPreferredWorkView(v ViewScreen) bool {
+	if v.FName == "" {
+		return false
+	}
+	if v.Mode == PluginView {
+		return false
+	}
+	if v.Mode == Text && filepath.Base(v.FName) == conf.FILE_SHELL_OUTPUT {
+		return false
+	}
+	return true
+}
+
+// PreferredWorkingDirectory returns the best directory to use when opening
+// explorer/shell flows: current file directory first, then previously-opened
+// file/view directory, then workspace.
+func PreferredWorkingDirectory() string {
+	if isPreferredWorkView(CurrentView) {
+		if d := directoryFromPath(CurrentView.FName); d != "" {
+			return d
+		}
+	}
+
+	currentIdx := -1
+	for i, v := range OpenViews {
+		if v.FName == CurrentView.FName {
+			currentIdx = i
+			break
+		}
+	}
+
+	if currentIdx >= 0 && len(OpenViews) > 1 {
+		for step := 1; step < len(OpenViews); step++ {
+			idx := currentIdx - step
+			if idx < 0 {
+				idx += len(OpenViews)
+			}
+			candidate := OpenViews[idx]
+			if !isPreferredWorkView(candidate) {
+				continue
+			}
+			if d := directoryFromPath(candidate.FName); d != "" {
+				return d
+			}
+		}
+	}
+
+	if d := directoryFromPath(CurrentView.FName); d != "" {
+		return d
+	}
+	if conf.ConfigGeneral.Workspace != "" {
+		return conf.ConfigGeneral.Workspace
+	}
+	if wd, err := os.Getwd(); err == nil {
+		return wd
+	}
+	return "."
 }
 
 // ****************************************************************************
@@ -392,11 +477,40 @@ func SaveAnyFileAs(f any) {
 func NewFile(dir string) {
 	f, err := os.CreateTemp(dir, conf.NEW_FILE_TEMPLATE)
 	if err == nil {
+		trackedNoname[f.Name()] = struct{}{}
 		// SwitchToEditor(f.Name())
 		OpenView(f.Name(), true)
 	} else {
 		ui.SetStatus(err.Error())
 	}
+}
+
+func cleanupTrackedNonameFiles() int {
+	deleted := 0
+	for fName := range trackedNoname {
+		info, err := os.Stat(fName)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				delete(trackedNoname, fName)
+				continue
+			}
+			ui.SetStatus(fmt.Sprintf("Error when checking file %s : %s", fName, err.Error()))
+			continue
+		}
+		if info.IsDir() {
+			continue
+		}
+		if info.Size() == 0 {
+			ui.SetStatus(fmt.Sprintf("Deleting empty draft file %s", fName))
+			if err := os.Remove(fName); err != nil {
+				ui.SetStatus(fmt.Sprintf("Error when deleting empty draft file %s : %s", fName, err.Error()))
+				continue
+			}
+			delete(trackedNoname, fName)
+			deleted++
+		}
+	}
+	return deleted
 }
 
 // ****************************************************************************
@@ -921,18 +1035,10 @@ func startQuitSaveFlow() {
 				return // Wait for user input from dialog
 			}
 		}
-		// Delete empty files
-		if conf.ConfigGeneral.CleanUpOnExit {
-			if f.Mode != SQLite3 && f.Mode != Explorer && f.Mode != PluginView {
-				if f.FemtoBuffer.Len() == 0 {
-					ui.SetStatus(fmt.Sprintf("Deleting empty file %s", f.FName))
-					err := os.Remove(f.FName)
-					if err != nil {
-						ui.SetStatus(fmt.Sprintf("Error when deleting empty file %s : %s", f.FName, err.Error()))
-					}
-				}
-			}
-		}
+	}
+	if conf.ConfigGeneral.CleanUpOnExit {
+		deleted := cleanupTrackedNonameFiles()
+		ui.SetStatus(fmt.Sprintf("Cleaned %d empty draft file(s)", deleted))
 	}
 	// All files checked, proceed to quit
 	ui.App.Stop()
@@ -972,8 +1078,12 @@ func CloseCurrentFile() {
 			copy(OpenViews[n:], OpenViews[n+1:])
 			OpenViews = OpenViews[:len(OpenViews)-1]
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
-			if n > 0 {
-				CurrentView = OpenViews[n-1]
+			if len(OpenViews) > 0 {
+				next := n
+				if next >= len(OpenViews) {
+					next = len(OpenViews) - 1
+				}
+				CurrentView = OpenViews[next]
 				SwitchOpenView(CurrentView.FName)
 			} else {
 				NewFile(conf.ConfigGeneral.Workspace)
@@ -985,8 +1095,12 @@ func CloseCurrentFile() {
 				copy(OpenViews[n:], OpenViews[n+1:])
 				OpenViews = OpenViews[:len(OpenViews)-1]
 				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
-				if n > 0 {
-					CurrentView = OpenViews[n-1]
+				if len(OpenViews) > 0 {
+					next := n
+					if next >= len(OpenViews) {
+						next = len(OpenViews) - 1
+					}
+					CurrentView = OpenViews[next]
 					SwitchOpenView(CurrentView.FName)
 				} else {
 					NewFile(d)
@@ -999,8 +1113,12 @@ func CloseCurrentFile() {
 			copy(OpenViews[n:], OpenViews[n+1:])
 			OpenViews = OpenViews[:len(OpenViews)-1]
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
-			if n > 0 {
-				CurrentView = OpenViews[n-1]
+			if len(OpenViews) > 0 {
+				next := n
+				if next >= len(OpenViews) {
+					next = len(OpenViews) - 1
+				}
+				CurrentView = OpenViews[next]
 				SwitchOpenView(CurrentView.FName)
 			} else {
 				NewFile(d)
@@ -1032,8 +1150,12 @@ func CloseThisFile(fName string) {
 			copy(OpenViews[n:], OpenViews[n+1:])
 			OpenViews = OpenViews[:len(OpenViews)-1]
 			ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
-			if n > 0 {
-				CurrentView = OpenViews[n-1]
+			if len(OpenViews) > 0 {
+				next := n
+				if next >= len(OpenViews) {
+					next = len(OpenViews) - 1
+				}
+				CurrentView = OpenViews[next]
 				SwitchOpenView(CurrentView.FName)
 			} else {
 				NewFile(d)

@@ -599,15 +599,7 @@ func (p *explorerModePlugin) InternalCommand() string      { return "!expl" }
 func (p *explorerModePlugin) CommandOpensPluginView() bool { return false }
 
 func (p *explorerModePlugin) ExecuteInternalCommand() error {
-	if CurrentView.FName == "" {
-		OpenView(conf.ConfigGeneral.Workspace, false)
-		return nil
-	}
-	if utils.IsDir(CurrentView.FName) {
-		OpenView(CurrentView.FName, false)
-		return nil
-	}
-	OpenView(filepath.Dir(CurrentView.FName), false)
+	OpenView(PreferredWorkingDirectory(), false)
 	return nil
 }
 
