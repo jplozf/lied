@@ -62,6 +62,7 @@ var (
 	err                 error
 	MnuConfig           *menu.Menu
 	MnuWorkspace        *menu.Menu
+	MnuShell            *menu.Menu
 	MnuLicenses         *menu.Menu
 	MnuTemplates        *menu.Menu
 	args                []string
@@ -151,6 +152,63 @@ func init() {
 	Macros = make(map[string]string)
 	readSettings()
 	ui.SetColorAccent(conf.ConfigGeneral.ColorAccent)
+}
+
+func isInteractiveShellView() bool {
+	if edit.CurrentView.Mode != edit.Text {
+		return false
+	}
+	if !edit.CurrentView.Follow {
+		return false
+	}
+	if edit.CurrentView.FName == "" {
+		return false
+	}
+	return filepath.Base(edit.CurrentView.FName) == conf.FILE_SHELL_OUTPUT
+}
+
+func doKillRunningShellCommand(_ any) {
+	if activeCmd == nil {
+		ui.SetStatus("No running command")
+		return
+	}
+	activeCmd.Stop()
+	activeCmd = nil
+	ui.SetStatus("Running command killed")
+}
+
+func doClearShellOutput(_ any) {
+	if !isInteractiveShellView() {
+		ui.SetStatus("Shell output view is not active")
+		return
+	}
+
+	fName := edit.CurrentView.FName
+	if err := os.WriteFile(fName, []byte{}, 0600); err != nil {
+		ui.SetStatus(err.Error())
+		return
+	}
+
+	if edit.CurrentView.FemtoBuffer != nil {
+		edit.CurrentView.FemtoBuffer.Replace(edit.CurrentView.FemtoBuffer.Start(), edit.CurrentView.FemtoBuffer.End(), "")
+		edit.CurrentView.FemtoBuffer.IsModified = false
+		ui.EdtMain.OpenBuffer(edit.CurrentView.FemtoBuffer)
+	}
+
+	ui.SetStatus("Shell output cleared")
+}
+
+func showShellContextMenu() {
+	MnuShell = MnuShell.New(" Shell ", ui.PopupParentPage(), edit.CurrentWidget)
+	MnuShell.AddItem("mnuShellKill", "Kill running command", doKillRunningShellCommand, nil, activeCmd != nil, false)
+	MnuShell.AddItem("mnuShellClear", "Clear output screen", doClearShellOutput, nil, true, false)
+	if promptVisible {
+		MnuShell.AddItem("mnuShellFocusPrompt", "Focus command prompt", func(any) {
+			ui.App.SetFocus(ui.TxtPrompt)
+		}, nil, true, false)
+	}
+	ui.PgsApp.AddPage("dlgShellMenu", MnuShell.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgShellMenu")
 }
 
 // ****************************************************************************
@@ -322,6 +380,11 @@ func main() {
 			return nil
 		}
 		switch event.Key() {
+		case tcell.KeyF8:
+			if isInteractiveShellView() {
+				ShowContextMenu()
+				return nil
+			}
 		case tcell.KeyLeft:
 			ui.EdtMain.CursorLeft()
 			return nil // Consume event
@@ -482,6 +545,9 @@ func main() {
 		newOffset := currentOffset
 		_, _, _, height := ui.HexView.GetInnerRect()
 		switch event.Key() {
+		case tcell.KeyF8:
+			ShowContextMenu()
+			return nil
 		case tcell.KeyUp:
 			newOffset = currentOffset - 1
 			if newOffset < 0 {
@@ -543,6 +609,12 @@ func main() {
 	// Shell Prompt Field keyboard's events manager
 	ui.TxtPrompt.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyF8:
+			if isInteractiveShellView() {
+				ShowContextMenu()
+				return nil
+			}
+			return event
 		case tcell.KeyEnter:
 			Xeq(ui.TxtPrompt.GetText())
 			ui.TxtPrompt.SetText("")
@@ -591,6 +663,9 @@ func main() {
 			return nil
 		}
 		switch event.Key() {
+		case tcell.KeyF8:
+			ShowContextMenu()
+			return nil
 		// Key UP
 		case tcell.KeyUp:
 			if len(edit.ASql) > 0 {
@@ -623,6 +698,9 @@ func main() {
 	// SQL Output Field keyboard's events manager
 	ui.TblSQLOutput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
+		case tcell.KeyF8:
+			ShowContextMenu()
+			return nil
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
@@ -640,10 +718,10 @@ func main() {
 		case tcell.KeyF5:
 			edit.RefreshMe()
 		case tcell.KeyF8:
-			edit.ShowFilesMenu()
+			ShowContextMenu()
 			return nil
 		case tcell.KeyCtrlS:
-			edit.ShowMenuSort()
+			edit.ShowExplorerSortMenu()
 			return nil
 		case tcell.KeyInsert:
 			edit.ProceedFileSelect()
@@ -869,6 +947,11 @@ func ShowWorkspaceMenu() {
 // ShowContextMenu()
 // ****************************************************************************
 func ShowContextMenu() {
+	if isInteractiveShellView() {
+		showShellContextMenu()
+		return
+	}
+
 	if edit.CurrentView.Plugin != nil {
 		if edit.CurrentView.Plugin.ShowContextMenu(ShowWorkspaceMenu) {
 			return
@@ -885,8 +968,7 @@ func ShowContextMenu() {
 	case edit.Shell:
 		ShowWorkspaceMenu()
 	case edit.Explorer:
-		edit.SetFilesMenu()
-		edit.ShowFilesMenu()
+		ShowWorkspaceMenu()
 	case edit.PluginView:
 		// Fallback for plugin views that don't implement a custom context menu.
 		ShowWorkspaceMenu()

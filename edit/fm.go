@@ -84,79 +84,6 @@ var pasteSource string
 var pasteTarget string
 
 // ****************************************************************************
-// SetFilesMenu()
-// ****************************************************************************
-func SetFilesMenu() {
-	// MnuFiles = MnuFiles.New("Actions", ui.GetCurrentScreen(), ui.TblFiles)
-	MnuFiles = MnuFiles.New("Actions", "fileManager", ui.TblFiles)
-	MnuFiles.AddItem("mnuEdit", "Edit", DoEdit, nil, true, false)
-	MnuFiles.AddItem("mnuSelect", "Select / Unselect All", SelectAll, nil, true, false)
-	MnuFiles.AddItem("mnuDelete", "Delete", DoDelete, nil, true, false)
-	MnuFiles.AddItem("mnuRename", "Rename", DoRename, nil, true, false)
-	MnuFiles.AddItem("mnuCopy", "Copy", DoCopy, nil, true, false)
-	MnuFiles.AddItem("mnuCut", "Cut", DoCut, nil, true, false)
-	MnuFiles.AddItem("mnuPaste", "Paste", DoPaste, nil, false, false)
-	MnuFiles.AddItem("mnuCreateFile", "New File", DoNewFile, nil, true, false)
-	MnuFiles.AddItem("mnuCreateFolder", "New Folder", DoNewFolder, nil, true, false)
-	MnuFiles.AddItem("mnuZip", "Zip", DoZip, nil, true, false)
-	MnuFiles.AddItem("mnuSnapshot", "Snapshot", DoSnapshot, nil, true, false)
-	MnuFiles.AddItem("mnuShowHiddenFiles", "Show hidden files", DoSwitchHiddenFiles, nil, true, false)
-	ui.PgsApp.AddPage("dlgFileAction", MnuFiles.Popup(), true, false)
-
-	MnuFilesSort = MnuFilesSort.New("Sort by", "fileManager", ui.TblFiles)
-	MnuFilesSort.AddItem("mnuSortNameA", "Name Ascending", doSortNameA, nil, false, true)
-	MnuFilesSort.AddItem("mnuSortNameD", "Name Descending", doSortNameD, nil, true, false)
-	MnuFilesSort.AddItem("mnuSortSizeA", "Size Ascending", doSortSizeA, nil, true, false)
-	MnuFilesSort.AddItem("mnuSortSizeD", "Size Descending", doSortSizeD, nil, true, false)
-	MnuFilesSort.AddItem("mnuSortTimeA", "Time Ascending", doSortTimeA, nil, true, false)
-	MnuFilesSort.AddItem("mnuSortTimeD", "Time Descending", doSortTimeD, nil, true, false)
-
-	ui.PgsApp.AddPage("dlgFileSort", MnuFilesSort.Popup(), true, false)
-}
-
-// ****************************************************************************
-// ShowFilesMenu()
-// ****************************************************************************
-func ShowFilesMenu() {
-	idx, _ := ui.TblFiles.GetSelection()
-	targetType := strings.TrimSpace(ui.TblFiles.GetCell(idx, 4).Text)
-	// fName := filepath.Join(Cwd, ui.TblFiles.GetCell(idx, 1).Text)
-	if targetType == "FOLDER" {
-		MnuFiles.SetEnabled("mnuEdit", false)
-		MnuFiles.SetEnabled("mnuOpen", false)
-		MnuFiles.SetEnabled("mnuEncrypt", false)
-	}
-	if targetType == "FILE" {
-		fName := filepath.Join(CurrentView.FName, ui.TblFiles.GetCell(idx, 2).Text)
-		mtype, xtype := preview.DisplayFilePreview(fName)
-		if len(mtype) >= 4 {
-			if mtype[:4] == "text" || strings.HasSuffix(xtype, "sqlite3") {
-				MnuFiles.SetEnabled("mnuEdit", true)
-			} else {
-				MnuFiles.SetEnabled("mnuEdit", false)
-			}
-		} else {
-			MnuFiles.SetEnabled("mnuEdit", false)
-		}
-		// MnuFiles.SetEnabled("mnuOpen", true)
-		// MnuFiles.SetEnabled("mnuEncrypt", true)
-	}
-	if Hidden {
-		MnuFiles.SetLabel("mnuShowHiddenFiles", "Hide hidden files")
-	} else {
-		MnuFiles.SetLabel("mnuShowHiddenFiles", "Show hidden files")
-	}
-	ui.PgsApp.ShowPage("dlgFileAction")
-}
-
-// ****************************************************************************
-// ShowMenuSort()
-// ****************************************************************************
-func ShowMenuSort() {
-	ui.PgsApp.ShowPage("dlgFileSort")
-}
-
-// ****************************************************************************
 // DoDelete()
 // ****************************************************************************
 func DoDelete(p any) {
@@ -712,7 +639,6 @@ func DoSwitchHiddenFiles(p any) {
 // ****************************************************************************
 func ShowFiles() {
 	// ui.TxtSelection.Clear()
-	// SetFilesMenu()
 	files, err := os.ReadDir(CurrentView.FName)
 	if err != nil {
 		ui.SetStatus(err.Error())
@@ -1167,10 +1093,11 @@ func displaySelection() {
 			"02Size":    fmt.Sprintf("%d Bytes (%s)", nSize, utils.HumanFileSize(float64(nSize))),
 		}
 		ui.DisplayMap(ui.TxtSelection, infos)
-		SetFilesMenu()
+		explorerPlugin.initMenus()
 		MnuFiles.SetEnabled("mnuPaste", true)
 	} else {
 		ui.TxtSelection.Clear()
+		explorerPlugin.initMenus()
 		MnuFiles.SetEnabled("mnuPaste", false)
 		pasteMode = PASTE_DEFAULT
 	}
@@ -1303,9 +1230,10 @@ func DoEdit(p any) {
 	idx, _ := ui.TblFiles.GetSelection()
 	fName := filepath.Join(CurrentView.FName, ui.TblFiles.GetCell(idx, 2).Text)
 	mtype, xtype := preview.DisplayFilePreview(fName)
-	if mtype[:4] == "text" {
+	if strings.HasPrefix(mtype, "text") {
 		OpenView(fName, true)
 		SwitchToEditor(fName)
+		return
 	}
 	if strings.HasSuffix(xtype, "sqlite3") {
 		ui.SetStatus(fmt.Sprintf("Opening SQLite3 database %s", fName))
@@ -1313,6 +1241,16 @@ func DoEdit(p any) {
 		// SwitchToSQLite3()
 		OpenView(fName, true)
 		SwitchToSQLite3()
+		return
+	}
+	if utils.IsBinaryFile(fName) {
+		ui.SetStatus(fmt.Sprintf("Opening binary file %s in hexadecimal view", fName))
+		OpenView(fName, false)
+		if CurrentView.Plugin != nil {
+			CurrentView.Plugin.Activate()
+			ui.App.SetFocus(CurrentView.Plugin.FocusWidget())
+		}
+		return
 	}
 }
 
@@ -1321,7 +1259,7 @@ func DoEdit(p any) {
 // SelfInit()
 // ****************************************************************************
 func SelfInit(a any) {
-	SetFilesMenu()
+	explorerPlugin.initMenus()
 	ShowFiles()
 	ui.App.Sync()
 	ui.App.SetFocus(ui.TblFiles)

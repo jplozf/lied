@@ -187,7 +187,6 @@ func OpenView(fName string, rw bool) {
 		} else {
 			// Check if it's a path, then explorer view
 			if utils.IsDir(fName) {
-				// SetFilesMenu()
 				CurrentView.FName = fName
 				CurrentView.Mode = Explorer
 				CurrentView.ReadWrite = false
@@ -199,7 +198,9 @@ func OpenView(fName string, rw bool) {
 				go focusOpenFile(fName)
 				//
 				ui.SetStatus(fmt.Sprintf("Exploring %s", CurrentView.FName))
-				ui.PgsApp.SwitchToPage("fileManager")
+				if CurrentView.Plugin != nil {
+					CurrentView.Plugin.Activate()
+				}
 				ShowFiles()
 				ui.App.SetFocus(ui.TblFiles)
 				return

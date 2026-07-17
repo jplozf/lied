@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/atotto/clipboard"
 	"github.com/gdamore/tcell/v2"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/rivo/tview"
@@ -413,26 +414,6 @@ func DoSelect(q string) error {
 }
 
 // ****************************************************************************
-// SetSQLMenu()
-// ****************************************************************************
-func SetSQLMenu() {
-	MnuSQL = MnuSQL.New("Actions", "sqlite3", ui.TblSQLOutput)
-	MnuSQL.AddItem("mnuExportCell", "Export cell", DoExportCell, nil, true, false)
-	MnuSQL.AddItem("mnuExportRow", "Export row to CSV", DoExportRow, nil, true, false)
-	MnuSQL.AddItem("mnuExportAll", "Export all to CSV", DoExportAll, nil, true, false)
-	MnuSQL.AddItem("mnuExportStructSQL", "Export structure to SQL script", DoExportAll, nil, true, false)
-	MnuSQL.AddItem("mnuExportAllSQL", "Export all to SQL script", DoExportAll, nil, true, false)
-	ui.PgsApp.AddPage("dlgMenuAction", MnuSQL.Popup(), true, false)
-}
-
-// ****************************************************************************
-// ShowSQLMenu()
-// ****************************************************************************
-func ShowSQLMenu() {
-	ui.PgsApp.ShowPage("dlgMenuAction")
-}
-
-// ****************************************************************************
 // DoExportRow(p any)
 // ****************************************************************************
 func DoExportRow(p any) {
@@ -487,6 +468,69 @@ func DoExportAll(p any) {
 	} else {
 		ui.SetStatus(err.Error())
 	}
+}
+
+// ****************************************************************************
+// DoExportAllJSON(p any)
+// ****************************************************************************
+func DoExportAllJSON(p any) {
+	if ui.TblSQLOutput.GetRowCount() <= 1 {
+		ui.SetStatus("No SQL result to export")
+		return
+	}
+
+	f, err := os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+	if err != nil {
+		ui.SetStatus(err.Error())
+		return
+	}
+	defer f.Close()
+
+	cols := ui.TblSQLOutput.GetColumnCount()
+	rows := make([]map[string]string, 0, ui.TblSQLOutput.GetRowCount()-1)
+	headers := make([]string, cols)
+
+	for c := 0; c < cols; c++ {
+		head := ui.TblSQLOutput.GetCell(0, c).Text
+		head = strings.TrimPrefix(head, "[")
+		head = strings.TrimSuffix(head, "]")
+		headers[c] = head
+	}
+
+	for r := 1; r < ui.TblSQLOutput.GetRowCount(); r++ {
+		row := make(map[string]string, cols)
+		for c := 0; c < cols; c++ {
+			row[headers[c]] = ui.TblSQLOutput.GetCell(r, c).Text
+		}
+		rows = append(rows, row)
+	}
+
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(rows); err != nil {
+		ui.SetStatus(err.Error())
+		return
+	}
+
+	SwitchToEditor(f.Name())
+}
+
+// ****************************************************************************
+// DoCopyCell(p any)
+// ****************************************************************************
+func DoCopyCell(p any) {
+	r, c := ui.TblSQLOutput.GetSelection()
+	if r <= 0 {
+		ui.SetStatus("No SQL data cell selected")
+		return
+	}
+
+	value := ui.TblSQLOutput.GetCell(r, c).Text
+	if err := clipboard.WriteAll(value); err != nil {
+		ui.SetStatus(err.Error())
+		return
+	}
+	ui.SetStatus("Cell copied to system clipboard")
 }
 
 // ****************************************************************************
