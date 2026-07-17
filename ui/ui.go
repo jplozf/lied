@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"lied/conf"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +72,7 @@ var (
 	LblKeys             *tview.TextView
 	App                 *tview.Application
 	FlxEditor           *tview.Flex
+	FlxEditorRight      *tview.Flex
 	MidColumn           *tview.Flex
 	MidColumnSQL        *tview.Flex
 	FlxSQLite           *tview.Flex
@@ -139,6 +139,22 @@ func ConfigureFindFormForBinary(isBinary bool) {
 	} else {
 		DpdSearchType.SetCurrentOption(0) // Default to ASCII
 	}
+}
+
+// ****************************************************************************
+// SetFindPanelVisible()
+// ****************************************************************************
+func SetFindPanelVisible(visible bool) {
+	if FlxEditorRight == nil || FrmFind == nil {
+		return
+	}
+
+	if visible {
+		FlxEditorRight.ResizeItem(FrmFind, 11, 0)
+		return
+	}
+
+	FlxEditorRight.ResizeItem(FrmFind, 0, 0)
 }
 
 // ****************************************************************************
@@ -475,6 +491,17 @@ func SetUI(fQuit Fn, hostname string) {
 		AddItem(PgsEditorContent, 0, 1, true)
 		// AddItem(TxtPrompt, 1, 1, false) // TxtPrompt is currently index 2
 
+	FlxEditorRight = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(TblOpenFiles, 12, 0, false).
+		AddItem(FrmFind, 11, 0, false).
+		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
+			AddItem(TrvExplorer, 0, 1, false).
+			AddItem(TblOutline, 12, 0, false).
+			AddItem(tview.NewFlex().
+				AddItem(LblGITBranch, 0, 1, false).
+				AddItem(LblCommit, 0, 1, false).
+				AddItem(LblGITStatus, 0, 1, false), 1, 0, false), 0, 1, false)
+
 	FlxEditor = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tview.NewFlex().
 			AddItem(lblDate, 10, 0, false).
@@ -482,16 +509,7 @@ func SetUI(fQuit Fn, hostname string) {
 			AddItem(lblTime, 10, 0, false), 1, 0, false).
 		AddItem(tview.NewFlex().
 			AddItem(MidColumn, 0, 2, true).
-			AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-				AddItem(TblOpenFiles, 12, 0, false).
-				AddItem(FrmFind, 11, 0, false).
-				AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-					AddItem(TrvExplorer, 0, 1, false).
-					AddItem(TblOutline, 12, 0, false).
-					AddItem(tview.NewFlex().
-						AddItem(LblGITBranch, 0, 1, false).
-						AddItem(LblCommit, 0, 1, false).
-						AddItem(LblGITStatus, 0, 1, false), 1, 0, false), 0, 1, false), 0, 1, false), 0, 1, false).
+			AddItem(FlxEditorRight, 0, 1, false), 0, 1, false).
 		AddItem(LblKeys, 2, 1, false).
 		AddItem(tview.NewFlex().
 			AddItem(LblHostname, len(hostname)+3, 0, false).
@@ -520,6 +538,7 @@ func SetUI(fQuit Fn, hostname string) {
 
 	IdxScreens = -1
 	ConfigureFindFormForBinary(false) // Default to text file configuration
+	SetFindPanelVisible(true)
 }
 
 // ****************************************************************************
@@ -670,8 +689,7 @@ func GetCurrentScreen() string {
 func GetScreenFromTitle(t string) string {
 	for i := 0; i < len(ArrScreens); i++ {
 		if ArrScreens[i].Title == t {
-			// return (ArrScreens[i].Title + "_" + ArrScreens[i].ID)
-			return strconv.Itoa(ArrScreens[i].Idx)
+			return ArrScreens[i].Title + "_" + ArrScreens[i].ID
 		}
 	}
 	return "NIL"

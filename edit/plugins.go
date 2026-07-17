@@ -76,6 +76,7 @@ func (p *TextModePlugin) FocusWidget() tview.Primitive { return ui.EdtMain }
 // current buffer and configures the Find/Replace form for text mode.
 func (p *TextModePlugin) Activate() {
 	CurrentWidget = ui.EdtMain
+	ui.SetFindPanelVisible(true)
 	if CurrentView.FemtoBuffer != nil {
 		ui.EdtMain.OpenBuffer(CurrentView.FemtoBuffer)
 	}
@@ -318,6 +319,7 @@ func (p *hexModePlugin) FocusWidget() tview.Primitive { return ui.HexView }
 // Activate switches to the hex-viewer content page and refreshes the display.
 func (p *hexModePlugin) Activate() {
 	CurrentWidget = ui.HexView
+	ui.SetFindPanelVisible(true)
 	CurrentView.HexContentDirty = true
 	displayBinaryContent()
 	ui.PgsApp.SwitchToPage("edit")
@@ -386,6 +388,7 @@ func (p *sqlModePlugin) initMenus() {
 	MnuSQL.AddItem("mnuSQLExportAllJSON", "Export all to JSON", DoExportAllJSON, nil, false, false)
 	MnuSQL.AddSeparator()
 	MnuSQL.AddItem("mnuSQLOpen", "Open database...", p.menuOpenDatabase, nil, true, false)
+	MnuSQL.AddItem("mnuSQLNew", "New SQLite3 database...", p.menuNewDatabase, nil, true, false)
 	MnuSQL.AddItem("mnuSQLClose", "Close current database", p.menuCloseDatabase, nil, true, false)
 
 	ui.PgsApp.AddPage("dlgSQLiteAction", MnuSQL.Popup(), true, false)
@@ -454,6 +457,14 @@ func (p *sqlModePlugin) menuOpenDatabase(_ any) {
 	DoOpenDB(path)
 }
 
+func (p *sqlModePlugin) menuNewDatabase(_ any) {
+	path := conf.ConfigGeneral.Workspace
+	if CurrentView.FName != "" {
+		path = filepath.Dir(CurrentView.FName)
+	}
+	DoNewDB(path)
+}
+
 func (p *sqlModePlugin) menuCloseDatabase(_ any) {
 	if CurrentView.Database == nil {
 		ui.SetStatus("No open database")
@@ -470,6 +481,7 @@ func (p *sqlModePlugin) FocusWidget() tview.Primitive { return ui.TxtPromptSQL }
 // Activate switches to the SQL-viewer page and refreshes the schema tree.
 func (p *sqlModePlugin) Activate() {
 	CurrentWidget = ui.TxtPromptSQL
+	ui.SetFindPanelVisible(false)
 	ui.PgsApp.SwitchToPage("edit")
 	ui.PgsEditorContent.SwitchToPage("sqlViewer")
 	showTreeDB()

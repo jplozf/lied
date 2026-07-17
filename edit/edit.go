@@ -229,6 +229,7 @@ func OpenView(fName string, rw bool) {
 				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for this data
 				showTreeDB()
 				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+				ui.SetFindPanelVisible(false)
 				ui.PgsEditorContent.SwitchToPage("sqlViewer")
 				ui.App.SetFocus(ui.TxtPromptSQL)
 				return
@@ -260,6 +261,7 @@ func OpenView(fName string, rw bool) {
 				ui.DisplayExifInfo(CurrentView.FName) // Display EXIF info for binary files
 				ui.ConfigureFindFormForBinary(true)
 				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+				ui.SetFindPanelVisible(true)
 				ui.App.SetFocus(ui.HexView) // Set focus to HexView for binary files
 				ui.PgsEditorContent.SwitchToPage("hexViewer")
 				return
@@ -305,6 +307,7 @@ func OpenView(fName string, rw bool) {
 				go focusOpenFile(fName)
 				ui.SetStatus(fmt.Sprintf("Opening file %s", CurrentView.FName))
 				ui.TblOpenFiles.SetTitle(fmt.Sprintf("Open Views (%d)", len(OpenViews)))
+				ui.SetFindPanelVisible(true)
 				ui.App.SetFocus(ui.EdtMain)
 				ui.PgsEditorContent.SwitchToPage("textEditor")
 			}
@@ -535,6 +538,7 @@ func UpdateStatus() {
 				ui.TblOpenFiles.SetCell(i, 2, tview.NewTableCell("⯈"))
 				ui.TblOpenFiles.SetCell(i, 3, tview.NewTableCell(f.FName))
 			}
+			syncCurrentOpenViewSelection()
 
 			// Uniform status-bar update: every plugin provides the label values.
 			if CurrentView.Plugin != nil {
@@ -676,12 +680,7 @@ func SwitchOpenView(fName string) {
 
 			// FocusOnPath(fName)
 			ui.SetStatus(fmt.Sprintf("Switching to %s", CurrentView.FName))
-			for idx, file := range OpenViews {
-				if file.FName == CurrentView.FName {
-					ui.TblOpenFiles.Select(idx, 0)
-					break
-				}
-			}
+			syncCurrentOpenViewSelection()
 			go focusOpenFile(fName)
 			break
 		}
@@ -729,6 +728,18 @@ func SwitchNextFile() {
 }
 
 // ****************************************************************************
+// syncCurrentOpenViewSelection()
+// ****************************************************************************
+func syncCurrentOpenViewSelection() {
+	for idx, file := range OpenViews {
+		if file.FName == CurrentView.FName {
+			ui.TblOpenFiles.Select(idx, 0)
+			return
+		}
+	}
+}
+
+// ****************************************************************************
 // isViewAlreadyOpen()
 // ****************************************************************************
 func isViewAlreadyOpen(fName string) bool {
@@ -746,13 +757,9 @@ func isViewAlreadyOpen(fName string) bool {
 // focusOpenFile()
 // ****************************************************************************
 func focusOpenFile(fName string) {
+	_ = fName
 	<-time.After(500 * time.Millisecond) // must be greater than the updateStatus sleep
-	for idx := 0; idx < ui.TblOpenFiles.GetRowCount(); idx++ {
-		if fName == ui.TblOpenFiles.GetCell(idx, 3).Text {
-			ui.TblOpenFiles.Select(idx, 0)
-			break
-		}
-	}
+	syncCurrentOpenViewSelection()
 }
 
 // ****************************************************************************

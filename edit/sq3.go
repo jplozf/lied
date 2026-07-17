@@ -50,6 +50,21 @@ var (
 var headerBackgroundColor = tcell.ColorDarkGreen
 var headerTextColor = tcell.ColorYellow
 
+func createSQLExportTempFile() (*os.File, error) {
+	dir := conf.APP_FOLDER
+	if CurrentView.FName != "" {
+		dir = filepath.Dir(CurrentView.FName)
+	}
+
+	f, err := os.CreateTemp(dir, conf.NEW_FILE_TEMPLATE)
+	if err == nil || dir == conf.APP_FOLDER {
+		return f, err
+	}
+
+	// Fallback to app folder if creating alongside database fails.
+	return os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+}
+
 // ****************************************************************************
 // Xeq()
 // ****************************************************************************
@@ -210,6 +225,20 @@ func confirmCloseDB(rc dialog.DlgButton, idx int) {
 func DoOpenDB(path string) {
 	DlgOpenDB = DlgOpenDB.Input("Open Database", // Title
 		"Please, enter the name for the database to open :", // Message
+		path,
+		confirmOpenDB,
+		0,
+		ui.GetCurrentScreen(), ui.TxtPrompt) // Focus return
+	ui.PgsApp.AddPage("dlgOpenDB", DlgOpenDB.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgOpenDB")
+}
+
+// ****************************************************************************
+// DoNewDB()
+// ****************************************************************************
+func DoNewDB(path string) {
+	DlgOpenDB = DlgOpenDB.Input("New SQLite3 Database", // Title
+		"Please, enter the name for the database to create :", // Message
 		path,
 		confirmOpenDB,
 		0,
@@ -419,7 +448,7 @@ func DoSelect(q string) error {
 func DoExportRow(p any) {
 	r, _ := ui.TblSQLOutput.GetSelection()
 	if r > 0 {
-		f, err := os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+		f, err := createSQLExportTempFile()
 		if err == nil {
 			defer f.Close()
 			w := bufio.NewWriter(f)
@@ -444,7 +473,7 @@ func DoExportRow(p any) {
 // DoExportAll(p any)
 // ****************************************************************************
 func DoExportAll(p any) {
-	f, err := os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+	f, err := createSQLExportTempFile()
 	if err == nil {
 		defer f.Close()
 		w := bufio.NewWriter(f)
@@ -479,7 +508,7 @@ func DoExportAllJSON(p any) {
 		return
 	}
 
-	f, err := os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+	f, err := createSQLExportTempFile()
 	if err != nil {
 		ui.SetStatus(err.Error())
 		return
@@ -539,7 +568,7 @@ func DoCopyCell(p any) {
 func DoExportCell(p any) {
 	r, c := ui.TblSQLOutput.GetSelection()
 	if r > 0 {
-		f, err := os.CreateTemp(conf.APP_FOLDER, conf.NEW_FILE_TEMPLATE)
+		f, err := createSQLExportTempFile()
 		if err == nil {
 			defer f.Close()
 			w := bufio.NewWriter(f)
@@ -562,6 +591,7 @@ func DoExportCell(p any) {
 func SwitchToSQLite3() {
 	// ui.AddNewScreen(ui.ModeSQLite3, nil, nil)
 	ui.PgsApp.SwitchToPage("edit")
+	ui.SetFindPanelVisible(false)
 	ui.PgsEditorContent.SwitchToPage("sqlViewer")
 	ui.App.SetFocus(ui.TxtPromptSQL)
 	ui.SetStatus("Switching to [SQLite3]")

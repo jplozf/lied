@@ -372,6 +372,27 @@ func main() {
 	})
 
 	// Editor keyboard's events manager
+	openFindPanel := func(binaryMode bool) {
+		if edit.CurrentView.Mode == edit.SQLite3 {
+			ui.SetStatus("Find & Replace is unavailable in SQLite3 mode")
+			ui.App.SetFocus(ui.TxtPromptSQL)
+			return
+		}
+
+		ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
+		ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
+
+		if binaryMode {
+			ui.FrmFind.GetButton(2).SetDisabled(true)
+			ui.FrmFind.GetButton(3).SetDisabled(true)
+		} else {
+			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
+			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
+		}
+
+		ui.App.SetFocus(ui.FrmFind)
+	}
+
 	ui.EdtMain.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		// ALT+S
 		evkSaveAs := tcell.NewEventKey(tcell.KeyRune, 's', tcell.ModAlt)
@@ -410,11 +431,7 @@ func main() {
 			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
 		case tcell.KeyCtrlF:
-			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
-			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
-			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
-			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
-			ui.App.SetFocus(ui.FrmFind)
+			openFindPanel(false)
 			return nil
 		}
 		if edit.CurrentView.ReadWrite == true {
@@ -438,7 +455,11 @@ func main() {
 	ui.TblOpenFiles.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			ui.App.SetFocus(ui.FrmFind)
+			if edit.CurrentView.Mode == edit.SQLite3 {
+				ui.App.SetFocus(ui.TblSQLOutput)
+			} else {
+				ui.App.SetFocus(ui.FrmFind)
+			}
 			return nil
 		case tcell.KeyEnter:
 			idx, _ := ui.TblOpenFiles.GetSelection()
@@ -452,11 +473,7 @@ func main() {
 			}
 			return nil
 		case tcell.KeyCtrlF:
-			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
-			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
-			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
-			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
-			ui.App.SetFocus(ui.FrmFind)
+			openFindPanel(false)
 			return nil
 		}
 		return event
@@ -495,11 +512,7 @@ func main() {
 			ui.App.SetFocus(ui.TblOutline)
 			return nil
 		case tcell.KeyCtrlF:
-			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
-			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
-			ui.FrmFind.GetButton(2).SetSelectedFunc(edit.ReplaceOne)
-			ui.FrmFind.GetButton(3).SetSelectedFunc(edit.ReplaceAll)
-			ui.App.SetFocus(ui.FrmFind)
+			openFindPanel(false)
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
@@ -580,11 +593,7 @@ func main() {
 		case tcell.KeyF2:
 			ui.App.SetFocus(ui.TblOpenFiles)
 		case tcell.KeyCtrlF:
-			ui.FrmFind.GetButton(0).SetSelectedFunc(edit.FindNext)
-			ui.FrmFind.GetButton(1).SetSelectedFunc(edit.FindPrevious)
-			ui.FrmFind.GetButton(2).SetDisabled(true) // Disable Replace for binary
-			ui.FrmFind.GetButton(3).SetDisabled(true) // Disable Replace All for binary
-			ui.App.SetFocus(ui.FrmFind)
+			openFindPanel(true)
 		default:
 			return event
 		}
@@ -884,6 +893,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, edit.CurrentView.ReadWrite, false)
 	MnuMacros.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
 	MnuMacros.AddItem("mnuNew", "New", edit.NewAnyFile, conf.ConfigGeneral.Workspace, true, false)
+	MnuMacros.AddItem("mnuNewDatabase", "New SQLite3 database", doNewDatabase, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuOpen", "Open File…", InputFileOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
 	MnuMacros.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentView.ReadWrite)
@@ -935,7 +945,6 @@ func ShowWorkspaceMenu() {
 	// MnuWorkspace.AddItem("mnuNewFile", "New file", doNewFile, conf.ConfigGeneral.Workspace, true, false)
 	MnuWorkspace.AddItem("mnuAddFileTemplate", "New file", ShowTemplatesMenu, conf.ConfigGeneral.Workspace, true, false)        // OK
 	MnuWorkspace.AddItem("mnuNewFolder", "New folder", doNewFolder, conf.ConfigGeneral.Workspace, true, false)                  // OK
-	MnuWorkspace.AddItem("mnuNewDatabase", "New SQLite3 database", doNewDatabase, conf.ConfigGeneral.Workspace, true, false)    // OK
 	MnuWorkspace.AddItem("mnuAddLicense", "Add license", ShowLicensesMenu, conf.ConfigGeneral.Workspace, true, false)           // OK
 	MnuWorkspace.AddItem("mnuDelete", "Delete file or folder", InputWorkspaceDelete, conf.ConfigGeneral.Workspace, true, false) // OK
 	// Popup menu
