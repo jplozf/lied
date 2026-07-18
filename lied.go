@@ -1420,7 +1420,7 @@ func setFormatDate(rc dialog.DlgButton, idx int) {
 // InputFileOpen()
 // ****************************************************************************
 func InputFileOpen(f any) {
-	startPath := conf.ConfigGeneral.Workspace
+	startPath := edit.PreferredWorkingDirectory()
 	if startPath == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {
@@ -1457,7 +1457,7 @@ func InputRename(f any) {
 // InputWorkspaceOpen()
 // ****************************************************************************
 func InputWorkspaceOpen(f any) {
-	startPath := conf.ConfigGeneral.Workspace
+	startPath := edit.PreferredWorkingDirectory()
 	if startPath == "" {
 		userHome, err := os.UserHomeDir()
 		if err != nil {

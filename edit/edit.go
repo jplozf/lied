@@ -204,10 +204,66 @@ func isPreferredWorkView(v ViewScreen) bool {
 	if v.Mode == PluginView {
 		return false
 	}
-	if v.Mode == Text && filepath.Base(v.FName) == conf.FILE_SHELL_OUTPUT {
+	if isInternalShellOutputPath(v.FName) {
+		return false
+	}
+	if v.Follow && isInInternalAppFolder(v.FName) {
 		return false
 	}
 	return true
+}
+
+func isInInternalAppFolder(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+
+	appFolder := filepath.Join(home, conf.APP_FOLDER)
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		pathAbs = filepath.Clean(path)
+	}
+	appFolderAbs, err := filepath.Abs(appFolder)
+	if err != nil {
+		appFolderAbs = filepath.Clean(appFolder)
+	}
+
+	pathAbs = filepath.Clean(pathAbs)
+	appFolderAbs = filepath.Clean(appFolderAbs)
+
+	if pathAbs == appFolderAbs {
+		return true
+	}
+
+	return strings.HasPrefix(pathAbs, appFolderAbs+string(os.PathSeparator))
+}
+
+func isInternalShellOutputPath(path string) bool {
+	if path == "" {
+		return false
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+
+	internalOutput := filepath.Join(home, conf.APP_FOLDER, conf.FILE_SHELL_OUTPUT)
+	pathAbs, err := filepath.Abs(path)
+	if err != nil {
+		pathAbs = filepath.Clean(path)
+	}
+	internalAbs, err := filepath.Abs(internalOutput)
+	if err != nil {
+		internalAbs = filepath.Clean(internalOutput)
+	}
+
+	return filepath.Clean(pathAbs) == filepath.Clean(internalAbs)
 }
 
 // PreferredWorkingDirectory returns the best directory to use when opening

@@ -126,7 +126,8 @@ func Xeq(c string) {
 			// 2. Open the log file once (use O_APPEND)
 			fOut, err := os.OpenFile(filepath.Join(appDir, conf.FILE_SHELL_OUTPUT), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
-				// Handle error
+				ui.SetStatus("Error opening shell output file: " + err.Error())
+				return
 			}
 
 			// 3. Start the command in the background
@@ -149,6 +150,8 @@ func Xeq(c string) {
 				fmt.Fprintf(fOut, "%s ⯈ %s\n", time.Now().Format("20060102-150405"), c)
 				outPrefix := ""
 				errPrefix := ""
+				commandDone := false
+				exitCode := 0
 				if conf.ConfigGeneral.OutErrPrefix {
 					outPrefix = "OUT : "
 					errPrefix = "ERR : "
@@ -158,27 +161,49 @@ func Xeq(c string) {
 					case line, open := <-xCmd.Stdout:
 						if !open {
 							xCmd.Stdout = nil
+							if commandDone && xCmd.Stderr == nil {
+								fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, exitCode))
+								ui.App.QueueUpdateDraw(func() {
+									ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, exitCode))
+								})
+								return
+							}
 						} else {
 							fmt.Fprintln(fOut, outPrefix+line)
 						}
 					case line, open := <-xCmd.Stderr:
 						if !open {
 							xCmd.Stderr = nil
+							if commandDone && xCmd.Stdout == nil {
+								fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, exitCode))
+								ui.App.QueueUpdateDraw(func() {
+									ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, exitCode))
+								})
+								return
+							}
 						} else {
 							fmt.Fprintln(fOut, errPrefix+line)
 						}
-					case status := <-statusChan:
-						// Command finished!
-						fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, status.Exit))
-						ui.App.QueueUpdateDraw(func() {
-							ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, status.Exit))
-						})
-						return // Exit the goroutine
+					case status, open := <-statusChan:
+						if !open {
+							statusChan = nil
+							continue
+						}
+						commandDone = true
+						exitCode = status.Exit
+						statusChan = nil
+						if xCmd.Stdout == nil && xCmd.Stderr == nil {
+							fmt.Fprintln(fOut, fmt.Sprintf("%s ⯈ Done [%s] Exit Code: %d\n", time.Now().Format("20060102-150405"), c, exitCode))
+							ui.App.QueueUpdateDraw(func() {
+								ui.SetStatus(fmt.Sprintf("Done [%s] Exit Code: %d", c, exitCode))
+							})
+							return
+						}
 					}
 
 					// If both streams are closed but status hasn't arrived,
 					// we still need to wait for statusChan to avoid leaking
-					if xCmd.Stdout == nil && xCmd.Stderr == nil && statusChan == nil {
+					if commandDone && xCmd.Stdout == nil && xCmd.Stderr == nil {
 						return
 					}
 				}
