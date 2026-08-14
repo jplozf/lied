@@ -1118,6 +1118,12 @@ func readSettings() {
 				}
 				continue
 			}
+			if rec[0] == 'H' {
+				// Built-in Help manual, recorded as "H,Lied Manual".
+				ShowManual()
+				atLeastOneFile = true
+				continue
+			}
 			rw := true
 			if rec[0] == '0' {
 				rw = false
@@ -1245,6 +1251,12 @@ func saveSettings() {
 				if oFile.Plugin != nil {
 					fmt.Fprintln(wMRU, "P,"+oFile.Plugin.ID())
 				}
+				continue
+			}
+			// The built-in Help manual has no backing file; record it so
+			// ShowManual() can reopen it at startup.
+			if oFile.FName == "Lied Manual" {
+				fmt.Fprintln(wMRU, "H,Lied Manual")
 				continue
 			}
 			// We record only existing files
