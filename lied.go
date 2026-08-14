@@ -33,6 +33,7 @@ import (
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
+	"lied/rss"
 	"lied/services"
 	"lied/sysinfo"
 	"lied/ui"
@@ -92,6 +93,9 @@ var (
 	// svcMgrPlugin is the Service Manager plugin instance, created in init() and
 	// wired up in main().
 	svcMgrPlugin *services.ServiceManagerPlugin
+	// rssPlugin is the RSS Reader plugin instance, created in init() and wired
+	// up in main().
+	rssPlugin *rss.RSSPlugin
 )
 
 // ****************************************************************************
@@ -124,6 +128,8 @@ func init() {
 	edit.RegisterInternalCommandPlugins()
 	svcMgrPlugin = services.NewServiceManagerPlugin()
 	ui.RegisterPlugin(svcMgrPlugin)
+	rssPlugin = rss.NewRSSPlugin()
+	ui.RegisterPlugin(rssPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -825,6 +831,37 @@ func main() {
 		return event
 	})
 
+	// RSS Reader plugin keyboard handler.
+	// Enter=read article, o=open link, F5=refresh, Ctrl+T=close.
+	rssPlugin.TblFeeds.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		case tcell.KeyF5:
+			rssPlugin.Refresh()
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyCtrlF:
+			ui.App.SetFocus(ui.FrmFind)
+			return nil
+		case tcell.KeyEnter:
+			if item, ok := rssPlugin.SelectedItem(); ok {
+				rssPlugin.ShowArticle(item)
+			}
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'o':
+				rssPlugin.OpenLink()
+				return nil
+			}
+		}
+		return event
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -914,6 +951,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
+	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1312,6 +1350,15 @@ func ShowQuitDialog(p any) {
 // ****************************************************************************
 func openServiceManager(_ any) {
 	edit.OpenPluginView(svcMgrPlugin)
+}
+
+// ****************************************************************************
+// openRSSReader()
+// openRSSReader is the menu.Fn-compatible wrapper that opens the RSS Reader
+// plugin view from the main menu.
+// ****************************************************************************
+func openRSSReader(_ any) {
+	edit.OpenPluginView(rssPlugin)
 }
 
 // ****************************************************************************
