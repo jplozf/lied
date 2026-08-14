@@ -89,6 +89,7 @@ func (p *TextModePlugin) Activate() {
 	ui.DpdSearchType.SetDisabled(true)
 	ui.DpdSearchType.SetCurrentOption(0)
 	ui.ChkCase.SetDisabled(false)
+	RefreshTextOutline()
 	ui.LblKeys.SetText(conf.FKEY_LABELS + "\n" + conf.CKEY_LABELS)
 }
 

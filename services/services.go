@@ -81,6 +81,11 @@ func NewServiceManagerPlugin() *ServiceManagerPlugin {
 	// standard editor frame (header, key hints, status bar) is retained.
 	ui.PgsEditorContent.AddPage(ContentPageName, p.layout, true, false)
 
+	// Keep the shared Outline panel in sync with the highlighted service.
+	p.TblServices.SetSelectionChangedFunc(func(row, column int) {
+		p.RefreshOutline()
+	})
+
 	return p
 }
 
@@ -93,12 +98,31 @@ func (p *ServiceManagerPlugin) Title() string { return "Service Manager" }
 func (p *ServiceManagerPlugin) Icon() string  { return "⚙" }
 
 // Activate switches the application to the service manager content page and
-// sets focus to the services table.
+// sets focus to the services table.  It also repurposes the shared Search and
+// Outline panels: Search filters the services table by unit name, and Outline
+// shows `systemctl show` properties for the currently selected service.
 func (p *ServiceManagerPlugin) Activate() {
 	ui.PgsApp.SwitchToPage("edit")
 	ui.PgsEditorContent.SwitchToPage(ContentPageName)
+	p.configureSearchPanel()
+	p.RefreshOutline()
 	ui.App.SetFocus(p.TblServices)
 	ui.LblKeys.SetText(p.KeyHints())
+}
+
+// configureSearchPanel adapts the shared Find form to search services by unit
+// name instead of searching text/hex buffer content.
+func (p *ServiceManagerPlugin) configureSearchPanel() {
+	ui.SetFindPanelVisible(true)
+	ui.FrmFind.SetTitle("Find Service")
+	ui.TxtReplace.SetDisabled(true)
+	ui.ChkToggleReplace.SetDisabled(true)
+	ui.FrmFind.GetButton(2).SetDisabled(true) // Replace One
+	ui.FrmFind.GetButton(3).SetDisabled(true) // Replace All
+	ui.DpdSearchType.SetDisabled(true)
+	ui.DpdSearchType.SetCurrentOption(0)
+	ui.FrmFind.GetButton(0).SetSelectedFunc(func() { p.FindNext() })
+	ui.FrmFind.GetButton(1).SetSelectedFunc(func() { p.FindPrevious() })
 }
 
 // FocusWidget returns the services table as the primary focus target.
@@ -131,7 +155,7 @@ func (p *ServiceManagerPlugin) StatusFields() ui.ViewStatus {
 // KeyHints returns the two-line key-hint string for the LblKeys bar.
 func (p *ServiceManagerPlugin) KeyHints() string {
 	return "F1=Help F2=Panel F6=Previous F7=Next F8=Settings F9=Context F10=Menu F12=Exit\n" +
-		"[s] Start  [S] Stop  [r] Restart  [Enter] Journal  [F5] Refresh  [Ctrl+T] Close"
+		"[s] Start  [S] Stop  [r] Restart  [Enter] Journal  [F5] Refresh  [Ctrl+F] Find  [Ctrl+T] Close"
 }
 
 func (p *ServiceManagerPlugin) InternalCommand() string { return "!serv" }
@@ -254,6 +278,7 @@ func (p *ServiceManagerPlugin) Refresh() {
 	}
 
 	p.TblServices.SetTitle(fmt.Sprintf("Services (%d)", row-1))
+	p.RefreshOutline()
 }
 
 // ShowJournal fills TxtJournal with the last 100 journal entries for unit.
@@ -286,3 +311,106 @@ func (p *ServiceManagerPlugin) SelectedUnit() string {
 	}
 	return cell.Text
 }
+
+// ****************************************************************************
+// Outline panel integration
+// ****************************************************************************
+
+// RefreshOutline populates the shared Outline panel with `systemctl show`
+// properties for the currently selected service.
+func (p *ServiceManagerPlugin) RefreshOutline() {
+	ui.TblOutline.Clear()
+	unit := p.SelectedUnit()
+	if unit == "" {
+		ui.TblOutline.SetTitle("Outline")
+		return
+	}
+
+	out, err := exec.Command("systemctl", "show", unit, "--no-pager").Output()
+	if err != nil {
+		ui.TblOutline.SetCell(0, 0,
+			tview.NewTableCell("Error: "+err.Error()).SetTextColor(tcell.ColorRed))
+		return
+	}
+
+	row := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		key, value, found := strings.Cut(line, "=")
+		if !found || value == "" {
+			continue
+		}
+		ui.TblOutline.SetCell(row, 0,
+			tview.NewTableCell(key).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignLeft))
+		ui.TblOutline.SetCell(row, 1,
+			tview.NewTableCell(value).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+		row++
+	}
+	ui.TblOutline.ScrollToBeginning()
+	ui.TblOutline.SetTitle(fmt.Sprintf("Outline — %s", unit))
+}
+
+// ****************************************************************************
+// Search panel integration
+// ****************************************************************************
+
+// matchesUnit reports whether row's unit name contains the given
+// case-insensitive substring.
+func (p *ServiceManagerPlugin) matchesUnit(row int, needle string) bool {
+	cell := p.TblServices.GetCell(row, 0)
+	if cell == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(cell.Text), needle)
+}
+
+// findService selects the next (or, if backward, previous) service row whose
+// unit name contains the Find field's text, wrapping around the table.
+func (p *ServiceManagerPlugin) findService(backward bool) {
+	needle := strings.ToLower(strings.TrimSpace(ui.TxtFind.GetText()))
+	rowCount := p.TblServices.GetRowCount()
+	if needle == "" || rowCount <= 1 {
+		ui.FrmFind.SetTitle("Find Service")
+		ui.SetStatus("Nothing to search")
+		return
+	}
+
+	total := 0
+	for r := 1; r < rowCount; r++ {
+		if p.matchesUnit(r, needle) {
+			total++
+		}
+	}
+	if total == 0 {
+		ui.FrmFind.SetTitle("Find Service (0/0)")
+		ui.SetStatus(fmt.Sprintf("No service matching '%s'", needle))
+		return
+	}
+
+	current, _ := p.TblServices.GetSelection()
+	if current < 1 {
+		current = 1
+	}
+	dataRows := rowCount - 1
+	step := 1
+	if backward {
+		step = -1
+	}
+	start := current - 1 // 0-based index within data rows
+	for i := 1; i <= dataRows; i++ {
+		idx := ((start+i*step)%dataRows + dataRows) % dataRows
+		r := idx + 1 // back into the 1..rowCount-1 range
+		if p.matchesUnit(r, needle) {
+			p.TblServices.Select(r, 0)
+			p.RefreshOutline()
+			ui.FrmFind.SetTitle(fmt.Sprintf("Find Service (%d/%d)", r, total))
+			ui.SetStatus(fmt.Sprintf("Found '%s' at %s", needle, p.TblServices.GetCell(r, 0).Text))
+			return
+		}
+	}
+}
+
+// FindNext selects the next service matching the shared Find field.
+func (p *ServiceManagerPlugin) FindNext() { p.findService(false) }
+
+// FindPrevious selects the previous service matching the shared Find field.
+func (p *ServiceManagerPlugin) FindPrevious() { p.findService(true) }

@@ -641,6 +641,31 @@ func OpenPluginView(plugin ui.ViewPlugin) {
 }
 
 // ****************************************************************************
+// RefreshTextOutline()
+// RefreshTextOutline populates the shared Outline panel with the function
+// list of the current text buffer.  Called immediately on activation and
+// periodically from UpdateStatus so switching back to a text view never
+// leaves a stale title/content from another plugin (e.g. Service Manager).
+// ****************************************************************************
+func RefreshTextOutline() {
+	if CurrentView.FemtoBuffer == nil {
+		return
+	}
+	ui.TblOutline.Clear()
+	ui.TblOutline.SetTitle("Outline")
+	var funcs = GetFuncs(CurrentView.FemtoBuffer.String(), CurrentView.FemtoBuffer.Settings["filetype"].(string))
+	sort.Slice(funcs, func(i, j int) bool {
+		a := funcs[i]
+		b := funcs[j]
+		return strings.ToUpper(a.name) < strings.ToUpper(b.name)
+	})
+	for i, f := range funcs {
+		ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
+		ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
+	}
+}
+
+// ****************************************************************************
 // UpdateStatus()
 // ****************************************************************************
 func UpdateStatus() {
@@ -724,18 +749,7 @@ func UpdateStatus() {
 			// Heavy per-mode operations executed only every 20 ticks.
 			if count%20 == 0 {
 				if CurrentView.Mode == Text && CurrentView.FemtoBuffer != nil {
-					// Populate TblOutline with the function/symbol list.
-					ui.TblOutline.Clear()
-					var funcs = GetFuncs(CurrentView.FemtoBuffer.String(), CurrentView.FemtoBuffer.Settings["filetype"].(string))
-					sort.Slice(funcs, func(i, j int) bool {
-						a := funcs[i]
-						b := funcs[j]
-						return strings.ToUpper(a.name) < strings.ToUpper(b.name)
-					})
-					for i, f := range funcs {
-						ui.TblOutline.SetCell(i, 0, tview.NewTableCell(strconv.Itoa(f.line)).SetTextColor(tcell.ColorLightCyan).SetAlign(tview.AlignRight))
-						ui.TblOutline.SetCell(i, 1, tview.NewTableCell(f.name).SetTextColor(tcell.ColorWhite).SetAlign(tview.AlignLeft))
-					}
+					RefreshTextOutline()
 					if !onlyOnce {
 						ui.TblOutline.ScrollToBeginning()
 						onlyOnce = true

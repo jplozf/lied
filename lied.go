@@ -482,10 +482,18 @@ func main() {
 	ui.FrmFind.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyF2:
-			ui.App.SetFocus(ui.TrvExplorer)
+			if edit.CurrentView.Mode == edit.PluginView {
+				ui.App.SetFocus(ui.TblOutline)
+			} else {
+				ui.App.SetFocus(ui.TrvExplorer)
+			}
 			return nil
 		case tcell.KeyCtrlF:
-			ui.App.SetFocus(ui.EdtMain)
+			if edit.CurrentView.Mode == edit.PluginView && edit.CurrentView.Plugin != nil {
+				ui.App.SetFocus(edit.CurrentView.Plugin.FocusWidget())
+			} else {
+				ui.App.SetFocus(ui.EdtMain)
+			}
 			return nil
 		}
 		return event
@@ -527,19 +535,20 @@ func main() {
 			if promptVisible {
 				ui.App.SetFocus(ui.TxtPrompt)
 			} else {
-				if edit.CurrentView.Mode == edit.SQLite3 {
+				switch {
+				case edit.CurrentView.Mode == edit.PluginView && edit.CurrentView.Plugin != nil:
+					ui.App.SetFocus(edit.CurrentView.Plugin.FocusWidget())
+				case edit.CurrentView.Mode == edit.SQLite3:
 					ui.App.SetFocus(ui.TxtPromptSQL)
-				} else {
-					if edit.CurrentView.Mode == edit.Binary {
-						ui.App.SetFocus(ui.HexView)
-					} else {
-						ui.App.SetFocus(ui.EdtMain)
-					}
+				case edit.CurrentView.Mode == edit.Binary:
+					ui.App.SetFocus(ui.HexView)
+				default:
+					ui.App.SetFocus(ui.EdtMain)
 				}
 			}
 			return nil
 		case tcell.KeyEnter:
-			if edit.CurrentView.Mode != edit.Binary {
+			if edit.CurrentView.Mode == edit.Text {
 				idx, _ := ui.TblOutline.GetSelection()
 				funcLine := ui.TblOutline.GetCell(idx, 0).Text
 				l, _ := strconv.Atoi(funcLine)
@@ -779,6 +788,9 @@ func main() {
 			return nil
 		case tcell.KeyCtrlT:
 			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyCtrlF:
+			ui.App.SetFocus(ui.FrmFind)
 			return nil
 		case tcell.KeyEnter:
 			if unit != "" {
@@ -1057,6 +1069,17 @@ func readSettings() {
 		sMRU := bufio.NewScanner(fMRU)
 		for sMRU.Scan() {
 			rec := sMRU.Text()
+			if rec == "" {
+				continue
+			}
+			if rec[0] == 'P' {
+				// Plugin-backed view, recorded as "P,<pluginID>".
+				if plugin, ok := ui.GetPlugin(rec[2:]); ok {
+					edit.OpenPluginView(plugin)
+					atLeastOneFile = true
+				}
+				continue
+			}
 			rw := true
 			if rec[0] == '0' {
 				rw = false
@@ -1178,8 +1201,12 @@ func saveSettings() {
 		defer fMRU.Close()
 		wMRU := bufio.NewWriter(fMRU)
 		for _, oFile := range edit.OpenViews {
-			// Plugin views use synthetic paths — skip them; only persist real files.
+			// Plugin views use synthetic paths — record them by plugin ID so
+			// they can be reopened generically via ui.GetPlugin at startup.
 			if oFile.Mode == edit.PluginView {
+				if oFile.Plugin != nil {
+					fmt.Fprintln(wMRU, "P,"+oFile.Plugin.ID())
+				}
 				continue
 			}
 			// We record only existing files
@@ -1243,12 +1270,9 @@ func saveSettings() {
 	sec.NewKey("CleanUpOnExit", utils.If(conf.ConfigGeneral.CleanUpOnExit, "True", "False"))
 	sec.NewKey("FormatTime", conf.ConfigGeneral.FormatTime)
 	sec.NewKey("FormatDate", conf.ConfigGeneral.FormatDate)
-	// Don't persist plugin-view synthetic paths as the current file — fall back
-	// to an empty string so the next session starts fresh.
+	// Plugin views are persisted via the MRU "P,<pluginID>" record, so their
+	// synthetic FName is safe to store as the current file too.
 	currentFile := edit.CurrentView.FName
-	if edit.CurrentView.Mode == edit.PluginView {
-		currentFile = ""
-	}
 	sec.NewKey("CurrentFile", currentFile)
 	if edit.CurrentView.Mode != edit.SQLite3 && edit.CurrentView.Mode != edit.Explorer && edit.CurrentView.Mode != edit.PluginView && edit.CurrentView.FemtoBuffer != nil {
 		sec.NewKey("CurrentX", strconv.Itoa(edit.CurrentView.FemtoBuffer.Cursor.X))
