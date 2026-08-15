@@ -158,7 +158,7 @@ func NewRSSPlugin() *RSSPlugin {
 
 func (p *RSSPlugin) ID() string    { return PluginID }
 func (p *RSSPlugin) Title() string { return "RSS Reader" }
-func (p *RSSPlugin) Icon() string  { return "📰" }
+func (p *RSSPlugin) Icon() string  { return "🗎" }
 
 // Activate switches the application to the RSS reader content page and sets
 // focus to the feed table.  It also repurposes the shared Search and Outline
@@ -416,6 +416,9 @@ func (p *RSSPlugin) OpenLink() {
 // RefreshOutline populates the shared Outline panel with the properties of
 // the currently selected article.
 func (p *RSSPlugin) RefreshOutline() {
+	if edit.CurrentView.Plugin != p {
+		return
+	}
 	ui.TblOutline.Clear()
 	item, ok := p.SelectedItem()
 	if !ok {

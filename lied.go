@@ -33,6 +33,7 @@ import (
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
+	"lied/restic"
 	"lied/rss"
 	"lied/services"
 	"lied/sysinfo"
@@ -96,6 +97,9 @@ var (
 	// rssPlugin is the RSS Reader plugin instance, created in init() and wired
 	// up in main().
 	rssPlugin *rss.RSSPlugin
+	// resticPlugin is the Restic Backup Manager plugin instance, created in
+	// init() and wired up in main().
+	resticPlugin *restic.ResticPlugin
 )
 
 // ****************************************************************************
@@ -130,6 +134,8 @@ func init() {
 	ui.RegisterPlugin(svcMgrPlugin)
 	rssPlugin = rss.NewRSSPlugin()
 	ui.RegisterPlugin(rssPlugin)
+	resticPlugin = restic.NewResticPlugin()
+	ui.RegisterPlugin(resticPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -862,6 +868,41 @@ func main() {
 		return event
 	})
 
+	// Restic Backup Manager plugin keyboard handler.
+	// Enter=list files, b=backup now, c=check repository, F5=refresh, Ctrl+T=close.
+	resticPlugin.TblSnapshots.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		id := resticPlugin.SelectedSnapshotID()
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		case tcell.KeyF5:
+			resticPlugin.Refresh()
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyCtrlF:
+			ui.App.SetFocus(ui.FrmFind)
+			return nil
+		case tcell.KeyEnter:
+			if id != "" {
+				resticPlugin.ShowSnapshotFiles(id)
+			}
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'b':
+				resticPlugin.ShowBackupFolderMenu()
+				return nil
+			case 'c':
+				resticPlugin.CheckRepository()
+				return nil
+			}
+		}
+		return event
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -952,6 +993,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
 	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
+	MnuMacros.AddItem("mnuResticManager", "Restic Backup", openResticManager, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1371,6 +1413,15 @@ func openServiceManager(_ any) {
 // ****************************************************************************
 func openRSSReader(_ any) {
 	edit.OpenPluginView(rssPlugin)
+}
+
+// ****************************************************************************
+// openResticManager()
+// openResticManager is the menu.Fn-compatible wrapper that opens the Restic
+// Backup Manager plugin view from the main menu.
+// ****************************************************************************
+func openResticManager(_ any) {
+	edit.OpenPluginView(resticPlugin)
 }
 
 // ****************************************************************************
