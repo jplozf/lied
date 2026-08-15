@@ -30,6 +30,7 @@ import (
 
 	"lied/conf"
 	"lied/dialog"
+	"lied/disks"
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
@@ -100,6 +101,9 @@ var (
 	// resticPlugin is the Restic Backup Manager plugin instance, created in
 	// init() and wired up in main().
 	resticPlugin *restic.ResticPlugin
+	// diskPlugin is the Disk Manager plugin instance, created in init() and
+	// wired up in main().
+	diskPlugin *disks.DiskManagerPlugin
 )
 
 // ****************************************************************************
@@ -136,6 +140,8 @@ func init() {
 	ui.RegisterPlugin(rssPlugin)
 	resticPlugin = restic.NewResticPlugin()
 	ui.RegisterPlugin(resticPlugin)
+	diskPlugin = disks.NewDiskManagerPlugin()
+	ui.RegisterPlugin(diskPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -903,6 +909,20 @@ func main() {
 		return event
 	})
 
+	// Disk Manager plugin keyboard handler.
+	// Enter=df, d=du, t=top ten files, F5=refresh, Ctrl+T=close.
+	diskPlugin.TblMounts.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return diskPlugin.HandleInput(event)
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -994,6 +1014,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
 	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
 	MnuMacros.AddItem("mnuResticManager", "Restic Backup", openResticManager, nil, true, false)
+	MnuMacros.AddItem("mnuDiskManager", "Disk Manager", openDiskManager, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1422,6 +1443,14 @@ func openRSSReader(_ any) {
 // ****************************************************************************
 func openResticManager(_ any) {
 	edit.OpenPluginView(resticPlugin)
+}
+
+// ****************************************************************************
+// openDiskManager()
+// openDiskManager opens the Disk Manager plugin view from the main menu.
+// ****************************************************************************
+func openDiskManager(_ any) {
+	edit.OpenPluginView(diskPlugin)
 }
 
 // ****************************************************************************
