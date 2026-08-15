@@ -34,6 +34,7 @@ import (
 	"lied/edit"
 	"lied/help"
 	"lied/menu"
+	"lied/network"
 	"lied/restic"
 	"lied/rss"
 	"lied/services"
@@ -104,6 +105,9 @@ var (
 	// diskPlugin is the Disk Manager plugin instance, created in init() and
 	// wired up in main().
 	diskPlugin *disks.DiskManagerPlugin
+	// networkPlugin is the Network Tools plugin instance, created in init() and
+	// wired up in main().
+	networkPlugin *network.NetworkPlugin
 )
 
 // ****************************************************************************
@@ -142,6 +146,8 @@ func init() {
 	ui.RegisterPlugin(resticPlugin)
 	diskPlugin = disks.NewDiskManagerPlugin()
 	ui.RegisterPlugin(diskPlugin)
+	networkPlugin = network.NewNetworkPlugin()
+	ui.RegisterPlugin(networkPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -554,6 +560,8 @@ func main() {
 				ui.App.SetFocus(ui.TxtPrompt)
 			} else {
 				switch {
+				case edit.CurrentView.Mode == edit.PluginView && edit.CurrentView.Plugin == networkPlugin:
+					ui.App.SetFocus(networkPlugin.TxtOutput)
 				case edit.CurrentView.Mode == edit.PluginView && edit.CurrentView.Plugin != nil:
 					ui.App.SetFocus(edit.CurrentView.Plugin.FocusWidget())
 				case edit.CurrentView.Mode == edit.SQLite3:
@@ -923,6 +931,34 @@ func main() {
 		return diskPlugin.HandleInput(event)
 	})
 
+	// Network Tools plugin keyboard handler.
+	// a=add target, Del=remove, Enter=ping, p=ping all, t=traceroute, n=nslookup, g=dig, Ctrl+T=close.
+	networkPlugin.TblTargets.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return networkPlugin.HandleInput(event)
+	})
+
+	// Network Tools output panel: Tab/F2 return focus to the targets table,
+	// Ctrl+T still closes the view even while the output panel is focused.
+	networkPlugin.TxtOutput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyTab || event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(networkPlugin.TblTargets)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return event
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -1015,6 +1051,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
 	MnuMacros.AddItem("mnuResticManager", "Restic Backup", openResticManager, nil, true, false)
 	MnuMacros.AddItem("mnuDiskManager", "Disk Manager", openDiskManager, nil, true, false)
+	MnuMacros.AddItem("mnuNetworkTools", "Network Tools", openNetworkTools, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1451,6 +1488,14 @@ func openResticManager(_ any) {
 // ****************************************************************************
 func openDiskManager(_ any) {
 	edit.OpenPluginView(diskPlugin)
+}
+
+// ****************************************************************************
+// openNetworkTools()
+// openNetworkTools opens the Network Tools plugin view from the main menu.
+// ****************************************************************************
+func openNetworkTools(_ any) {
+	edit.OpenPluginView(networkPlugin)
 }
 
 // ****************************************************************************
