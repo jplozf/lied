@@ -36,6 +36,7 @@ import (
 	"lied/menu"
 	"lied/network"
 	"lied/restic"
+	"lied/rpn"
 	"lied/rss"
 	"lied/services"
 	"lied/sysinfo"
@@ -108,6 +109,9 @@ var (
 	// networkPlugin is the Network Tools plugin instance, created in init() and
 	// wired up in main().
 	networkPlugin *network.NetworkPlugin
+	// rpnPlugin is the RPN Calculator plugin instance, created in init() and
+	// wired up in main().
+	rpnPlugin *rpn.RPNPlugin
 )
 
 // ****************************************************************************
@@ -148,6 +152,8 @@ func init() {
 	ui.RegisterPlugin(diskPlugin)
 	networkPlugin = network.NewNetworkPlugin()
 	ui.RegisterPlugin(networkPlugin)
+	rpnPlugin = rpn.NewRPNPlugin()
+	ui.RegisterPlugin(rpnPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -223,6 +229,7 @@ func doClearShellOutput(_ any) {
 
 func showShellContextMenu() {
 	MnuShell = MnuShell.New(" Shell ", ui.PopupParentPage(), edit.CurrentWidget)
+	edit.AddOpenViewsMenuItems(MnuShell)
 	MnuShell.AddItem("mnuShellKill", "Kill running command", doKillRunningShellCommand, nil, activeCmd != nil, false)
 	MnuShell.AddItem("mnuShellClear", "Clear output screen", doClearShellOutput, nil, true, false)
 	if promptVisible {
@@ -959,6 +966,29 @@ func main() {
 		return event
 	})
 
+	// RPN Calculator plugin keyboard handler.
+	// Enter=evaluate (handled by the input field itself), Up/Down=history, F5=clear stack, Ctrl+T=close.
+	rpnPlugin.TxtInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyF2:
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		case tcell.KeyF5:
+			rpnPlugin.Clear()
+			return nil
+		case tcell.KeyCtrlT:
+			edit.CloseCurrentFile()
+			return nil
+		case tcell.KeyUp:
+			rpnPlugin.HistoryPrev()
+			return nil
+		case tcell.KeyDown:
+			rpnPlugin.HistoryNext()
+			return nil
+		}
+		return event
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -1008,50 +1038,19 @@ func main() {
 // ****************************************************************************
 func ShowMainMenu() {
 	MnuMacros = MnuMacros.New(" "+conf.APP_NAME+" ", ui.PopupParentPage(), edit.CurrentWidget)
-	// Dynamic options (files currently open)
-	for i, e := range edit.OpenViews {
-		chk := false
-		if e.FName == edit.CurrentView.FName {
-			chk = true
-		}
-		// Plugin views have synthetic FNames that don't exist on disk, so we use
-		// the plugin ID as the menu item key and title instead of a file hash.
-		var itemKey, itemLabel string
-		if e.Mode == edit.PluginView && e.Plugin != nil {
-			itemKey = e.Plugin.ID()
-			itemLabel = fmt.Sprintf("%2d) %s %s", i+1, e.Plugin.Icon(), e.Plugin.Title())
-		} else {
-			sha, _ := utils.GetSha256(e.FName)
-			itemKey = sha
-			itemLabel = fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName))
-		}
-		MnuMacros.AddItem(itemKey,
-			itemLabel,
-			edit.SwitchAnyFile,
-			e.FName,
-			true,
-			chk)
-	}
 	// Fixed options
-	MnuMacros.AddSeparator()
-	// MnuMain.AddItem("mnuOpenWorkspace", "Open Workspace", edit.OpenWorkspace, nil, true, false)
-	MnuMacros.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, edit.CurrentView.ReadWrite, false)
-	MnuMacros.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
 	MnuMacros.AddItem("mnuNew", "New", edit.NewAnyFile, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuNewDatabase", "New SQLite3 database", doNewDatabase, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuOpen", "Open File…", InputFileOpen, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
-	MnuMacros.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentView.ReadWrite)
-	MnuMacros.AddItem("mnuFollow", "Follow", edit.SwitchFollow, nil, true, edit.CurrentView.Follow)
 	MnuMacros.AddSeparator()
-	MnuMacros.AddItem("mnuGitAdd", "Git add…", DoGitAdd, edit.CurrentView.FName, !IsFileGitTracked(edit.CurrentView.FName), false)
-	MnuMacros.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
 	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
 	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
 	MnuMacros.AddItem("mnuResticManager", "Restic Backup", openResticManager, nil, true, false)
 	MnuMacros.AddItem("mnuDiskManager", "Disk Manager", openDiskManager, nil, true, false)
 	MnuMacros.AddItem("mnuNetworkTools", "Network Tools", openNetworkTools, nil, true, false)
+	MnuMacros.AddItem("mnuRPNCalculator", "RPN Calculator", openRPNCalculator, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1086,6 +1085,16 @@ func ShowConfigMenu() {
 func ShowWorkspaceMenu() {
 	ui.SetStatus(fmt.Sprintf("Current Workspace is %s", conf.ConfigGeneral.Workspace))
 	MnuWorkspace = MnuWorkspace.New(" Workspace ", ui.PopupParentPage(), edit.CurrentWidget)
+	// Dynamic options (files currently open)
+	edit.AddOpenViewsMenuItems(MnuWorkspace)
+	// Text editor options
+	MnuWorkspace.AddItem("mnuSave", "Save", edit.SaveAnyFile, nil, edit.CurrentView.ReadWrite, false)
+	MnuWorkspace.AddItem("mnuSaveAs", "Save as…", edit.SaveAnyFileAs, nil, true, false)
+	MnuWorkspace.AddItem("mnuReadOnly", "Read Only", edit.SwitchReadWrite, nil, true, !edit.CurrentView.ReadWrite)
+	MnuWorkspace.AddItem("mnuFollow", "Follow", edit.SwitchFollow, nil, true, edit.CurrentView.Follow)
+	MnuWorkspace.AddItem("mnuGitAdd", "Git add…", DoGitAdd, edit.CurrentView.FName, !IsFileGitTracked(edit.CurrentView.FName), false)
+	MnuWorkspace.AddItem("mnuArchive", "Archive", DoArchive, conf.ConfigGeneral.Workspace, true, false)
+	MnuWorkspace.AddSeparator()
 	// Menu Options
 	MnuWorkspace.AddItem("mnuOpen", "Open Workspace", InputWorkspaceOpen, conf.ConfigGeneral.Workspace, true, false) // OK
 	MnuWorkspace.AddItem("mnuSaveAll", "Save all", doSaveAll, conf.ConfigGeneral.Workspace, true, false)             // OK
@@ -1269,6 +1278,34 @@ func readSettings() {
 		}
 	}
 
+	// Read RPN calculator history
+	ui.SetStatus("Reading RPN calculator history")
+	fRPN, err := os.Open(filepath.Join(appDir, conf.FILE_RPN_HISTORY))
+	if err == nil {
+		defer fRPN.Close()
+		var rpnHistory []string
+		sRPN := bufio.NewScanner(fRPN)
+		for sRPN.Scan() {
+			rpnHistory = append(rpnHistory, sRPN.Text())
+		}
+		rpnPlugin.LoadHistory(rpnHistory)
+	}
+
+	// Read RPN calculator stack
+	ui.SetStatus("Reading RPN calculator stack")
+	fRPNStack, err := os.Open(filepath.Join(appDir, conf.FILE_RPN_STACK))
+	if err == nil {
+		defer fRPNStack.Close()
+		var rpnStack []float64
+		sRPNStack := bufio.NewScanner(fRPNStack)
+		for sRPNStack.Scan() {
+			if v, err := strconv.ParseFloat(sRPNStack.Text(), 64); err == nil {
+				rpnStack = append(rpnStack, v)
+			}
+		}
+		rpnPlugin.LoadStack(rpnStack)
+	}
+
 	// Read INI file
 	ui.SetStatus("Reading INI file")
 	inidata, err := ini.Load(filepath.Join(appDir, conf.FILE_INI))
@@ -1292,6 +1329,7 @@ func readSettings() {
 		conf.ConfigGeneral.OutErrPrefix, _ = section.Key("OutErrPrefix").Bool()
 		conf.ConfigGeneral.OrgName = section.Key("OrgName").String()
 		conf.ConfigGeneral.OrgExtension = section.Key("OrgExtension").String()
+		rpnPlugin.SetAngMode(section.Key("RPNAngMode").String())
 		// Set them
 		if conf.ConfigGeneral.Theme == "" {
 			conf.ConfigGeneral.Theme = "monokai"
@@ -1407,6 +1445,30 @@ func saveSettings() {
 		wFind.Flush()
 	}
 
+	// Save RPN calculator history
+	ui.SetStatus("Saving RPN calculator history")
+	fRPN, err := os.Create(filepath.Join(appDir, conf.FILE_RPN_HISTORY))
+	if err == nil {
+		defer fRPN.Close()
+		wRPN := bufio.NewWriter(fRPN)
+		for _, line := range rpnPlugin.History() {
+			fmt.Fprintln(wRPN, line)
+		}
+		wRPN.Flush()
+	}
+
+	// Save RPN calculator stack
+	ui.SetStatus("Saving RPN calculator stack")
+	fRPNStack, err := os.Create(filepath.Join(appDir, conf.FILE_RPN_STACK))
+	if err == nil {
+		defer fRPNStack.Close()
+		wRPNStack := bufio.NewWriter(fRPNStack)
+		for _, v := range rpnPlugin.Stack() {
+			fmt.Fprintln(wRPNStack, strconv.FormatFloat(v, 'g', -1, 64))
+		}
+		wRPNStack.Flush()
+	}
+
 	// Save INI file
 	inidata := ini.Empty()
 	sec, _ := inidata.NewSection("general")
@@ -1436,6 +1498,7 @@ func saveSettings() {
 	sec.NewKey("OutErrPrefix", utils.If(conf.ConfigGeneral.OutErrPrefix, "True", "False"))
 	sec.NewKey("OrgName", conf.ConfigGeneral.OrgName)
 	sec.NewKey("OrgExtension", conf.ConfigGeneral.OrgExtension)
+	sec.NewKey("RPNAngMode", rpnPlugin.AngMode())
 
 	err = inidata.SaveTo(filepath.Join(appDir, conf.FILE_INI))
 	if err != nil {
@@ -1496,6 +1559,14 @@ func openDiskManager(_ any) {
 // ****************************************************************************
 func openNetworkTools(_ any) {
 	edit.OpenPluginView(networkPlugin)
+}
+
+// ****************************************************************************
+// openRPNCalculator()
+// openRPNCalculator opens the RPN Calculator plugin view from the main menu.
+// ****************************************************************************
+func openRPNCalculator(_ any) {
+	edit.OpenPluginView(rpnPlugin)
 }
 
 // ****************************************************************************

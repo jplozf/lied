@@ -234,6 +234,7 @@ func (p *RSSPlugin) ExecuteInternalCommand() error {
 
 func (p *RSSPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m := (&menu.Menu{}).New(" RSS Reader ", ui.PopupParentPage(), p.FocusWidget())
+	edit.AddOpenViewsMenuItems(m)
 	_, hasItem := p.SelectedItem()
 
 	m.AddItem("mnuRSSRefresh", "Refresh feeds", func(any) {

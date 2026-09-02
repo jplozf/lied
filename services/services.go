@@ -20,6 +20,7 @@ package services
 // ****************************************************************************
 import (
 	"fmt"
+	"lied/edit"
 	"lied/menu"
 	"lied/ui"
 	"os/exec"
@@ -169,6 +170,7 @@ func (p *ServiceManagerPlugin) ExecuteInternalCommand() error {
 
 func (p *ServiceManagerPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m := (&menu.Menu{}).New(" Service Manager ", ui.PopupParentPage(), p.FocusWidget())
+	edit.AddOpenViewsMenuItems(m)
 	unit := p.SelectedUnit()
 	hasUnit := unit != ""
 

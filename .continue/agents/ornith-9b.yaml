@@ -1,0 +1,14 @@
+name: Ornith-9B
+version: 0.0.1
+schema: v1
+models:
+  - name: Ornith 9B
+    provider: ollama
+    model: ornith:9b
+    roles:
+      - chat
+      - edit
+    defaultCompletionOptions:
+      contextLength: 16384
+      temperature: 0.6
+      topP: 0.95

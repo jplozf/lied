@@ -161,16 +161,14 @@ type hexModePlugin struct{}
 
 // hexPlugin is the package-level singleton for all binary-file views.
 var hexPlugin = &hexModePlugin{}
-var hexMenusInitialized bool
 var MnuHex *menu.Menu
 var DlgHexOffset *dialog.Dialog
 
+// initMenus rebuilds MnuHex on every call so its numbered "switch to open
+// view" entries stay in sync with OpenViews.
 func (p *hexModePlugin) initMenus() {
-	if hexMenusInitialized {
-		return
-	}
-
 	MnuHex = MnuHex.New("Hex Viewer", "edit", ui.HexView)
+	AddOpenViewsMenuItems(MnuHex)
 	MnuHex.AddItem("mnuHexRefresh", "Refresh hex view", p.menuRefresh, nil, true, false)
 	MnuHex.AddItem("mnuHexFind", "Find...", p.menuFind, nil, true, false)
 	MnuHex.AddItem("mnuHexCopyOffset", "Copy current offset", p.menuCopyOffset, nil, true, false)
@@ -181,7 +179,6 @@ func (p *hexModePlugin) initMenus() {
 	MnuHex.AddItem("mnuHexClose", "Close current view", p.menuCloseCurrent, nil, true, false)
 
 	ui.PgsApp.AddPage("dlgHexAction", MnuHex.Popup(), true, false)
-	hexMenusInitialized = true
 }
 
 func (p *hexModePlugin) updateMenuState() {
@@ -377,6 +374,7 @@ func (p *sqlModePlugin) initMenus() {
 	}
 
 	MnuSQL = MnuSQL.New("SQLite3", "edit", ui.TxtPromptSQL)
+	AddOpenViewsMenuItems(MnuSQL)
 	MnuSQL.AddItem("mnuSQLRun", "Run query", p.menuRunQuery, nil, true, false)
 	MnuSQL.AddItem("mnuSQLRefresh", "Refresh schema tree", p.menuRefreshSchema, nil, true, false)
 	MnuSQL.AddItem("mnuSQLTables", "List tables", p.menuListTables, nil, true, false)
@@ -538,6 +536,7 @@ func (p *explorerModePlugin) initMenus() {
 	}
 	// Explorer context menus are defined by the explorer plugin implementation.
 	MnuFiles = MnuFiles.New("Files", "fileManager", ui.TblFiles)
+	AddOpenViewsMenuItems(MnuFiles)
 	MnuFiles.AddItem("mnuEdit", "Edit", DoEdit, nil, true, false)
 	MnuFiles.AddItem("mnuSelect", "Select / Unselect All", SelectAll, nil, true, false)
 	MnuFiles.AddItem("mnuDelete", "Delete", DoDelete, nil, true, false)
@@ -702,4 +701,28 @@ var editorPlugin = &editorCommandPlugin{}
 func RegisterInternalCommandPlugins() {
 	ui.RegisterPlugin(explorerPlugin)
 	ui.RegisterPlugin(editorPlugin)
+}
+
+// AddOpenViewsMenuItems appends the numbered "switch to open view" entries
+// (formerly only in the main menu) to any context menu, using the same
+// key/label conventions as the main menu's dynamic file list.
+func AddOpenViewsMenuItems(m *menu.Menu) {
+	for i, e := range OpenViews {
+		chk := e.FName == CurrentView.FName
+		// Plugin views have synthetic FNames that don't exist on disk, so we use
+		// the plugin ID as the menu item key and title instead of a file hash.
+		var itemKey, itemLabel string
+		if e.Mode == PluginView && e.Plugin != nil {
+			itemKey = e.Plugin.ID()
+			itemLabel = fmt.Sprintf("%2d) %s %s", i+1, e.Plugin.Icon(), e.Plugin.Title())
+		} else {
+			sha, _ := utils.GetSha256(e.FName)
+			itemKey = sha
+			itemLabel = fmt.Sprintf("%2d) %s", i+1, filepath.Base(e.FName))
+		}
+		m.AddItem(itemKey, itemLabel, SwitchAnyFile, e.FName, true, chk)
+	}
+	if len(OpenViews) > 0 {
+		m.AddSeparator()
+	}
 }

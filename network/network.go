@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"lied/conf"
 	"lied/dialog"
+	"lied/edit"
 	"lied/menu"
 	"lied/ui"
 	"net"
@@ -93,7 +94,7 @@ func NewNetworkPlugin() *NetworkPlugin {
 
 func (p *NetworkPlugin) ID() string    { return PluginID }
 func (p *NetworkPlugin) Title() string { return "Network Tools" }
-func (p *NetworkPlugin) Icon() string  { return "🌐" }
+func (p *NetworkPlugin) Icon() string  { return "🖧" }
 
 // Activate switches the application to the network tools content page.
 func (p *NetworkPlugin) Activate() {
@@ -144,6 +145,7 @@ func (p *NetworkPlugin) ExecuteInternalCommand() error { return nil }
 
 func (p *NetworkPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m := (&menu.Menu{}).New(" Network Tools ", ui.PopupParentPage(), p.FocusWidget())
+	edit.AddOpenViewsMenuItems(m)
 	hasTarget := p.SelectedTarget() != ""
 
 	m.AddItem("mnuNetAdd", "Add target...", func(any) {

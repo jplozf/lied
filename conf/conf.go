@@ -46,6 +46,8 @@ const (
 	FILE_MRU                = "mru"
 	FILE_RSS_FEEDS          = "rssfeeds"
 	FILE_NET_TARGETS        = "nettargets"
+	FILE_RPN_HISTORY        = "rpnhistory"
+	FILE_RPN_STACK          = "rpnstack"
 	FOLDER_TEMPLATES        = "templates"
 	FKEY_LABELS             = "F1=Help F2=Panel F3=Git F4=Command F6=Previous F7=Next F8=Settings F9=Context F10=Menu F12=Exit"
 	CKEY_LABELS             = "Ctrl+E=Explorer Ctrl+F=Find… Ctrl+S=Save Alt+S=Save as… Ctrl+N=New Ctrl+O=Open… Ctrl+T=Close Alt+M=Macros Alt+Q=Shell"

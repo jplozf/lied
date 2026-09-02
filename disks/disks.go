@@ -16,6 +16,7 @@ import (
 	"bufio"
 	"fmt"
 	"lied/dialog"
+	"lied/edit"
 	"lied/menu"
 	"lied/ui"
 	"os/exec"
@@ -124,6 +125,7 @@ func (p *DiskManagerPlugin) ExecuteInternalCommand() error { return nil }
 
 func (p *DiskManagerPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m := (&menu.Menu{}).New(" Disk Manager ", ui.PopupParentPage(), p.FocusWidget())
+	edit.AddOpenViewsMenuItems(m)
 	hasMount := p.SelectedMount() != nil
 	m.AddItem("mnuDiskRefresh", "Refresh mounted filesystems", func(any) {
 		p.Refresh()

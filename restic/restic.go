@@ -27,6 +27,7 @@ import (
 	"io"
 	"lied/conf"
 	"lied/dialog"
+	"lied/edit"
 	"lied/menu"
 	"lied/ui"
 	"os"
@@ -197,6 +198,7 @@ func (p *ResticPlugin) ExecuteInternalCommand() error {
 
 func (p *ResticPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m := (&menu.Menu{}).New(" Restic Backup ", ui.PopupParentPage(), p.FocusWidget())
+	edit.AddOpenViewsMenuItems(m)
 	id := p.SelectedSnapshotID()
 	hasSnapshot := id != ""
 

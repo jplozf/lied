@@ -221,6 +221,7 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 !edit : Open selected file from Explorer, or switch current file to text editor
 !serv : Open the Service Manager plugin (same as F11)
 !rss  : Open the RSS Reader plugin
+!rpn  : Open the RPN Calculator plugin
 !conf : Opens the Lied configuration file for editing
 !macr : Opens the macros file for editing
 !help : Displays the Help panel (same as F1)
