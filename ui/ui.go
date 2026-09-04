@@ -359,7 +359,7 @@ func SetUI(fQuit Fn, hostname string) {
 	TxtCurrentEditName.SetBorder(true)
 	TxtCurrentEditName.SetDynamicColors(true)
 	TxtCurrentEditName.SetTitleAlign(tview.AlignLeft)
-	TxtCurrentEditName.SetTitle("File")
+	TxtCurrentEditName.SetTitle("Current View")
 
 	TblOpenFiles = tview.NewTable()
 	TblOpenFiles.SetBorder(true)

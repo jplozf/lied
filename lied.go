@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"lied/conf"
+	"lied/cron"
 	"lied/dialog"
 	"lied/disks"
 	"lied/edit"
@@ -112,6 +113,9 @@ var (
 	// rpnPlugin is the RPN Calculator plugin instance, created in init() and
 	// wired up in main().
 	rpnPlugin *rpn.RPNPlugin
+	// cronPlugin is the Cron Manager plugin instance, created in init() and
+	// wired up in main().
+	cronPlugin *cron.CronManagerPlugin
 )
 
 // ****************************************************************************
@@ -154,6 +158,8 @@ func init() {
 	ui.RegisterPlugin(networkPlugin)
 	rpnPlugin = rpn.NewRPNPlugin()
 	ui.RegisterPlugin(rpnPlugin)
+	cronPlugin = cron.NewCronManagerPlugin()
+	ui.RegisterPlugin(cronPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -989,6 +995,20 @@ func main() {
 		return event
 	})
 
+	// Cron Manager plugin keyboard handler.
+	// a=add, e=edit, Space/Enter=toggle, Del=delete, F5=refresh, Ctrl+T=close.
+	cronPlugin.TblJobs.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return cronPlugin.HandleInput(event)
+	})
+
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
 	// * Launching lied with directory as argument : Open a temporary file into this directory as workspace
 	// * Launching lied with file name as argument : Open this file into its directory as workspace
@@ -1051,6 +1071,7 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuDiskManager", "Disk Manager", openDiskManager, nil, true, false)
 	MnuMacros.AddItem("mnuNetworkTools", "Network Tools", openNetworkTools, nil, true, false)
 	MnuMacros.AddItem("mnuRPNCalculator", "RPN Calculator", openRPNCalculator, nil, true, false)
+	MnuMacros.AddItem("mnuCronManager", "Cron Manager", openCronManager, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1567,6 +1588,14 @@ func openNetworkTools(_ any) {
 // ****************************************************************************
 func openRPNCalculator(_ any) {
 	edit.OpenPluginView(rpnPlugin)
+}
+
+// ****************************************************************************
+// openCronManager()
+// openCronManager opens the Cron Manager plugin view from the main menu.
+// ****************************************************************************
+func openCronManager(_ any) {
+	edit.OpenPluginView(cronPlugin)
 }
 
 // ****************************************************************************

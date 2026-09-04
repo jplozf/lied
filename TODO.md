@@ -5,7 +5,7 @@
 * Network Processes plugin
 * Printers plugin
 * Updates plugin
-* RPN Calculation plugin
+* ~~RPN Calculation plugin~~
 * Cron plugin
 * Dashboard plugin
 
