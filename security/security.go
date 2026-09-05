@@ -643,8 +643,8 @@ func (p *SecurityPlugin) ShowAddRuleDialog() {
 	}
 
 	action := tview.NewDropDown().SetLabel("Action: ").SetOptions(fw.Actions(), nil).SetCurrentOption(0)
-	target := tview.NewInputField().SetLabel("Port/Service (" + fw.TargetHint() + "): ").SetFieldWidth(34)
-	from := tview.NewInputField().SetLabel("Source (blank = any): ").SetFieldWidth(34)
+	target := tview.NewInputField().SetLabel("Port/Service (" + fw.TargetHint() + "): ").SetFieldWidth(24)
+	from := tview.NewInputField().SetLabel("Source (blank = any): ").SetFieldWidth(24)
 
 	form := tview.NewForm()
 	form.SetBorder(true).SetTitle(" Add Firewall Rule ")
@@ -654,7 +654,7 @@ func (p *SecurityPlugin) ShowAddRuleDialog() {
 
 	var to *tview.InputField
 	if fw.SupportsDestination() {
-		to = tview.NewInputField().SetLabel("Destination (blank = any): ").SetFieldWidth(34)
+		to = tview.NewInputField().SetLabel("Destination (blank = any): ").SetFieldWidth(24)
 		form.AddFormItem(to)
 	}
 
@@ -693,7 +693,7 @@ func (p *SecurityPlugin) ShowAddRuleDialog() {
 
 	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(form, 64, 0, true).
+		AddItem(form, 70, 0, true).
 		AddItem(nil, 0, 1, false)
 	ui.PgsApp.AddPage("dlgSecAddRule", centered, true, true)
 	ui.App.SetFocus(target)
