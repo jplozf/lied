@@ -68,6 +68,20 @@ type FirewallRule struct {
 	ID string
 }
 
+// RuleSpec describes a firewall rule to add, gathered from the Add Rule
+// form.
+type RuleSpec struct {
+	// Action is one of the backend's Actions(), e.g. "allow", "deny", "reject".
+	Action string
+	// Target is a port/protocol (e.g. "22/tcp") or a service name (e.g. "http").
+	Target string
+	// From is the source address/CIDR; empty or "any" means anywhere.
+	From string
+	// To is the destination address/CIDR (ufw only); empty or "any" means
+	// anywhere.
+	To string
+}
+
 // clamavStatusRE extracts the ClamAV engine version and database date from
 // `clamscan --version` output, e.g. "ClamAV 1.0.0/27000/Mon Jan 1 00:00:00 2024".
 var clamavStatusRE = regexp.MustCompile(`ClamAV\s+([\d.]+)/(\d+)/(.+)`)
@@ -117,7 +131,6 @@ type SecurityPlugin struct {
 
 	busy bool
 
-	ruleDialog *dialog.Dialog
 	scanDialog *dialog.Dialog
 	confirm    *dialog.Dialog
 }
@@ -287,10 +300,16 @@ type firewallBackend interface {
 	// Refresh returns whether the firewall is active and its current rules;
 	// raw holds the last command's raw output for diagnostics on error.
 	Refresh() (active bool, rules []FirewallRule, raw string, err error)
-	// RulePrompt returns the Add Rule dialog's prompt text.
-	RulePrompt() string
-	// AddSteps returns the command(s) needed to add ruleText.
-	AddSteps(ruleText string) [][]string
+	// Actions lists the rule actions this backend supports, for the Add Rule
+	// form's Action dropdown.
+	Actions() []string
+	// TargetHint is shown next to the port/service field in the Add Rule form.
+	TargetHint() string
+	// SupportsDestination reports whether this backend can restrict a rule to
+	// a destination address (ufw can; firewalld rich rules only filter source).
+	SupportsDestination() bool
+	// AddRuleSteps returns the command(s) needed to add spec.
+	AddRuleSteps(spec RuleSpec) [][]string
 	// DeleteSteps returns the command(s) needed to remove rule.
 	DeleteSteps(rule FirewallRule) [][]string
 	// EnableSteps/DisableSteps turn the firewall on/off.
@@ -352,12 +371,41 @@ func (ufwBackend) Refresh() (bool, []FirewallRule, string, error) {
 	return active, rules, string(out), nil
 }
 
-func (ufwBackend) RulePrompt() string {
-	return "Rule (e.g. allow 22/tcp, deny from 1.2.3.4):"
-}
+func (ufwBackend) Actions() []string { return []string{"allow", "deny", "reject", "limit"} }
 
-func (ufwBackend) AddSteps(ruleText string) [][]string {
-	return [][]string{append([]string{"sudo", "-n", "ufw"}, strings.Fields(ruleText)...)}
+func (ufwBackend) TargetHint() string { return "e.g. 22/tcp, 80, or http" }
+
+func (ufwBackend) SupportsDestination() bool { return true }
+
+// AddRuleSteps builds a ufw command from spec, using the simple
+// "ACTION TARGET" form when no source/destination is given, or the extended
+// "ACTION [proto P] from FROM to TO [port PORT]" form otherwise.
+func (ufwBackend) AddRuleSteps(spec RuleSpec) [][]string {
+	target := strings.TrimSpace(spec.Target)
+	from := strings.TrimSpace(spec.From)
+	to := strings.TrimSpace(spec.To)
+	args := []string{"sudo", "-n", "ufw"}
+	if from == "" && (to == "" || strings.EqualFold(to, "any")) {
+		args = append(args, spec.Action)
+		args = append(args, strings.Fields(target)...)
+		return [][]string{args}
+	}
+	if from == "" {
+		from = "any"
+	}
+	if to == "" {
+		to = "any"
+	}
+	port, proto, _ := strings.Cut(target, "/")
+	args = append(args, spec.Action)
+	if proto != "" {
+		args = append(args, "proto", proto)
+	}
+	args = append(args, "from", from, "to", to)
+	if port != "" {
+		args = append(args, "port", port)
+	}
+	return [][]string{args}
 }
 
 func (ufwBackend) DeleteSteps(rule FirewallRule) [][]string {
@@ -417,17 +465,49 @@ func (firewalldBackend) Refresh() (bool, []FirewallRule, string, error) {
 	return active, parseFirewalldStatus(string(out)), string(out), nil
 }
 
-func (firewalldBackend) RulePrompt() string {
-	return "Port (e.g. 8080/tcp) or service name (e.g. http):"
-}
+func (firewalldBackend) Actions() []string { return []string{"allow", "deny", "reject"} }
 
-func (firewalldBackend) AddSteps(ruleText string) [][]string {
-	addFlag := "--add-service=" + ruleText
-	if firewalldPortRE.MatchString(ruleText) {
-		addFlag = "--add-port=" + ruleText
+func (firewalldBackend) TargetHint() string { return "e.g. 8080/tcp or http" }
+
+func (firewalldBackend) SupportsDestination() bool { return false }
+
+// AddRuleSteps adds spec via the simple --add-port/--add-service flags when
+// it's an unrestricted allow rule, or via a permanent rich rule otherwise
+// (needed to express a source restriction or a deny/reject action).
+func (firewalldBackend) AddRuleSteps(spec RuleSpec) [][]string {
+	target := strings.TrimSpace(spec.Target)
+	from := strings.TrimSpace(spec.From)
+	isPort := firewalldPortRE.MatchString(target)
+
+	if spec.Action == "allow" && (from == "" || strings.EqualFold(from, "any")) {
+		addFlag := "--add-service=" + target
+		if isPort {
+			addFlag = "--add-port=" + target
+		}
+		return [][]string{
+			{"sudo", "-n", "firewall-cmd", "--permanent", addFlag},
+			{"sudo", "-n", "firewall-cmd", "--reload"},
+		}
 	}
+
+	verb := "accept"
+	if spec.Action == "deny" || spec.Action == "reject" {
+		verb = "reject"
+	}
+	var rule strings.Builder
+	rule.WriteString(`rule family="ipv4"`)
+	if from != "" && !strings.EqualFold(from, "any") {
+		fmt.Fprintf(&rule, ` source address="%s"`, from)
+	}
+	if isPort {
+		port, proto, _ := strings.Cut(target, "/")
+		fmt.Fprintf(&rule, ` port port="%s" protocol="%s"`, port, proto)
+	} else {
+		fmt.Fprintf(&rule, ` service name="%s"`, target)
+	}
+	fmt.Fprintf(&rule, " %s", verb)
 	return [][]string{
-		{"sudo", "-n", "firewall-cmd", "--permanent", addFlag},
+		{"sudo", "-n", "firewall-cmd", "--permanent", "--add-rich-rule=" + rule.String()},
 		{"sudo", "-n", "firewall-cmd", "--reload"},
 	}
 }
@@ -552,35 +632,71 @@ func (p *SecurityPlugin) SelectedRule() *FirewallRule {
 	return &p.rules[row-1]
 }
 
-// ShowAddRuleDialog prompts for a rule expression appropriate to the
-// detected firewall backend (e.g. "allow 22/tcp" for ufw, or "8080/tcp" /
-// "http" for firewalld).
+// ShowAddRuleDialog opens a form to add a rule, with fields adapted to the
+// detected firewall backend (action, port/service, source and, for ufw,
+// destination).
 func (p *SecurityPlugin) ShowAddRuleDialog() {
-	if p.fw == nil {
+	fw := p.fw
+	if fw == nil {
 		ui.SetStatus("No firewall manager found")
 		return
 	}
-	p.ruleDialog = p.ruleDialog.Input(
-		"Add Firewall Rule",
-		p.fw.RulePrompt(),
-		"",
-		func(rc dialog.DlgButton, _ int) {
-			if rc != dialog.BUTTON_OK {
-				return
-			}
-			rule := strings.TrimSpace(p.ruleDialog.Value)
-			if rule == "" {
-				ui.SetStatus("No rule entered")
-				return
-			}
-			p.runFirewallSteps("Add rule", p.fw.AddSteps(rule))
-		},
-		0,
-		ui.GetCurrentScreen(),
-		p.FocusWidget(),
-	)
-	ui.PgsApp.AddPage("dlgSecAddRule", p.ruleDialog.Popup(), true, false)
-	ui.PgsApp.ShowPage("dlgSecAddRule")
+
+	action := tview.NewDropDown().SetLabel("Action: ").SetOptions(fw.Actions(), nil).SetCurrentOption(0)
+	target := tview.NewInputField().SetLabel("Port/Service (" + fw.TargetHint() + "): ").SetFieldWidth(34)
+	from := tview.NewInputField().SetLabel("Source (blank = any): ").SetFieldWidth(34)
+
+	form := tview.NewForm()
+	form.SetBorder(true).SetTitle(" Add Firewall Rule ")
+	form.AddFormItem(action)
+	form.AddFormItem(target)
+	form.AddFormItem(from)
+
+	var to *tview.InputField
+	if fw.SupportsDestination() {
+		to = tview.NewInputField().SetLabel("Destination (blank = any): ").SetFieldWidth(34)
+		form.AddFormItem(to)
+	}
+
+	form.AddButton("Add", func() {
+		targetText := strings.TrimSpace(target.GetText())
+		if targetText == "" {
+			ui.SetStatus("No port/service entered")
+			return
+		}
+		_, actionText := action.GetCurrentOption()
+		spec := RuleSpec{
+			Action: actionText,
+			Target: targetText,
+			From:   strings.TrimSpace(from.GetText()),
+		}
+		if to != nil {
+			spec.To = strings.TrimSpace(to.GetText())
+		}
+		ui.PgsApp.HidePage("dlgSecAddRule")
+		ui.App.SetFocus(p.FocusWidget())
+		p.runFirewallSteps("Add rule", fw.AddRuleSteps(spec))
+	})
+	form.AddButton("Cancel", func() {
+		ui.PgsApp.HidePage("dlgSecAddRule")
+		ui.App.SetFocus(p.FocusWidget())
+	})
+
+	form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEscape {
+			ui.PgsApp.HidePage("dlgSecAddRule")
+			ui.App.SetFocus(p.FocusWidget())
+			return nil
+		}
+		return event
+	})
+
+	centered := tview.NewFlex().
+		AddItem(nil, 0, 1, false).
+		AddItem(form, 64, 0, true).
+		AddItem(nil, 0, 1, false)
+	ui.PgsApp.AddPage("dlgSecAddRule", centered, true, true)
+	ui.App.SetFocus(target)
 }
 
 // ConfirmDeleteSelectedRule asks for confirmation before deleting the
