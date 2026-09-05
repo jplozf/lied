@@ -10,9 +10,10 @@
 // L I E D   -   Copyright © JPL 2024
 // ****************************************************************************
 // Package security provides a Security Manager plugin for lied.
-// It manages the host firewall (ufw) — showing rules and allowing them to be
-// added, removed, enabled or disabled — and ClamAV — showing installation
-// status and letting the user scan a path or update virus definitions.
+// It manages the host firewall (ufw or firewalld, whichever is installed) —
+// showing rules and allowing them to be added, removed, enabled or disabled —
+// and ClamAV — showing installation status and letting the user scan a path
+// or update virus definitions.
 // ****************************************************************************
 package security
 
@@ -28,6 +29,7 @@ import (
 	"lied/ui"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,12 +55,17 @@ const (
 // TYPES
 // ****************************************************************************
 
-// FirewallRule is a single numbered ufw rule.
+// FirewallRule is a single firewall rule, either a numbered ufw rule or a
+// firewalld allowed port/service.
 type FirewallRule struct {
 	Num    string
 	To     string
 	Action string
 	From   string
+	// ID is a backend-specific identifier used to delete this rule (e.g. the
+	// ufw rule number, or "port:8080/tcp" / "service:http" for firewalld).
+	// ufw rules use Num directly instead.
+	ID string
 }
 
 // clamavStatusRE extracts the ClamAV engine version and database date from
@@ -87,7 +94,7 @@ type clamavStatusRow struct {
 // SecurityPlugin implements ui.ViewPlugin and shows firewall rules together
 // with a ClamAV status/scan sub-view.
 type SecurityPlugin struct {
-	// TblFirewall lists the current ufw rules.
+	// TblFirewall lists the current firewall rules.
 	TblFirewall *tview.Table
 	// TblClamav shows ClamAV component status.
 	TblClamav *tview.Table
@@ -98,6 +105,9 @@ type SecurityPlugin struct {
 	firewallLayout *tview.Flex
 	clamavLayout   *tview.Flex
 
+	// fw is the detected firewall backend (ufw or firewalld), or nil when
+	// neither is installed.
+	fw             firewallBackend
 	firewallActive bool
 	firewallOK     bool
 	rules          []FirewallRule
@@ -266,8 +276,45 @@ func (p *SecurityPlugin) ShowContextMenu(defaultMenu func()) bool {
 }
 
 // ****************************************************************************
-// Firewall (ufw) management
+// Firewall management (ufw or firewalld)
 // ****************************************************************************
+
+// firewallBackend abstracts the host firewall manager so the plugin works
+// with either ufw (Debian/Ubuntu) or firewalld (Fedora/RHEL and friends).
+type firewallBackend interface {
+	// Name returns the backend's display name, e.g. "ufw" or "firewalld".
+	Name() string
+	// Refresh returns whether the firewall is active and its current rules;
+	// raw holds the last command's raw output for diagnostics on error.
+	Refresh() (active bool, rules []FirewallRule, raw string, err error)
+	// RulePrompt returns the Add Rule dialog's prompt text.
+	RulePrompt() string
+	// AddSteps returns the command(s) needed to add ruleText.
+	AddSteps(ruleText string) [][]string
+	// DeleteSteps returns the command(s) needed to remove rule.
+	DeleteSteps(rule FirewallRule) [][]string
+	// EnableSteps/DisableSteps turn the firewall on/off.
+	EnableSteps() [][]string
+	DisableSteps() [][]string
+}
+
+// detectFirewallBackend picks whichever supported firewall manager is
+// installed, preferring ufw when both happen to be present.
+func detectFirewallBackend() firewallBackend {
+	if _, err := exec.LookPath("ufw"); err == nil {
+		return ufwBackend{}
+	}
+	if _, err := exec.LookPath("firewall-cmd"); err == nil {
+		return firewalldBackend{}
+	}
+	return nil
+}
+
+// ---- ufw ----
+
+type ufwBackend struct{}
+
+func (ufwBackend) Name() string { return "ufw" }
 
 // parseUfwStatus parses the output of `ufw status numbered` into an active
 // flag and a list of rules.
@@ -296,30 +343,155 @@ func parseUfwStatus(output string) (bool, []FirewallRule) {
 	return active, rules
 }
 
-// RefreshFirewall reloads the ufw rule list.
+func (ufwBackend) Refresh() (bool, []FirewallRule, string, error) {
+	out, err := exec.Command("ufw", "status", "numbered").CombinedOutput()
+	if err != nil {
+		return false, nil, string(out), err
+	}
+	active, rules := parseUfwStatus(string(out))
+	return active, rules, string(out), nil
+}
+
+func (ufwBackend) RulePrompt() string {
+	return "Rule (e.g. allow 22/tcp, deny from 1.2.3.4):"
+}
+
+func (ufwBackend) AddSteps(ruleText string) [][]string {
+	return [][]string{append([]string{"sudo", "-n", "ufw"}, strings.Fields(ruleText)...)}
+}
+
+func (ufwBackend) DeleteSteps(rule FirewallRule) [][]string {
+	return [][]string{{"sudo", "-n", "ufw", "--force", "delete", rule.Num}}
+}
+
+func (ufwBackend) EnableSteps() [][]string {
+	return [][]string{{"sudo", "-n", "ufw", "--force", "enable"}}
+}
+
+func (ufwBackend) DisableSteps() [][]string {
+	return [][]string{{"sudo", "-n", "ufw", "disable"}}
+}
+
+// ---- firewalld ----
+
+type firewalldBackend struct{}
+
+func (firewalldBackend) Name() string { return "firewalld" }
+
+// firewalldPortRE matches a firewalld port/protocol token, e.g. "8080/tcp".
+var firewalldPortRE = regexp.MustCompile(`^\d+(-\d+)?/(tcp|udp)$`)
+
+// parseFirewalldStatus parses the "services:" and "ports:" lines from
+// `firewall-cmd --list-all` into a list of allowed rules.
+func parseFirewalldStatus(output string) []FirewallRule {
+	var rules []FirewallRule
+	for _, line := range strings.Split(output, "\n") {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(trimmed, "services:"):
+			for _, name := range strings.Fields(strings.TrimPrefix(trimmed, "services:")) {
+				rules = append(rules, FirewallRule{To: name, Action: "ALLOW", From: "Anywhere", ID: "service:" + name})
+			}
+		case strings.HasPrefix(trimmed, "ports:"):
+			for _, port := range strings.Fields(strings.TrimPrefix(trimmed, "ports:")) {
+				rules = append(rules, FirewallRule{To: port, Action: "ALLOW", From: "Anywhere", ID: "port:" + port})
+			}
+		}
+	}
+	for i := range rules {
+		rules[i].Num = strconv.Itoa(i + 1)
+	}
+	return rules
+}
+
+func (firewalldBackend) Refresh() (bool, []FirewallRule, string, error) {
+	stateOut, stateErr := exec.Command("firewall-cmd", "--state").CombinedOutput()
+	active := stateErr == nil && strings.TrimSpace(string(stateOut)) == "running"
+	if !active {
+		return false, nil, string(stateOut), nil
+	}
+	out, err := exec.Command("firewall-cmd", "--list-all").CombinedOutput()
+	if err != nil {
+		return active, nil, string(out), err
+	}
+	return active, parseFirewalldStatus(string(out)), string(out), nil
+}
+
+func (firewalldBackend) RulePrompt() string {
+	return "Port (e.g. 8080/tcp) or service name (e.g. http):"
+}
+
+func (firewalldBackend) AddSteps(ruleText string) [][]string {
+	addFlag := "--add-service=" + ruleText
+	if firewalldPortRE.MatchString(ruleText) {
+		addFlag = "--add-port=" + ruleText
+	}
+	return [][]string{
+		{"sudo", "-n", "firewall-cmd", "--permanent", addFlag},
+		{"sudo", "-n", "firewall-cmd", "--reload"},
+	}
+}
+
+func (firewalldBackend) DeleteSteps(rule FirewallRule) [][]string {
+	kind, value, ok := strings.Cut(rule.ID, ":")
+	if !ok {
+		return nil
+	}
+	removeFlag := "--remove-service=" + value
+	if kind == "port" {
+		removeFlag = "--remove-port=" + value
+	}
+	return [][]string{
+		{"sudo", "-n", "firewall-cmd", "--permanent", removeFlag},
+		{"sudo", "-n", "firewall-cmd", "--reload"},
+	}
+}
+
+func (firewalldBackend) EnableSteps() [][]string {
+	return [][]string{{"sudo", "-n", "systemctl", "enable", "--now", "firewalld"}}
+}
+
+func (firewalldBackend) DisableSteps() [][]string {
+	return [][]string{{"sudo", "-n", "systemctl", "disable", "--now", "firewalld"}}
+}
+
+// RefreshFirewall reloads the firewall rule list using whichever backend
+// (ufw or firewalld) is installed.
 func (p *SecurityPlugin) RefreshFirewall() {
 	if p.busy {
 		ui.SetStatus("A security operation is already running")
 		return
 	}
+	if p.fw == nil {
+		p.fw = detectFirewallBackend()
+	}
+	if p.fw == nil {
+		p.rules = nil
+		p.firewallOK = false
+		p.populateFirewallTable()
+		p.TxtOutput.SetTitle("Firewall")
+		p.TxtOutput.SetText("No supported firewall manager found (looked for ufw and firewalld).")
+		ui.SetStatus("No firewall manager found")
+		return
+	}
 	p.busy = true
 	ui.SetStatus("Reading firewall status...")
 	go func() {
-		out, err := exec.Command("ufw", "status", "numbered").CombinedOutput()
+		active, rules, raw, err := p.fw.Refresh()
 		ui.App.QueueUpdateDraw(func() {
 			p.busy = false
 			if err != nil {
 				p.rules = nil
 				p.firewallOK = false
 				p.populateFirewallTable()
-				p.TxtOutput.SetTitle("ufw status")
-				p.TxtOutput.SetText(string(out) + "\nError: " + err.Error())
-				ui.SetStatus("ufw not available: " + err.Error())
+				p.TxtOutput.SetTitle(p.fw.Name() + " status")
+				p.TxtOutput.SetText(raw + "\nError: " + err.Error())
+				ui.SetStatus(p.fw.Name() + " not available: " + err.Error())
 				return
 			}
-			p.firewallOK, p.rules = parseUfwStatus(string(out))
+			p.firewallOK, p.rules = active, rules
 			p.populateFirewallTable()
-			ui.SetStatus("Firewall status refreshed")
+			ui.SetStatus("Firewall status refreshed (" + p.fw.Name() + ")")
 		})
 	}()
 }
@@ -353,7 +525,11 @@ func (p *SecurityPlugin) populateFirewallTable() {
 	if p.firewallOK {
 		status = "active"
 	}
-	p.TblFirewall.SetTitle(fmt.Sprintf("Firewall Rules (%s, %d)", status, len(p.rules)))
+	backend := "no backend"
+	if p.fw != nil {
+		backend = p.fw.Name()
+	}
+	p.TblFirewall.SetTitle(fmt.Sprintf("Firewall Rules — %s (%s, %d)", backend, status, len(p.rules)))
 	if len(p.rules) > 0 {
 		if row < 1 {
 			row = 1
@@ -376,11 +552,17 @@ func (p *SecurityPlugin) SelectedRule() *FirewallRule {
 	return &p.rules[row-1]
 }
 
-// ShowAddRuleDialog prompts for a ufw rule expression (e.g. "allow 22/tcp").
+// ShowAddRuleDialog prompts for a rule expression appropriate to the
+// detected firewall backend (e.g. "allow 22/tcp" for ufw, or "8080/tcp" /
+// "http" for firewalld).
 func (p *SecurityPlugin) ShowAddRuleDialog() {
+	if p.fw == nil {
+		ui.SetStatus("No firewall manager found")
+		return
+	}
 	p.ruleDialog = p.ruleDialog.Input(
 		"Add Firewall Rule",
-		"Rule (e.g. allow 22/tcp, deny from 1.2.3.4):",
+		p.fw.RulePrompt(),
 		"",
 		func(rc dialog.DlgButton, _ int) {
 			if rc != dialog.BUTTON_OK {
@@ -391,8 +573,7 @@ func (p *SecurityPlugin) ShowAddRuleDialog() {
 				ui.SetStatus("No rule entered")
 				return
 			}
-			args := append([]string{"sudo", "-n", "ufw"}, strings.Fields(rule)...)
-			p.runFirewallCommand("Add rule", args)
+			p.runFirewallSteps("Add rule", p.fw.AddSteps(rule))
 		},
 		0,
 		ui.GetCurrentScreen(),
@@ -405,6 +586,10 @@ func (p *SecurityPlugin) ShowAddRuleDialog() {
 // ConfirmDeleteSelectedRule asks for confirmation before deleting the
 // selected firewall rule.
 func (p *SecurityPlugin) ConfirmDeleteSelectedRule() {
+	if p.fw == nil {
+		ui.SetStatus("No firewall manager found")
+		return
+	}
 	rule := p.SelectedRule()
 	if rule == nil {
 		ui.SetStatus("No rule selected")
@@ -417,7 +602,7 @@ func (p *SecurityPlugin) ConfirmDeleteSelectedRule() {
 			if button != dialog.BUTTON_YES {
 				return
 			}
-			p.runFirewallCommand("Delete rule", []string{"sudo", "-n", "ufw", "--force", "delete", rule.Num})
+			p.runFirewallSteps("Delete rule", p.fw.DeleteSteps(*rule))
 		},
 		0,
 		ui.GetCurrentScreen(),
@@ -427,13 +612,22 @@ func (p *SecurityPlugin) ConfirmDeleteSelectedRule() {
 	ui.PgsApp.ShowPage("dlgSecDeleteRule")
 }
 
-// EnableFirewall turns ufw on.
+// EnableFirewall turns the detected firewall backend on.
 func (p *SecurityPlugin) EnableFirewall() {
-	p.runFirewallCommand("Enable firewall", []string{"sudo", "-n", "ufw", "--force", "enable"})
+	if p.fw == nil {
+		ui.SetStatus("No firewall manager found")
+		return
+	}
+	p.runFirewallSteps("Enable firewall", p.fw.EnableSteps())
 }
 
-// ConfirmDisableFirewall asks for confirmation before turning ufw off.
+// ConfirmDisableFirewall asks for confirmation before turning the firewall
+// off.
 func (p *SecurityPlugin) ConfirmDisableFirewall() {
+	if p.fw == nil {
+		ui.SetStatus("No firewall manager found")
+		return
+	}
 	p.confirm = p.confirm.YesNo(
 		"Disable Firewall",
 		"Disable the firewall?",
@@ -441,7 +635,7 @@ func (p *SecurityPlugin) ConfirmDisableFirewall() {
 			if button != dialog.BUTTON_YES {
 				return
 			}
-			p.runFirewallCommand("Disable firewall", []string{"sudo", "-n", "ufw", "disable"})
+			p.runFirewallSteps("Disable firewall", p.fw.DisableSteps())
 		},
 		0,
 		ui.GetCurrentScreen(),
@@ -451,11 +645,16 @@ func (p *SecurityPlugin) ConfirmDisableFirewall() {
 	ui.PgsApp.ShowPage("dlgSecDisableFirewall")
 }
 
-// runFirewallCommand executes a ufw command asynchronously, shows its output
-// and refreshes the rule list.
-func (p *SecurityPlugin) runFirewallCommand(label string, args []string) {
+// runFirewallSteps executes a sequence of commands asynchronously (stopping
+// at the first failure), shows their combined output and refreshes the rule
+// list.
+func (p *SecurityPlugin) runFirewallSteps(label string, steps [][]string) {
 	if p.busy {
 		ui.SetStatus("A security operation is already running")
+		return
+	}
+	if len(steps) == 0 {
+		ui.SetStatus(label + ": nothing to do")
 		return
 	}
 	p.busy = true
@@ -463,13 +662,23 @@ func (p *SecurityPlugin) runFirewallCommand(label string, args []string) {
 	p.TxtOutput.SetText("Running " + label + "...\n")
 	ui.SetStatus("Running " + label)
 	go func() {
-		out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+		var combined strings.Builder
+		var stepErr error
+		for _, args := range steps {
+			out, err := exec.Command(args[0], args[1:]...).CombinedOutput()
+			combined.Write(out)
+			combined.WriteString("\n")
+			if err != nil {
+				stepErr = err
+				break
+			}
+		}
 		ui.App.QueueUpdateDraw(func() {
 			p.busy = false
-			p.TxtOutput.SetText(string(out))
+			p.TxtOutput.SetText(combined.String())
 			p.TxtOutput.ScrollToBeginning()
-			if err != nil {
-				ui.SetStatus(label + " failed: " + err.Error())
+			if stepErr != nil {
+				ui.SetStatus(label + " failed: " + stepErr.Error())
 				return
 			}
 			ui.SetStatus(label + " completed")

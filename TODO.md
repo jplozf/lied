@@ -8,7 +8,7 @@
 * ~~RPN Calculation plugin~~
 * ~~Cron plugin~~
 * Dashboard plugin
-* ~~Firewall (ufw) management plugin~~
+* ~~Firewall (ufw/firewalld) management plugin~~
 
 
 * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
