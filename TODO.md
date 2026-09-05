@@ -1,13 +1,14 @@
 # TODO ♯ Lied
 
-* ClamAV plugin
-* Processes plugin
-* Network Processes plugin
+* ~~ClamAV plugin~~
+* ~~Processes plugin~~
+* ~~Network Processes plugin~~
 * Printers plugin
 * Updates plugin
 * ~~RPN Calculation plugin~~
-* Cron plugin
+* ~~Cron plugin~~
 * Dashboard plugin
+* ~~Firewall (ufw) management plugin~~
 
 
 * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace

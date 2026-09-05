@@ -36,10 +36,11 @@ import (
 	"lied/help"
 	"lied/menu"
 	"lied/network"
+	"lied/process"
 	"lied/restic"
 	"lied/rpn"
 	"lied/rss"
-	"lied/services"
+	"lied/security"
 	"lied/sysinfo"
 	"lied/ui"
 	"lied/utils"
@@ -95,9 +96,10 @@ var (
 	activeCmd           *cmd.Cmd
 	promptVisible       bool
 	LocalClipboard      string
-	// svcMgrPlugin is the Service Manager plugin instance, created in init() and
-	// wired up in main().
-	svcMgrPlugin *services.ServiceManagerPlugin
+	// processPlugin is the Process Manager plugin instance, created in init()
+	// and wired up in main(). Its default view lists running processes; a
+	// secondary view manages systemd services.
+	processPlugin *process.ProcessManagerPlugin
 	// rssPlugin is the RSS Reader plugin instance, created in init() and wired
 	// up in main().
 	rssPlugin *rss.RSSPlugin
@@ -116,6 +118,9 @@ var (
 	// cronPlugin is the Cron Manager plugin instance, created in init() and
 	// wired up in main().
 	cronPlugin *cron.CronManagerPlugin
+	// securityPlugin is the Security Manager plugin instance, created in
+	// init() and wired up in main().
+	securityPlugin *security.SecurityPlugin
 )
 
 // ****************************************************************************
@@ -142,12 +147,12 @@ func init() {
 	ui.PgsApp.AddPage("fileManager", ui.FlxFileManager, true, false)
 	ui.PgsApp.AddPage("dlgQuit", ui.DlgQuit, false, false)
 
-	// Register built-in plugins.  NewServiceManagerPlugin() also adds the
+	// Register built-in plugins.  NewProcessManagerPlugin() also adds the
 	// plugin content page to ui.PgsEditorContent so it is available inside the
 	// standard editor frame without a full-page layout of its own.
 	edit.RegisterInternalCommandPlugins()
-	svcMgrPlugin = services.NewServiceManagerPlugin()
-	ui.RegisterPlugin(svcMgrPlugin)
+	processPlugin = process.NewProcessManagerPlugin()
+	ui.RegisterPlugin(processPlugin)
 	rssPlugin = rss.NewRSSPlugin()
 	ui.RegisterPlugin(rssPlugin)
 	resticPlugin = restic.NewResticPlugin()
@@ -160,6 +165,8 @@ func init() {
 	ui.RegisterPlugin(rpnPlugin)
 	cronPlugin = cron.NewCronManagerPlugin()
 	ui.RegisterPlugin(cronPlugin)
+	securityPlugin = security.NewSecurityPlugin()
+	ui.RegisterPlugin(securityPlugin)
 
 	userDir, err := os.UserHomeDir()
 	if err != nil {
@@ -290,8 +297,8 @@ func main() {
 		case tcell.KeyF3:
 			ShowGitMenu()
 		case tcell.KeyF11:
-			// Open the Service Manager plugin view.
-			edit.OpenPluginView(svcMgrPlugin)
+			// Open the Process Manager plugin view.
+			edit.OpenPluginView(processPlugin)
 		case tcell.KeyF4:
 			if conf.ConfigGeneral.InteractiveShell {
 				if !promptVisible {
@@ -814,54 +821,32 @@ func main() {
 	initializeTemplatesFolder()
 	edit.ShowTreeDir(conf.ConfigGeneral.Workspace, conf.ConfigGeneral.ShowHidden)
 
-	// Service Manager plugin keyboard handler.
-	// s=start, S=stop, r=restart, R/F5=refresh, Enter=show journal, Ctrl+T=close.
-	svcMgrPlugin.TblServices.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		unit := svcMgrPlugin.SelectedUnit()
-		switch event.Key() {
-		case tcell.KeyF2:
+	// Process Manager plugin keyboard handler (default processes view).
+	// k=kill process, v=services, Ctrl+F=find, Ctrl+T=close.
+	processPlugin.TblProcesses.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
 			ui.App.SetFocus(ui.TblOpenFiles)
 			return nil
-		case tcell.KeyF5:
-			svcMgrPlugin.Refresh()
-			return nil
-		case tcell.KeyCtrlT:
+		}
+		if event.Key() == tcell.KeyCtrlT {
 			edit.CloseCurrentFile()
 			return nil
-		case tcell.KeyCtrlF:
-			ui.App.SetFocus(ui.FrmFind)
-			return nil
-		case tcell.KeyEnter:
-			if unit != "" {
-				svcMgrPlugin.ShowJournal(unit)
-			}
-			return nil
-		case tcell.KeyRune:
-			switch event.Rune() {
-			case 's':
-				if unit != "" {
-					exec.Command("systemctl", "start", unit).Run() //nolint:errcheck
-					svcMgrPlugin.Refresh()
-				}
-				return nil
-			case 'S':
-				if unit != "" {
-					exec.Command("systemctl", "stop", unit).Run() //nolint:errcheck
-					svcMgrPlugin.Refresh()
-				}
-				return nil
-			case 'r':
-				if unit != "" {
-					exec.Command("systemctl", "restart", unit).Run() //nolint:errcheck
-					svcMgrPlugin.Refresh()
-				}
-				return nil
-			case 'R':
-				svcMgrPlugin.Refresh()
-				return nil
-			}
 		}
-		return event
+		return processPlugin.HandleInput(event)
+	})
+
+	// Process Manager plugin keyboard handler (systemd services view).
+	// s=start, S=stop, r=restart, R/F5=refresh, Enter=show journal, Esc=back, Ctrl+T=close.
+	processPlugin.TblServices.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return processPlugin.HandleServicesInput(event)
 	})
 
 	// RSS Reader plugin keyboard handler.
@@ -972,6 +957,19 @@ func main() {
 		return event
 	})
 
+	// Network Tools listening-ports view: Esc=back to targets, k=kill process, Ctrl+T=close.
+	networkPlugin.TblListening.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return networkPlugin.HandleInput(event)
+	})
+
 	// RPN Calculator plugin keyboard handler.
 	// Enter=evaluate (handled by the input field itself), Up/Down=history, F5=clear stack, Ctrl+T=close.
 	rpnPlugin.TxtInput.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
@@ -1007,6 +1005,34 @@ func main() {
 			return nil
 		}
 		return cronPlugin.HandleInput(event)
+	})
+
+	// Security Manager plugin keyboard handler (firewall view).
+	// a=add rule, Del=delete rule, e=enable, d=disable, c=ClamAV, F5=refresh, Ctrl+T=close.
+	securityPlugin.TblFirewall.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return securityPlugin.HandleInput(event)
+	})
+
+	// Security Manager plugin keyboard handler (ClamAV view).
+	// s=scan path, u=update definitions, F5=refresh, Esc=back, Ctrl+T=close.
+	securityPlugin.TblClamav.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyF2 {
+			ui.App.SetFocus(ui.TblOpenFiles)
+			return nil
+		}
+		if event.Key() == tcell.KeyCtrlT {
+			edit.CloseCurrentFile()
+			return nil
+		}
+		return securityPlugin.HandleClamavInput(event)
 	})
 
 	// * Launching lied without args : Open last workspace and last open files if any, else open a temporary file into the current directory as workspace
@@ -1065,13 +1091,14 @@ func ShowMainMenu() {
 	MnuMacros.AddItem("mnuClose", "Close", edit.CloseAnyFile, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuExplorer", "Explorer", DoExplorer, conf.ConfigGeneral.Workspace, true, false)
-	MnuMacros.AddItem("mnuServiceManager", "Service Manager", openServiceManager, nil, true, false)
+	MnuMacros.AddItem("mnuProcessManager", "Process Manager", openProcessManager, nil, true, false)
 	MnuMacros.AddItem("mnuRSSReader", "RSS Reader", openRSSReader, nil, true, false)
 	MnuMacros.AddItem("mnuResticManager", "Restic Backup", openResticManager, nil, true, false)
 	MnuMacros.AddItem("mnuDiskManager", "Disk Manager", openDiskManager, nil, true, false)
 	MnuMacros.AddItem("mnuNetworkTools", "Network Tools", openNetworkTools, nil, true, false)
 	MnuMacros.AddItem("mnuRPNCalculator", "RPN Calculator", openRPNCalculator, nil, true, false)
 	MnuMacros.AddItem("mnuCronManager", "Cron Manager", openCronManager, nil, true, false)
+	MnuMacros.AddItem("mnuSecurityManager", "Security Manager", openSecurityManager, nil, true, false)
 	MnuMacros.AddSeparator()
 	MnuMacros.AddItem("mnuQuit", "Quit", ShowQuitDialog, nil, true, false)
 	// Popup menu
@@ -1540,12 +1567,12 @@ func ShowQuitDialog(p any) {
 }
 
 // ****************************************************************************
-// openServiceManager()
-// openServiceManager is the menu.Fn-compatible wrapper that opens the Service
+// openProcessManager()
+// openProcessManager is the menu.Fn-compatible wrapper that opens the Process
 // Manager plugin view from the main menu.
 // ****************************************************************************
-func openServiceManager(_ any) {
-	edit.OpenPluginView(svcMgrPlugin)
+func openProcessManager(_ any) {
+	edit.OpenPluginView(processPlugin)
 }
 
 // ****************************************************************************
@@ -1596,6 +1623,14 @@ func openRPNCalculator(_ any) {
 // ****************************************************************************
 func openCronManager(_ any) {
 	edit.OpenPluginView(cronPlugin)
+}
+
+// ****************************************************************************
+// openSecurityManager()
+// openSecurityManager opens the Security Manager plugin view from the main menu.
+// ****************************************************************************
+func openSecurityManager(_ any) {
+	edit.OpenPluginView(securityPlugin)
 }
 
 // ****************************************************************************

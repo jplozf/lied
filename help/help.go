@@ -219,7 +219,7 @@ These special commands all have a maximum of 4 letters and are prefixed by an ex
 !save : Saves the current document being edited (same as CTRL + S)
 !expl : Open the Explorer / file manager for the current directory
 !edit : Open selected file from Explorer, or switch current file to text editor
-!serv : Open the Service Manager plugin (same as F11)
+!proc : Open the Process Manager plugin (same as F11)
 !rss  : Open the RSS Reader plugin
 !rpn  : Open the RPN Calculator plugin
 !cron : Open the Cron Manager plugin

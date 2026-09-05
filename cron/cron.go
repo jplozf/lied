@@ -404,7 +404,7 @@ func (p *CronManagerPlugin) ShowJobForm(existing *CronJob) {
 
 	centered := tview.NewFlex().
 		AddItem(nil, 0, 1, false).
-		AddItem(form, 70, 40, true).
+		AddItem(form, 70, 0, true).
 		AddItem(nil, 0, 1, false)
 	ui.PgsApp.AddPage("dlgCronJobForm", centered, true, true)
 	ui.App.SetFocus(schedule)

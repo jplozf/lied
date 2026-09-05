@@ -28,7 +28,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -36,10 +39,13 @@ import (
 )
 
 const (
-	PluginID        = "networktools"
-	ContentPageName = "networkTools"
-	UniqueID        = PluginID + "://" + PluginID
-	pingCount       = "4"
+	PluginID          = "networktools"
+	ContentPageName   = "networkTools"
+	UniqueID          = PluginID + "://" + PluginID
+	pingCount         = "4"
+	mainViewName      = "main"
+	listeningViewName = "listening"
+	listeningInterval = 2 * time.Second
 )
 
 // defaultTargets seeds the target list the first time it is created.
@@ -50,13 +56,23 @@ var defaultTargets = []string{"8.8.8.8", "1.1.1.1"}
 type NetworkPlugin struct {
 	TblTargets  *tview.Table
 	TxtOutput   *tview.TextView
+	views       *tview.Pages
 	layout      *tview.Flex
 	targets     []string
 	statuses    []string
 	busy        bool
 	addDialog   *dialog.Dialog
+	confirm     *dialog.Dialog
 	pingRunning bool
 	stopPing    chan struct{}
+
+	// Listening ports ("watch") view.
+	TblListening    *tview.Table
+	listeningLayout *tview.Flex
+	listeningActive bool
+	watchRunning    bool
+	stopWatch       chan struct{}
+	listening       []ListeningPort
 }
 
 // NewNetworkPlugin creates and wires up the Network Tools plugin.
@@ -79,9 +95,24 @@ func NewNetworkPlugin() *NetworkPlugin {
 		AddItem(p.TblTargets, 0, 1, true).
 		AddItem(p.TxtOutput, 0, 2, false)
 
-	ui.PgsEditorContent.AddPage(ContentPageName, p.layout, true, false)
+	p.TblListening = tview.NewTable()
+	p.TblListening.SetBorder(true)
+	p.TblListening.SetTitle("Listening Ports")
+	p.TblListening.SetSelectable(true, false)
+
+	p.listeningLayout = tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(p.TblListening, 0, 1, true)
+
+	p.views = tview.NewPages().
+		AddPage(mainViewName, p.layout, true, true).
+		AddPage(listeningViewName, p.listeningLayout, true, false)
+
+	ui.PgsEditorContent.AddPage(ContentPageName, p.views, true, false)
 
 	p.TblTargets.SetSelectionChangedFunc(func(row, column int) {
+		p.RefreshOutline()
+	})
+	p.TblListening.SetSelectionChangedFunc(func(row, column int) {
 		p.RefreshOutline()
 	})
 
@@ -102,12 +133,18 @@ func (p *NetworkPlugin) Activate() {
 	ui.PgsEditorContent.SwitchToPage(ContentPageName)
 	ui.SetFindPanelVisible(false)
 	p.RefreshOutline()
-	ui.App.SetFocus(p.TblTargets)
+	ui.App.SetFocus(p.FocusWidget())
 	ui.LblKeys.SetText(p.KeyHints())
 }
 
-// FocusWidget returns the targets table as the primary focus target.
-func (p *NetworkPlugin) FocusWidget() tview.Primitive { return p.TblTargets }
+// FocusWidget returns the primary focus target for the currently active
+// sub-view (targets table, or listening ports table when watching).
+func (p *NetworkPlugin) FocusWidget() tview.Primitive {
+	if p.listeningActive {
+		return p.TblListening
+	}
+	return p.TblTargets
+}
 
 // Open loads the target list if it hasn't been loaded yet.
 func (p *NetworkPlugin) Open(_ any) error {
@@ -118,15 +155,23 @@ func (p *NetworkPlugin) Open(_ any) error {
 	return nil
 }
 
-// Close stops any running continuous ping so it doesn't keep pinging in the
-// background after the view is closed.
+// Close stops any running continuous ping or listening-ports watch so they
+// don't keep running in the background after the view is closed.
 func (p *NetworkPlugin) Close() error {
 	p.StopContinuousPing()
+	p.StopWatchListening()
 	return nil
 }
 func (p *NetworkPlugin) IsDirty() bool { return false }
 
 func (p *NetworkPlugin) StatusFields() ui.ViewStatus {
+	if p.listeningActive {
+		return ui.ViewStatus{
+			ReadWrite: "--",
+			Cursor:    fmt.Sprintf("%d listening port(s)", len(p.listening)),
+			Encoding:  "network",
+		}
+	}
 	return ui.ViewStatus{
 		ReadWrite: "--",
 		Cursor:    fmt.Sprintf("%d target(s)", len(p.targets)),
@@ -135,8 +180,12 @@ func (p *NetworkPlugin) StatusFields() ui.ViewStatus {
 }
 
 func (p *NetworkPlugin) KeyHints() string {
+	if p.listeningActive {
+		return "F1=Help F2=Panel F6=Previous F7=Next F8=Settings F9=Context F10=Menu F12=Exit\n" +
+			"[Esc] Back [k] Kill process [Ctrl+T] Close"
+	}
 	return "F1=Help F2=Panel F6=Previous F7=Next F8=Settings F9=Context F10=Menu F12=Exit\n" +
-		"[a] Add [Del] Remove [Enter] Ping [p] Ping all (Esc to stop) [t] Traceroute [n] nslookup [g] dig [w] whois [Tab] Output [Ctrl+T] Close"
+		"[a] Add [Del] Remove [Enter] Ping [p] Ping all (Esc to stop) [t] Traceroute [n] nslookup [g] dig [w] whois [l] Listening ports [Tab] Output [Ctrl+T] Close"
 }
 
 func (p *NetworkPlugin) InternalCommand() string       { return "!net" }
@@ -144,6 +193,9 @@ func (p *NetworkPlugin) CommandOpensPluginView() bool  { return true }
 func (p *NetworkPlugin) ExecuteInternalCommand() error { return nil }
 
 func (p *NetworkPlugin) ShowContextMenu(defaultMenu func()) bool {
+	if p.listeningActive {
+		return p.showListeningContextMenu()
+	}
 	m := (&menu.Menu{}).New(" Network Tools ", ui.PopupParentPage(), p.FocusWidget())
 	edit.AddOpenViewsMenuItems(m)
 	hasTarget := p.SelectedTarget() != ""
@@ -173,6 +225,10 @@ func (p *NetworkPlugin) ShowContextMenu(defaultMenu func()) bool {
 	m.AddItem("mnuNetWhois", "whois selected", func(any) {
 		p.WhoisSelected()
 	}, nil, hasTarget, false)
+	m.AddSeparator()
+	m.AddItem("mnuNetListening", "Watch listening ports...", func(any) {
+		p.ShowListeningPorts()
+	}, nil, true, false)
 
 	ui.PgsApp.AddPage("dlgNetworkMenu", m.Popup(), true, false)
 	ui.PgsApp.ShowPage("dlgNetworkMenu")
@@ -336,6 +392,10 @@ func (p *NetworkPlugin) RemoveSelectedTarget() {
 
 func (p *NetworkPlugin) RefreshOutline() {
 	ui.TblOutline.Clear()
+	if p.listeningActive {
+		p.refreshListeningOutline()
+		return
+	}
 	target := p.SelectedTarget()
 	if target == "" {
 		ui.TblOutline.SetTitle("Outline")
@@ -355,6 +415,28 @@ func (p *NetworkPlugin) RefreshOutline() {
 		ui.TblOutline.SetCell(r, 1, tview.NewTableCell(field[1]).SetTextColor(tcell.ColorWhite))
 	}
 	ui.TblOutline.SetTitle("Outline — " + target)
+}
+
+// refreshListeningOutline shows details for the currently selected listening
+// port in the shared Outline panel.
+func (p *NetworkPlugin) refreshListeningOutline() {
+	port := p.SelectedListeningPort()
+	if port == nil {
+		ui.TblOutline.SetTitle("Outline")
+		return
+	}
+	fields := [][2]string{
+		{"Protocol", port.Proto},
+		{"Local address", port.Local},
+		{"State", port.State},
+		{"PID", strconv.Itoa(port.PID)},
+		{"Process", port.Process},
+	}
+	for r, field := range fields {
+		ui.TblOutline.SetCell(r, 0, tview.NewTableCell(field[0]).SetTextColor(tcell.ColorLightCyan))
+		ui.TblOutline.SetCell(r, 1, tview.NewTableCell(field[1]).SetTextColor(tcell.ColorWhite))
+	}
+	ui.TblOutline.SetTitle("Outline — " + port.Local)
 }
 
 // ****************************************************************************
@@ -613,6 +695,9 @@ func extractDomain(host string) string {
 // HandleInput handles network-view actions; callers may handle global keys
 // such as Ctrl+T (close) and F2 (focus open views) before delegating here.
 func (p *NetworkPlugin) HandleInput(event *tcell.EventKey) *tcell.EventKey {
+	if p.listeningActive {
+		return p.handleListeningInput(event)
+	}
 	switch event.Key() {
 	case tcell.KeyEscape:
 		if p.pingRunning {
@@ -648,6 +733,263 @@ func (p *NetworkPlugin) HandleInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case 'w':
 			p.WhoisSelected()
+			return nil
+		case 'l':
+			p.ShowListeningPorts()
+			return nil
+		}
+	}
+	return event
+}
+
+// ****************************************************************************
+// Listening ports ("watch") view
+// ****************************************************************************
+
+// ListeningPort describes a single listening socket and, when available, the
+// process that owns it.
+type ListeningPort struct {
+	Proto   string
+	Local   string
+	State   string
+	PID     int
+	Process string
+}
+
+// listeningProcessRE extracts the process name and pid from the "Process"
+// column produced by `ss -tulnp`, e.g. `users:(("sshd",pid=1234,fd=3))`.
+var listeningProcessRE = regexp.MustCompile(`\(\("([^"]+)",pid=(\d+)`)
+
+// getListeningPorts runs `ss -tulnp` and parses its output into a list of
+// ListeningPort entries. Process/PID may be empty when the caller lacks the
+// permissions to see the owning process of a given socket.
+func getListeningPorts() ([]ListeningPort, error) {
+	out, err := exec.Command("ss", "-tulnp").CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	var ports []ListeningPort
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	first := true
+	for scanner.Scan() {
+		if first {
+			first = false
+			continue // header line
+		}
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		port := ListeningPort{
+			Proto: fields[0],
+			State: fields[1],
+			Local: fields[4],
+		}
+		if m := listeningProcessRE.FindStringSubmatch(line); m != nil {
+			port.Process = m[1]
+			port.PID, _ = strconv.Atoi(m[2])
+		}
+		ports = append(ports, port)
+	}
+	return ports, nil
+}
+
+// ShowListeningPorts switches to the listening-ports sub-view and starts
+// periodically refreshing it until StopWatchListening is called (Esc).
+func (p *NetworkPlugin) ShowListeningPorts() {
+	if p.pingRunning {
+		ui.SetStatus("Stop the running ping before watching listening ports")
+		return
+	}
+	p.listeningActive = true
+	p.views.SwitchToPage(listeningViewName)
+	p.populateListeningTable()
+	ui.App.SetFocus(p.TblListening)
+	ui.LblKeys.SetText(p.KeyHints())
+	p.startWatchListening()
+}
+
+// closeListeningPorts stops watching and returns to the main targets view.
+func (p *NetworkPlugin) closeListeningPorts() {
+	p.StopWatchListening()
+	p.listeningActive = false
+	p.views.SwitchToPage(mainViewName)
+	ui.App.SetFocus(p.TblTargets)
+	ui.LblKeys.SetText(p.KeyHints())
+	p.RefreshOutline()
+}
+
+// startWatchListening launches the background loop that periodically
+// refreshes the listening ports table until StopWatchListening is called.
+func (p *NetworkPlugin) startWatchListening() {
+	if p.watchRunning {
+		return
+	}
+	p.watchRunning = true
+	p.stopWatch = make(chan struct{})
+	ui.SetStatus("Watching listening ports (Esc to stop)")
+	go p.watchListening(p.stopWatch)
+}
+
+// StopWatchListening signals the running watch loop to stop.
+func (p *NetworkPlugin) StopWatchListening() {
+	if !p.watchRunning || p.stopWatch == nil {
+		return
+	}
+	close(p.stopWatch)
+	p.stopWatch = nil
+}
+
+// watchListening periodically refreshes the listening ports table until stop
+// is closed.
+func (p *NetworkPlugin) watchListening(stop chan struct{}) {
+	for {
+		select {
+		case <-stop:
+			ui.App.QueueUpdateDraw(func() { p.watchRunning = false })
+			return
+		case <-time.After(listeningInterval):
+		}
+		ports, err := getListeningPorts()
+		ui.App.QueueUpdateDraw(func() {
+			if err != nil {
+				ui.SetStatus("Listening ports: " + err.Error())
+				return
+			}
+			p.listening = ports
+			p.populateListeningTable()
+		})
+	}
+}
+
+// populateListeningTable rebuilds the listening ports table from p.listening,
+// preserving the current selection when possible.
+func (p *NetworkPlugin) populateListeningTable() {
+	row, _ := p.TblListening.GetSelection()
+	p.TblListening.Clear()
+	for col, header := range []string{"Proto", "Local Address", "State", "PID", "Process"} {
+		p.TblListening.SetCell(0, col, tview.NewTableCell(header).
+			SetTextColor(tcell.ColorYellow).SetAttributes(tcell.AttrBold).SetSelectable(false))
+	}
+	p.TblListening.SetFixed(1, 0)
+	for r, port := range p.listening {
+		pid := ""
+		if port.PID > 0 {
+			pid = strconv.Itoa(port.PID)
+		}
+		p.TblListening.SetCell(r+1, 0, tview.NewTableCell(port.Proto).SetTextColor(tcell.ColorWhite))
+		p.TblListening.SetCell(r+1, 1, tview.NewTableCell(port.Local).SetTextColor(tcell.ColorWhite))
+		p.TblListening.SetCell(r+1, 2, tview.NewTableCell(port.State).SetTextColor(tcell.ColorWhite))
+		p.TblListening.SetCell(r+1, 3, tview.NewTableCell(pid).SetTextColor(tcell.ColorWhite))
+		p.TblListening.SetCell(r+1, 4, tview.NewTableCell(port.Process).SetTextColor(tcell.ColorWhite))
+	}
+	p.TblListening.SetTitle(fmt.Sprintf("Listening Ports (%d) — watching", len(p.listening)))
+	if len(p.listening) > 0 {
+		if row < 1 {
+			row = 1
+		}
+		if row > len(p.listening) {
+			row = len(p.listening)
+		}
+		p.TblListening.Select(row, 0)
+	}
+	p.RefreshOutline()
+}
+
+// SelectedListeningPort returns the currently selected listening port, or nil
+// when no valid row is selected.
+func (p *NetworkPlugin) SelectedListeningPort() *ListeningPort {
+	row, _ := p.TblListening.GetSelection()
+	if row <= 0 || row > len(p.listening) {
+		return nil
+	}
+	return &p.listening[row-1]
+}
+
+// ConfirmKillSelectedProcess asks for confirmation before sending SIGTERM to
+// the process owning the selected listening port.
+func (p *NetworkPlugin) ConfirmKillSelectedProcess() {
+	port := p.SelectedListeningPort()
+	if port == nil {
+		ui.SetStatus("No listening port selected")
+		return
+	}
+	if port.PID <= 0 {
+		ui.SetStatus("No process information for this port (insufficient permissions?)")
+		return
+	}
+	p.confirm = p.confirm.YesNo(
+		"Kill process",
+		fmt.Sprintf("Kill %s (pid %d) listening on %s?", port.Process, port.PID, port.Local),
+		func(button dialog.DlgButton, _ int) {
+			if button != dialog.BUTTON_YES {
+				return
+			}
+			p.killProcess(port.PID, port.Process)
+		},
+		0,
+		ui.GetCurrentScreen(),
+		p.FocusWidget(),
+	)
+	ui.PgsApp.AddPage("dlgNetKillProcess", p.confirm.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNetKillProcess")
+}
+
+// killProcess sends SIGTERM to pid and refreshes the listening ports table.
+func (p *NetworkPlugin) killProcess(pid int, name string) {
+	proc, err := os.FindProcess(pid)
+	if err == nil {
+		err = proc.Signal(syscall.SIGTERM)
+	}
+	if err != nil {
+		ui.SetStatus(fmt.Sprintf("Failed to kill %s (pid %d): %s", name, pid, err.Error()))
+		return
+	}
+	ui.SetStatus(fmt.Sprintf("Sent SIGTERM to %s (pid %d)", name, pid))
+	go func() {
+		ports, err := getListeningPorts()
+		if err != nil {
+			return
+		}
+		ui.App.QueueUpdateDraw(func() {
+			p.listening = ports
+			p.populateListeningTable()
+		})
+	}()
+}
+
+// showListeningContextMenu shows the context menu available while watching
+// listening ports.
+func (p *NetworkPlugin) showListeningContextMenu() bool {
+	m := (&menu.Menu{}).New(" Listening Ports ", ui.PopupParentPage(), p.FocusWidget())
+	hasPort := p.SelectedListeningPort() != nil
+	m.AddItem("mnuNetKill", "Kill selected process", func(any) {
+		p.ConfirmKillSelectedProcess()
+	}, nil, hasPort, false)
+	m.AddItem("mnuNetBack", "Back to targets", func(any) {
+		p.closeListeningPorts()
+	}, nil, true, false)
+
+	ui.PgsApp.AddPage("dlgNetworkListeningMenu", m.Popup(), true, false)
+	ui.PgsApp.ShowPage("dlgNetworkListeningMenu")
+	return true
+}
+
+// handleListeningInput handles key presses while the listening-ports view is
+// active.
+func (p *NetworkPlugin) handleListeningInput(event *tcell.EventKey) *tcell.EventKey {
+	switch event.Key() {
+	case tcell.KeyEscape:
+		p.closeListeningPorts()
+		return nil
+	case tcell.KeyRune:
+		switch event.Rune() {
+		case 'k':
+			p.ConfirmKillSelectedProcess()
 			return nil
 		}
 	}
